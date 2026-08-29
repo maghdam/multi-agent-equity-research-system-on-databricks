@@ -1,4 +1,4 @@
-# Implementation Plan
+# Multi-Agent Equity Research System on Databricks - Implementation Plan
 
 The MVP is intentionally limited to AAPL and MSFT. A milestone is complete only when its acceptance criteria are met.
 

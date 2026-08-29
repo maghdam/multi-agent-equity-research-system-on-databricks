@@ -1,4 +1,4 @@
-# Equity Research Copilot on Databricks
+# Multi-Agent Equity Research System on Databricks
 
 > A production-oriented portfolio project combining data engineering and AI engineering on Databricks.
 
