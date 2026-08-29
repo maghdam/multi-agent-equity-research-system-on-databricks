@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environments and secrets
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Databricks and local tooling
+.databricks/
+.idea/
+.vscode/
+
+# Notebooks and operating systems
+.ipynb_checkpoints/
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+build/
+dist/
