@@ -1,0 +1,11 @@
+resources:
+  jobs:
+    phase_0_smoke_test:
+      name: ${bundle.name}-phase-0-smoke-test
+      description: >-
+        Verifies bundle deployment and serverless Spark execution before
+        implementation of the production data and AI workloads.
+      tasks:
+        - task_key: serverless_spark_smoke_test
+          notebook_task:
+            notebook_path: ../src/phase_0_smoke_test.py

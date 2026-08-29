@@ -5,6 +5,9 @@
 bundle:
   name: multi-agent-equity-research-system-on-databricks
 
+include:
+  - resources/*.yml
+
 targets:
   dev:
     mode: development
