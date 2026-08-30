@@ -2,9 +2,11 @@
 
 The MVP is intentionally limited to AAPL and MSFT. A milestone is complete only when its acceptance criteria are met.
 
-**Current step:** Milestone 1 - daily price contract examples reviewed; local Git checkpoint pending.
+**Scope decision:** Finish the two-stock workflow end to end before reconsidering broader stock coverage.
 
-**Next small step:** Stage, review, and commit the daily price contract draft and plan updates locally before the API access check.
+**Current step:** Milestone 1 - the daily-price contract, local access-check dependencies, and README setup/run instructions are documented and reviewed. The local code checkpoint is pending; the MVP remains AAPL and MSFT, and Silver validation and Databricks ingestion are not yet implemented.
+
+**Next small step:** Review the changes and staged file list, excluding `.env`, then commit the daily-price contract and local access-check checkpoint before continuing with the company-news contract.
 
 **Tracking rule:** After each small step, review the result and tick its checkbox. Leave a parent task unchecked until all its subtasks are verified. Update the current and next steps before moving on.
 
@@ -27,9 +29,19 @@ The MVP is intentionally limited to AAPL and MSFT. A milestone is complete only 
   - [x] Define ingestion metadata.
   - [x] Define daily price validation rules.
   - [x] Review representative valid and invalid examples.
-  - [ ] Commit the reviewed daily price contract draft and plan updates as a local checkpoint.
-  - [ ] Verify historical SIP access with an authenticated sample request.
-  - [ ] Finalize decimal precision and scale after inspecting source samples.
+  - [x] Commit the reviewed daily price contract draft and plan updates as a local checkpoint (`94d9225`).
+  - [x] Verify historical SIP access with an authenticated sample request.
+    - [x] Confirm availability of an Alpaca paper-trading API key pair; never share or commit credentials (user-confirmed).
+    - [x] Configure private local credentials (user-entered; `.env` existence and Git exclusion verified without reading secret values).
+    - [x] Verify local dependencies: `python-dotenv` 1.2.3 (user-provided package output) and `requests` 2.34.2 (local package check) in the `db` environment.
+    - [x] Verify that the local test can load the required credentials without printing their values (user-provided output: both presence checks returned `True`).
+    - [x] Run a minimal read-only historical bars request and inspect the response (`scripts/check_alpaca_access.py`; user-run HTTP 200, one bar per symbol for 2026-08-27, `next_page_token: null`; saved request uses `sip`, `split`, `1Day`, and `USD`).
+  - [x] Record the historical access-check evidence in `DATA_CONTRACTS.md`.
+  - [x] Finalize decimal precision and scale after inspecting source samples (`DECIMAL(20,8)` for OHLC and volume; exact parsing and rejection of lossy conversions are documented, not yet implemented).
+  - [x] Record local access-check dependencies and run instructions before the next code checkpoint.
+    - [x] Record the verified direct dependency versions in `requirements.txt` (`python-dotenv==1.2.3` and `requests==2.34.2`).
+    - [x] Document local setup, private credential configuration, the run command, and expected results in `README.md`.
+  - [ ] Review and commit the daily-price contract and local access-check checkpoint without credentials.
   - [ ] Define the Alpaca company-news contract.
   - [ ] Define the SEC company-facts and selected-filings contracts.
 - [ ] Add basic GitHub Actions CI alongside the contracts: formatting, linting, and contract/unit tests on pull requests and `main`, using fixtures without live API credentials.

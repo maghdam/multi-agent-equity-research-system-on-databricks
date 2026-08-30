@@ -34,7 +34,8 @@ original source payload; this table describes the parsed record.
 - Prices will be requested in USD.
 - Required means present and non-null in an accepted normalized record.
 - These are logical types, not yet a Spark table definition.
-- Decimal precision and scale will be finalized after inspecting sample data.
+- Silver numeric types and precision rules are defined under
+  Silver numeric storage policy below.
 - Additional source fields remain preserved in the raw payload.
 
 ### Feed and price-adjustment decisions
@@ -46,8 +47,8 @@ original source payload; this table describes the parsed record.
   excluding dividend income.
 - Include only completed trading days before the current
   date in America/New_York; exclude the current day's partial bar.
-- Historical SIP access must be verified with our account
-  before ingestion.
+- Historical SIP sample access has been verified for our account;
+  see Historical access verification below.
 - Do not automatically switch to IEX if SIP access fails;
   review and document any feed change.
 
@@ -177,7 +178,29 @@ For each case, start from the baseline and change only what is listed.
 
 These are documented expectations. Automated tests are not implemented yet.
 
-### Still to define
-- Verify historical SIP access using an authenticated sample request.
-- Decimal precision and scale (after inspecting source samples).
+### Historical access verification
 
+- Script: `scripts/check_alpaca_access.py`
+- Requested trading date: 2026-08-27, America/New_York.
+- Symbols: AAPL and MSFT.
+- Settings: timeframe `1Day`, feed `sip`, adjustment `split`,
+  currency `USD`.
+- Result: HTTP 200; one daily bar returned for each symbol.
+- Pagination: `next_page_token` was null; no further pages.
+- Scope: local historical-data access only. Databricks ingestion
+  and real-time data access have not been verified.
+
+### Silver numeric storage policy
+
+- Fields: `open`, `high`, `low`, `close`, and `volume`.
+- Storage type: `DECIMAL(20,8)` — up to 12 integer digits
+  and 8 fractional digits.
+- Keep volume decimal; integer-valued samples do not establish
+  that all future values will be integers.
+- This is our MVP storage policy, not an Alpaca precision guarantee.
+- Parse source numeric values directly as decimals, without an
+  intermediate conversion to binary floating-point.
+- Validate exact representability before casting to the Silver type.
+- If a value would overflow or require rounding, retain the original
+  record in Bronze, exclude it from Silver, and record the failure.
+- Do not silently round or truncate source values.

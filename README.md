@@ -73,6 +73,52 @@ The application will return:
 
 Development is organized into three milestones. See [PLAN.md](PLAN.md) for the working checklist.
 
+## Local Alpaca access check
+
+This read-only check requests daily AAPL and MSFT bars for
+2026-08-27 using the SIP feed, split adjustment, and USD.
+
+The successful local check used Python 3.14.7. This is not a
+Databricks runtime requirement.
+
+### Setup — Windows PowerShell
+
+With Python installed, run from the repository root:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Create a `.env` file in the repository root and enter your
+Alpaca paper-account credentials privately:
+
+```dotenv
+ALPACA_API_KEY=your_api_key_here
+ALPACA_SECRET_KEY=your_secret_key_here
+```
+
+The `.env` file is ignored by Git. Never commit or share it.
+
+### Run
+
+```powershell
+.\.venv\Scripts\python.exe scripts/check_alpaca_access.py
+```
+
+Expected output:
+
+- `HTTP status: 200`
+- One daily bar for AAPL and one for MSFT.
+- `next_page_token: null`
+
+Inspect all three conditions; HTTP 200 alone does not establish
+sample completeness. If the check fails, investigate without
+automatically switching feeds.
+
+This check does not place trades, create tables, run on Databricks,
+or validate the full data contract.
+
 ## Disclaimer
 
 This project is for educational and portfolio demonstration purposes. Its outputs are informational and are not investment advice.
