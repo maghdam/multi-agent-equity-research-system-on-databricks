@@ -4,9 +4,11 @@ The MVP is intentionally limited to AAPL and MSFT. A milestone is complete only 
 
 **Scope decision:** Finish the two-stock workflow end to end before reconsidering broader stock coverage.
 
-**Current step:** Milestone 1 - the daily-price contract, local access-check dependencies, and README setup/run instructions are documented and reviewed. The local code checkpoint is pending; the MVP remains AAPL and MSFT, and Silver validation and Databricks ingestion are not yet implemented.
+**Expansion design (planned):** Use one central equities configuration, initially AAPL and MSFT, for ingestion, scope checks, analytics, research tools, and UI selection. Adding another compatible US equity should require a configuration change and the normal onboarding/backfill checks, not changes to pipeline logic or stock-specific tables or agents. Resolve and validate required provider/SEC identifiers; report unsupported or ambiguous mappings rather than guessing. Provider news tags must never expand this configured universe automatically.
 
-**Next small step:** Review the changes and staged file list, excluding `.env`, then commit the daily-price contract and local access-check checkpoint before continuing with the company-news contract.
+**Current step:** Milestone 1 - the reviewed company-news contract and local access-check instructions are saved; `README.md` matches the script and the previously verified sample output. `.env` is ignored and untracked, and staging the news checkpoint is next. Ingestion, automated tests, shared-equities configuration, and permission verification remain pending; the live MVP remains AAPL and MSFT.
+
+**Next small step:** Stage only `DATA_CONTRACTS.md`, `PLAN.md`, `README.md`, and `scripts/check_alpaca_news_access.py`. Inspect the staged filenames, change summary, and whitespace check before the local commit. Do not include `.env`, real article bodies, or generated workspace files; no API rerun, commit, or push is needed during this staging step.
 
 **Tracking rule:** After each small step, review the result and tick its checkbox. Leave a parent task unchecked until all its subtasks are verified. Update the current and next steps before moving on.
 
@@ -41,29 +43,52 @@ The MVP is intentionally limited to AAPL and MSFT. A milestone is complete only 
   - [x] Record local access-check dependencies and run instructions before the next code checkpoint.
     - [x] Record the verified direct dependency versions in `requirements.txt` (`python-dotenv==1.2.3` and `requests==2.34.2`).
     - [x] Document local setup, private credential configuration, the run command, and expected results in `README.md`.
-  - [ ] Review and commit the daily-price contract and local access-check checkpoint without credentials.
-  - [ ] Define the Alpaca company-news contract.
+  - [x] Review and commit the daily-price contract and local access-check checkpoint without credentials (`bfb8122`).
+  - [x] Define the Alpaca company-news contract (reviewed draft; implementation and automated tests remain pending).
+    - [x] Draft the news purpose, scope, and meaning of one record.
+    - [x] Verify news API access with a small read-only sample and inspect article fields and content availability (`scripts/check_alpaca_news_access.py`; user-run HTTP 200, three articles, non-empty text fields, and more pages available; no full text displayed).
+    - [x] Record the news sample-access evidence and its limits in `DATA_CONTRACTS.md`.
+    - [x] Define core article fields, source mappings, logical types, and required/optional values.
+    - [x] Define article identity and relationships to supported symbols.
+    - [x] Define ingestion metadata and timestamp meanings.
+    - [x] Define article update and duplicate handling.
+    - [x] Define news validation rules.
+    - [x] Review representative valid and invalid article examples.
+    - [x] Review duplicate, revision, and replay examples.
+    - [x] Define research-text eligibility and content-use boundaries (policy documented; actual permissions remain unverified).
+    - [x] Clarify research scope versus accepted article revisions and finish the full news-contract review.
+  - [x] Document the local news access-check command, expected output, and sample limitations in `README.md`.
+  - [ ] Review and commit the news contract and access-check checkpoint without credentials or article bodies.
   - [ ] Define the SEC company-facts and selected-filings contracts.
+- [ ] Create one shared equities configuration and loader before the first ingestion job; initialize it with AAPL and MSFT.
+  - [ ] Drive ingestion requests, price scope validation, and news research-eligibility checks from this configuration; retain full provider news tags and apply news scope filtering after version selection.
+  - [ ] Resolve and validate required provider/SEC identifiers during onboarding, with clear failures for unavailable or ambiguous mappings.
+  - [ ] Make contract scope definitions configuration-driven while keeping existing examples explicitly tied to their two-stock test universe.
 - [ ] Add basic GitHub Actions CI alongside the contracts: formatting, linting, and contract/unit tests on pull requests and `main`, using fixtures without live API credentials.
+- [ ] Add an offline third-equity fixture test showing that a configuration change uses the same ingestion/transformation logic without stock-specific code; do not expand live API requests for this test.
+- [ ] Confirm and document permitted provider-data storage, retention, and processing before persistent ingestion; use synthetic fixtures where permissions remain unresolved.
 - [ ] Ingest Alpaca historical prices into Bronze.
 - [ ] After the first Bronze job works, verify secure non-interactive Databricks authentication supported by Free Edition; document manual CLI deployment as the fallback if unavailable.
 - [ ] Add controlled CD: manually trigger deployment of a CI-tested `main` commit, validate the bundle, deploy to `dev`, and run a verification job. Record the commit and Databricks run link.
 - [ ] Ingest Alpaca company news into Bronze.
 - [ ] Ingest SEC fundamentals and selected filings into Bronze.
 - [ ] Create cleaned, deduplicated Silver tables.
-- [ ] Create Gold market and fundamental metrics.
+- [ ] Create Gold market and fundamental metrics using shared per-symbol logic for the configured equities.
 - [ ] Add data-quality tests and freshness checks.
 - [ ] Schedule the pipeline in Databricks.
 
 **Acceptance criteria:** AAPL and MSFT data can be rebuilt from Bronze, passes validation, and produces reproducible Gold metrics with an `as_of` timestamp.
+
+**Extensibility acceptance criteria:** Offline tests demonstrate adding a compatible equity through configuration alone, with no pipeline-logic changes. Live onboarding still requires available source data, validated identifiers, backfill, and readiness checks; missing data is reported, not invented.
 
 **CI/CD acceptance criteria:** CI passes on the tested commit. Deployment and post-deployment verification are reproducible through GitHub Actions, or through the documented manual fallback if Free Edition authentication prevents unattended deployment. Deployment does not replace the scheduled data-refresh job.
 
 ## Milestone 2 - Retrieval and multi-agent workflow
 
 - [ ] Create curated filing and news documents with metadata.
+- [ ] Confirm permitted text indexing, model/embedding-provider processing, and retention before using real provider content for retrieval or model calls; keep synthetic fixtures as the fallback.
 - [ ] Chunk documents and create a vector index.
-- [ ] Implement controlled SQL and retrieval tools.
+- [ ] Implement controlled SQL and retrieval tools that validate requested symbols against the shared configuration and data readiness.
 - [ ] Implement the Market Analyst.
 - [ ] Implement the Company Researcher.
 - [ ] Implement the Supervisor workflow in LangGraph.
@@ -75,11 +100,12 @@ The MVP is intentionally limited to AAPL and MSFT. A milestone is complete only 
 
 ## Milestone 3 - Application and deployment
 
-- [ ] Build stock and period selection controls.
+- [ ] Build stock and period selection controls from the shared equities configuration and readiness status; do not maintain a separate UI stock list.
 - [ ] Display market charts and comparison metrics.
 - [ ] Display the generated research report and citations.
 - [ ] Add follow-up chat over the report evidence.
 - [ ] Add logging, monitoring, and secret management.
+- [ ] Confirm permitted public display and redistribution of real provider data and derived outputs before sharing the application or demo; use clearly labelled synthetic demo data if permission is unresolved. Review [Alpaca's redistribution guidance](https://alpaca.markets/support/redistribute-alpaca-api) and the applicable account/provider terms; API access alone is not approval.
 - [ ] Deploy the application on Databricks.
 - [ ] Extend controlled CD to deploy/start the application and verify its health; keep release deployment manually triggered from a CI-tested commit.
 - [ ] Add screenshots, a short demo, and reproduction instructions.

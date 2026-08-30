@@ -119,6 +119,52 @@ automatically switching feeds.
 This check does not place trades, create tables, run on Databricks,
 or validate the full data contract.
 
+## Local Alpaca news access check
+
+This read-only script requests one page of AAPL/MSFT news for
+the fixed UTC window specified in the script: August 24–28, 2026.
+It requests up to three articles, including content when available.
+
+Reuse the dependencies and private `.env` configuration described
+above. No additional credentials or packages are required.
+
+Run from the repository root using one of these commands.
+
+With the `.venv` setup above:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/check_alpaca_news_access.py
+```
+
+With an already active environment containing the dependencies,
+such as the project's local `db` environment:
+
+```powershell
+python scripts/check_alpaca_news_access.py
+```
+
+Verified sample output:
+
+```text
+HTTP status: 200
+Articles returned: 3
+More pages available: True
+```
+
+The remaining output shows article metadata and the types and
+lengths of text fields. It does not print credentials, headlines,
+summaries, or article bodies.
+
+`More pages available: True` is expected for the verified sample:
+the script intentionally inspects only the first page.
+
+A future response may differ if provider data or access changes.
+This check does not establish complete news coverage, validate
+the full contract, or create Databricks tables.
+
+See [DATA_CONTRACTS.md](DATA_CONTRACTS.md) for the documented
+schema, validation rules, and content-use boundaries.
+
 ## Disclaimer
 
 This project is for educational and portfolio demonstration purposes. Its outputs are informational and are not investment advice.
