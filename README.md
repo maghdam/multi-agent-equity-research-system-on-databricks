@@ -165,6 +165,50 @@ the full contract, or create Databricks tables.
 See [DATA_CONTRACTS.md](DATA_CONTRACTS.md) for the documented
 schema, validation rules, and content-use boundaries.
 
+## Local SEC access checks
+
+<details>
+<summary>Setup, commands, and expected output</summary>
+
+Reuse the Python dependencies described above. In your private
+`.env`, configure a project identifier and real contact email,
+replacing the placeholder locally:
+
+```dotenv
+SEC_USER_AGENT="EquityResearchLearningProject your-email@example.com"
+```
+
+Never commit `.env` or its private values. The SEC diagnostics
+do not send Alpaca credentials.
+
+From the repository root, with your project environment active:
+
+```powershell
+python scripts/check_sec_access.py
+python scripts/check_sec_company_facts_access.py
+```
+
+With the documented `.venv` setup, use
+`.\.venv\Scripts\python.exe` instead of `python`.
+
+Expected results:
+
+- Directory check: HTTP 200, AAPL CIK `0000320193`,
+  and MSFT CIK `0000789019`.
+- Company-facts check: HTTP 200 for each company, matching CIKs,
+  concept metadata, units, observation counts, and up to two
+  sample observations per inspected concept/unit.
+
+Inspect the output; HTTP 200 alone does not validate the contract.
+Counts and sample data may change. Samples follow response order
+and are not a latest-value selection.
+
+These are local, read-only source diagnostics. They do not save
+response payloads, create Databricks tables, or implement the
+Bronze/Silver/Gold pipeline.
+
+</details>
+
 ## Disclaimer
 
 This project is for educational and portfolio demonstration purposes. Its outputs are informational and are not investment advice.

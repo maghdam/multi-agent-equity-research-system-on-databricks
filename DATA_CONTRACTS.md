@@ -662,3 +662,516 @@ Permitted use:
   synthetic data for the public demonstration.
 - These rules document our safeguards; they do not establish
   that the necessary permissions have already been obtained.
+
+
+## SEC company facts — draft
+
+### Purpose
+
+Provide company-reported financial figures to support research
+and comparisons alongside stock prices and news.
+
+These figures describe business performance and financial position;
+they are not stock-price predictions or analyst estimates.
+
+### Scope
+
+- Planned source: SEC EDGAR Company Facts API.
+- Companies come from the planned shared equities configuration,
+  initially AAPL and MSFT.
+- The SEC identifies reporting entities using a Central Index Key
+  (CIK). Resolve and verify the ticker-to-entity mapping before
+  requesting company facts.
+- Focus on selected company-wide financial metrics.
+  Initial candidates are revenue, net income, and total assets.
+- Confirm exact source concepts, units, and reporting periods
+  after inspecting sample responses.
+- Preserve the reporting-period and filing provenance needed
+  to explain where each financial figure came from.
+- Full filing narrative text is a separate dataset and will
+  have its own contract.
+- Local Company Facts API access and the presence of the three
+  candidate concepts are verified for AAPL and MSFT, with USD
+  observations. Suitability and reporting-period coverage still
+  require validation.
+
+### Directory access verification
+
+- Script: `scripts/check_sec_access.py`.
+- Source: https://www.sec.gov/files/company_tickers.json
+- Execution: local `db` environment.
+- Result: HTTP 200, confirmed from user-run output.
+
+Returned directory mappings:
+
+- AAPL: CIK `0000320193`, company `Apple Inc.`
+- MSFT: CIK `0000789019`, company `MICROSOFT CORP`
+
+This check verifies directory access and resolves the two
+tickers to SEC identifiers. It does not retrieve financial facts.
+
+At the directory-only checkpoint, company-facts API access
+and company-level identity checks had not yet been tested.
+The separate company-facts check below records the next result.
+
+No SEC response payload or private User-Agent value was
+saved by the script.
+
+### Company-facts access verification
+
+- Script: `scripts/check_sec_company_facts_access.py`.
+- Execution: local `db` environment.
+- Result: HTTP 200 for both companies, confirmed from user-run output.
+- AAPL: entity name `Apple Inc.`, 503 US-GAAP concepts.
+- MSFT: entity name `MICROSOFT CORPORATION`, 562 US-GAAP concepts.
+- Both responses contain the `dei` and `us-gaap` taxonomies.
+- Both returned CIKs match the previously recorded directory mappings.
+
+Microsoft's directory name is `MICROSOFT CORP`; its company-facts
+name is `MICROSOFT CORPORATION`. The matching CIK identifies the
+same reporting entity despite this name-label difference.
+
+Concept counts describe the observed responses. They are not
+fixed validation thresholds or evidence that particular metrics
+are suitable for comparison.
+
+The initial access check did not validate financial values.
+Candidate-concept metadata is recorded below. Reporting-period
+and filing-provenance checks are required before final metric
+selection.
+
+The script printed metadata only and did not persist the
+response payloads or deploy anything to Databricks.
+
+### Candidate-concept metadata inspection
+
+Evidence: user-run output from
+`scripts/check_sec_company_facts_access.py`.
+Both company requests returned HTTP 200.
+
+All three candidates were present under `us-gaap`, with USD
+observations:
+
+- Revenue: `RevenueFromContractWithCustomerExcludingAssessedTax`
+  Source label: `Revenue from Contract with Customer, Excluding Assessed Tax`.
+  Observation counts: AAPL 117; MSFT 134.
+
+- Net income: `NetIncomeLoss`
+  Source label: `Net Income (Loss) Attributable to Parent`.
+  Observation counts: AAPL 338; MSFT 340.
+
+- Total assets: `Assets`
+  Source label: `Assets`.
+  Observation counts: AAPL 146; MSFT 142.
+
+These counts are observed array lengths, not deduplicated
+reporting-period counts or fixed validation thresholds.
+
+This metadata-only check established candidate presence and units,
+not coverage or comparability. The observation sample below
+examines dates, values, and filing references. Full validation
+and final selection rules remain pending.
+
+### Observation sample findings
+
+Evidence: user-run output from
+`scripts/check_sec_company_facts_access.py`.
+Both requests returned HTTP 200. Two observations per candidate
+concept and company were inspected: 12 observations in total.
+
+Findings:
+
+- Revenue and net-income examples describe a duration, using
+  `start` and `end`. Asset examples describe a snapshot at `end`,
+  with no `start`. Missing start dates are therefore not
+  automatically invalid for every concept.
+
+- Filing labels do not determine an observation's period.
+  Microsoft's revenue example covers 2016-07-02 to 2016-09-30,
+  despite `fy: 2018`, `fp: FY`, and `form: 10-K`.
+  Preserve actual dates; do not classify periods using those
+  filing labels alone.
+
+- The same period can have different reported values.
+  Apple's net income for 2006-10-01 to 2007-09-29 appears as
+  USD 3,496,000,000 in a 10-K and USD 3,495,000,000 in a 10-K/A.
+  Preserve filing provenance and both observed versions until
+  explicit selection rules are applied.
+
+- Identical asset values also appear in different filings.
+  Matching dates and values do not establish that two records
+  have the same filing provenance. Do not sum repeated disclosures.
+
+- `frame` is absent in some observations. The printed `<absent>`
+  marker is produced by the diagnostic, not supplied by SEC.
+  Do not store that marker as a financial value or treat it as zero.
+
+Keep observation dates separate from filing dates, and retain
+`accn`, `form`, and `filed` for traceability.
+
+These are historical response-order examples, not latest-value
+selections. Recent coverage, comparability, version selection,
+and automated validation remain to be established.
+
+### Meaning of one record
+
+One logical record represents one numerical fact reported
+by a company in a specific SEC filing.
+
+It describes:
+
+- One reporting company, identified by CIK.
+- One taxonomy and concept, such as `us-gaap` and `NetIncomeLoss`.
+- One measurement unit, such as USD.
+- One financial period: `start` and `end` for a duration,
+  or `end` alone for an instant.
+- One filing, identified by its accession number (`accn`).
+
+The reported value and supporting filing metadata belong
+to that observation.
+
+A complete Company Facts API response contains many such
+observations; it is not one financial-fact record.
+
+Different filings remain separate observations, even when
+their concept, period, and value match.
+
+For example, Apple's net income for 2006-10-01 to 2007-09-29
+in the original 10-K and the 10-K/A represents two separate
+filing-level observations.
+
+Bronze will preserve raw responses and retrieval history.
+Repeated API retrievals do not create new SEC filings.
+
+The business key, duplicate/conflict handling, and retrieval
+snapshot/replay rules are defined in the sections below.
+Selecting comparable Gold metrics and their filing versions
+remains separate work.
+
+### Core field definitions
+
+These are planned normalized fields. Bronze preserves the original
+source payload. Required means present and non-null in an accepted
+normalized record; this is our project policy, not an API guarantee.
+
+#### Company and source identity
+
+| Project field | Source | Logical type | Required | Meaning |
+|---|---|---|---|---|
+| cik | Top-level `cik` | String | Yes | Reporting company's SEC identifier, normalized to 10 digits with leading zeros. |
+| taxonomy | Key under `facts` | String | Yes | Concept namespace, such as `us-gaap`. |
+| concept | Key under `facts[taxonomy]` | String | Yes | Financial concept, such as `NetIncomeLoss`. |
+| unit | Key under `facts[taxonomy][concept].units` | String | Yes | Measurement unit, such as `USD`. |
+| accession_number | Observation's `accn` | String | Yes | Identifier of the filing containing the observation; preserve its hyphens. |
+
+Validate CIK before formatting it. For example, source value
+320193 becomes "0000320193"; never truncate an invalid identifier.
+
+Preserve taxonomy, concept, and unit keys as supplied.
+Interpret the concept together with its taxonomy.
+
+An accession number identifies a filing, not an individual fact.
+The complete key, including the financial period fields,
+is defined under Record identity and within-response duplicates.
+
+#### Financial value and period
+
+| Project field | Source | Logical type | Required | Meaning |
+|---|---|---|---|---|
+| fact_value | Observation's `val` | Decimal | Yes | Reported numerical amount, measured in the observation's `unit`. |
+| period_start | Observation's `start` | Date | For duration facts | Beginning of the financial period; null for instant facts. |
+| period_end | Observation's `end` | Date | Yes | End of a duration, or the measurement date of an instant fact. |
+
+For the current candidate concepts:
+
+- Revenue and net income describe a duration and require both dates.
+- Total assets describe an instant and require only `period_end`.
+- A missing start date does not turn a duration fact into an
+  instant fact. Determine the expected period type from the concept.
+
+Preserve actual source dates as dates, not timestamps.
+For duration facts, `period_start` must not exceed `period_end`.
+Do not replace these dates with filing dates or fiscal labels.
+
+Preserve the reported amount and sign. A missing value is not zero,
+and a negative value is not automatically invalid: net income
+can represent a loss.
+
+The planned Silver storage type for `fact_value` is `DECIMAL(28,8)`.
+Exact parsing and conversion rules are defined under
+Company-fact numeric storage policy below.
+
+#### Descriptive and filing metadata
+
+| Project field | Source | Logical type | Required | Meaning |
+|---|---|---|---|---|
+| entity_name | Top-level `entityName` | String | No | Company name supplied in the retrieved response; CIK remains the identifier. |
+| concept_label | `facts[taxonomy][concept].label` | String | No | Human-readable description of the concept. |
+| filing_form | Observation's `form` | String | Yes | Filing type, such as `10-K`, `10-Q`, or `10-K/A`; preserve amendment suffixes. |
+| filing_date | Observation's `filed` | Date | Yes | SEC filing date associated with the observation. |
+| filing_fiscal_year | Observation's `fy` | Integer | No | Fiscal-year label associated with the filing, not necessarily the year measured by the fact. |
+| filing_fiscal_period | Observation's `fp` | String | No | Filing's fiscal-period label, such as `FY` or `Q1`; not a classification of the fact's duration. |
+| frame | Observation's `frame` | String | No | SEC calendar-alignment label, when supplied; preserve its original value. |
+
+Names and concept labels describe the retrieved response.
+Do not assume they are historical descriptions as of the filing date.
+They are not record identifiers.
+
+Preserve missing optional values as null, never as the diagnostic
+marker "<absent>". Do not invent missing fiscal labels or frames.
+
+Financial dates remain authoritative for the observation's period.
+Do not replace them with `filing_fiscal_year`,
+`filing_fiscal_period`, or dates inferred from `frame`.
+
+Keep `filing_date` separate from our future retrieval timestamp.
+It is not an exact timestamp of public availability.
+
+### Unit and reporting-period rules
+
+Initial Silver normalization will support these inspected
+candidate concepts from the `us-gaap` taxonomy:
+
+| Concept | Accepted unit | Period type |
+|---|---|---|
+| RevenueFromContractWithCustomerExcludingAssessedTax | USD | Duration |
+| NetIncomeLoss | USD | Duration |
+| Assets | USD | Instant |
+
+This defines initial normalization scope, not proof of recent
+coverage or suitability for every Gold metric.
+
+#### Units
+
+- Preserve amounts in their reported USD units. Do not convert
+  currencies or rescale stored values into millions or billions.
+- Other taxonomy/concept/unit combinations remain in raw Bronze
+  data but are outside this initial Silver scope. Out of scope
+  does not automatically mean invalid source data.
+- If a selected concept or its USD observations are unavailable,
+  report that absence. Do not substitute zero or silently choose
+  another concept or currency.
+
+#### Reporting periods
+
+- Duration facts require valid start and end dates, with
+  `period_start <= period_end`.
+- Instant facts require a valid end date and an absent or null
+  start date. Flag an unexpected start date rather than erase it.
+- Determine duration versus instant from the configured concept,
+  not from whether a start date happens to be missing.
+- Preserve reported periods. Do not assume every duration is a
+  standalone quarter or a full year, or classify it solely from
+  filing form, fiscal labels, or frame.
+- Silver will not annualize amounts, derive standalone quarters,
+  or sum repeated disclosures.
+
+Gold rules will separately define comparable metric periods,
+filing-version selection, and coverage requirements.
+
+### Company-fact numeric storage policy
+
+- Field: `fact_value`.
+- Silver storage type: `DECIMAL(28,8)` — 20 integer digits
+  and 8 fractional digits.
+- This is our MVP storage policy, not an SEC precision guarantee.
+
+Parse JSON integer values as exact integers and fractional values
+as decimals, without an intermediate binary floating-point value.
+Convert integers directly to decimals when preparing Silver records.
+
+Accept only finite numeric values. Reject missing/null values,
+booleans, numeric strings, NaN, and infinity.
+
+Validate exact representability before casting:
+
+- The amount must fit the storage range.
+- Conversion must preserve its numerical value without rounding
+  or truncation.
+- Extra trailing fractional zeros are acceptable when removing
+  them does not change the value.
+
+For example, 123.450000000 is exactly representable,
+but 123.456789012 would require rounding and must be rejected.
+
+Keep rejected source observations in Bronze, exclude them from
+Silver, and record the validation failure. Never replace them
+with zero or a rounded amount.
+
+Implementation and automated boundary tests remain pending.
+
+### Ingestion metadata
+
+Our pipeline adds these required fields to each stored Bronze
+response and carries them into its parsed fact observations.
+
+| Field | Logical type | Meaning |
+|---|---|---|
+| source_system | String | Source identifier; fixed to `sec_edgar`. |
+| source_response_id | String | Unique identifier generated for each successfully retrieved response. |
+| fetched_at | Timestamp in UTC | When our process received the successful API response. |
+| ingestion_run_id | String | Unique identifier for the ingestion execution. |
+
+Rules:
+
+- Each `source_response_id` identifies one original Bronze response.
+  All facts extracted from that response share its metadata.
+- Requests within one ingestion execution share `ingestion_run_id`.
+  Each successful response has its own response ID and timestamp.
+- A new API retrieval gets a new response ID and timestamp,
+  even when its content is unchanged.
+- Reprocessing stored Bronze data preserves all original ingestion
+  metadata. Track the transformation execution separately.
+- `filing_date` describes the source filing; `fetched_at` describes
+  our retrieval. Neither proves the exact time of public availability.
+- Response IDs, run IDs, and retrieval timestamps are not part of
+  the financial-fact business key. Repeated retrievals do not
+  represent new SEC filings.
+- Never copy `.env` values or private request headers into
+  data records or logs.
+
+
+### Record identity and within-response duplicates
+
+The business key for a filing-level fact is:
+
+    (source_system, cik, taxonomy, concept, unit,
+     period_start, period_end, accession_number)
+
+- For instant facts, compare null `period_start` values as equal.
+  Do not replace null with an invented date.
+- Different accession numbers represent separate filing-level
+  observations, even when the period and amount match.
+- The amount, descriptive labels, retrieval timestamp, response ID,
+  and run ID are not part of this business key.
+
+Apply the following checks to valid, in-scope observations within
+each `source_response_id`:
+
+- Same key and identical normalized source fields: keep one
+  observation. Compare decimal amounts by numerical value,
+  so extra trailing zeros do not create a difference.
+- Same key but differing normalized source fields: flag a conflict.
+  Do not resolve it by choosing whichever appears first or last
+  in the response array.
+- A conflict fails the SEC Silver refresh before publication.
+  Preserve the original Bronze response and record the affected
+  key, response ID, and conflicting field names.
+- If a previously successful Silver result exists, leave it
+  unchanged and report the refresh failure; do not present it
+  as newly refreshed.
+
+These rules handle duplicates within one retrieved response.
+Selection across different retrievals, and selection of a filing
+for a Gold metric or historical cutoff, are defined separately.
+
+### Cross-retrieval selection and replay
+
+#### Current Silver snapshot
+
+- For each `(source_system, cik)`, select the complete retrieved
+  response with the greatest original `fetched_at`.
+- Select the response before applying fact-level validation.
+  Do not silently fall back to an older response when the newest
+  response contains invalid or missing observations.
+- If responses tie at the latest timestamp, choose the smallest
+  `source_response_id` only when their raw payloads are identical.
+  Different payloads at the same latest timestamp are ambiguous
+  and fail the refresh.
+- Apply the contract to the selected response. Invalid individual
+  facts follow the documented exclusion rules; response-level
+  failures or within-response conflicts fail the SEC refresh.
+- Publish the validated refresh atomically. On failure, preserve
+  the previous successful Silver result and report the failure.
+- A successful refresh replaces each company's current facts
+  with accepted observations from its selected response.
+  Do not fill gaps with facts from older responses.
+- Preserve distinct filings within the selected response.
+  Changes between different retrievals are snapshot changes,
+  not automatically within-response conflicts. Bronze retains
+  the earlier responses.
+
+#### Replay and historical cutoffs
+
+- Replay uses original retrieval metadata, not the replay time.
+  An older replay must not overwrite a newer current snapshot.
+- For a historical retrieval cutoff `T` in UTC, apply the same
+  selection rules only to stored responses with `fetched_at <= T`.
+  If none exists, report that historical snapshot as unavailable.
+- Historical reconstruction must not overwrite current Silver.
+- Do not use today's response with an old `filing_date` filter
+  and claim it reconstructs what our pipeline knew at that time.
+- These cutoffs describe stored observations, not exact public
+  availability or complete historical market knowledge.
+
+Gold period/filing selection and historical-query implementation
+remain separate work.
+
+### Validation rules and failure actions
+
+Apply the existing contract through these checks:
+
+| Check | Requirement | Failure action |
+|---|---|---|
+| Response | Successful retrieval, expected JSON object/array structure, and reporting CIK matching the configured request. | Fail the SEC refresh. |
+| Provenance | Required source, response ID, run ID, and UTC retrieval timestamp; response ID links to the original Bronze payload. | Fail the SEC refresh. |
+| Scope | Documented taxonomy/concept/unit combination. | Retain in Bronze and classify as out of scope, not automatically invalid. |
+| Fact fields | Required fields present, declared types respected, and identifiers correctly formatted. | Exclude the invalid observation from Silver. |
+| Amount and period | Existing exact-decimal and duration/instant rules satisfied. | Exclude the invalid observation from Silver. |
+| Publication | Snapshot selection is unambiguous, no within-response conflicts, and final business keys are unique. | Fail the SEC refresh before publication. |
+
+Field details:
+
+- Normalize a validated reporting CIK to 10 ASCII digits.
+- Accession numbers must have the form:
+  10 ASCII digits, hyphen, 2 digits, hyphen, 6 digits.
+  Do not require their prefix to match the reporting CIK.
+- Required strings must be nonblank. Dates must be real calendar
+  dates parsed from YYYY-MM-DD source values.
+- Optional strings that are missing, null, or blank become null.
+  Other supplied values must have the declared type.
+- A supplied `filing_fiscal_year` must be an integer, not a boolean.
+  Do not silently coerce numeric strings into numeric fields.
+
+Missing selected concepts or USD observations are reported as
+unavailable, not replaced with zeros or older-response facts.
+
+Record accepted, rejected, out-of-scope, and duplicate counts,
+plus response IDs and failed rule names. Preserve raw evidence
+in Bronze without logging credentials or private request headers.
+
+Failed fetches or refreshes must remain visible as failures.
+Do not present an older successful result as newly refreshed.
+
+These checks are documented requirements; automated tests
+and complete source-data validation remain pending.
+
+### Representative contract examples
+
+These are synthetic scenarios, not actual company disclosures.
+Assume all unspecified fields and ingestion metadata are valid.
+Numeric examples represent JSON numbers unless explicitly quoted.
+
+| Scenario | Expected outcome |
+|---|---|
+| `NetIncomeLoss` is -100 USD with valid duration dates. | Accept; a loss is not automatically invalid. |
+| `Assets` has a valid end date and no start date. | Accept as an instant fact. |
+| Revenue has an end date but no start date. | Exclude the invalid fact. |
+| `fact_value` is 123.456789012 or 1e20. | Exclude: the first requires rounding; the second exceeds the storage range. |
+| `fact_value` is the string `"100"`. | Exclude; do not silently convert numeric strings. |
+| Response CIK differs from the requested company's CIK. | Fail the SEC refresh. |
+| A selected concept is reported in EUR rather than USD. | Classify that observation as out of scope. |
+| Same key and identical normalized fields occur twice within one response. | Keep one observation. |
+| Same key has values 100 and 101 within one response. | Fail the SEC refresh because of a conflict. |
+| Same concept, period, unit, and value appear under two accession numbers. | Preserve both filing-level observations. |
+| An older response reports 100; a newer response reports 101 for the same key. | Use 101 from the selected newer snapshot; retain both responses in Bronze. |
+| A fact exists in an older response but is absent from the selected newer valid response. | Do not carry the old fact into current Silver. |
+| Two responses share the latest retrieval timestamp but have different raw payloads. | Fail the SEC refresh because selection is ambiguous. |
+| No stored response has `fetched_at <= T`. | Report the historical snapshot as unavailable. |
+
+Excluding an invalid fact does not automatically fail the entire
+refresh. A refresh-level failure preserves any previous successful
+Silver output and must remain visible as a failure.
+
+These are expected outcomes for future tests, not evidence that
+automated tests have passed.
