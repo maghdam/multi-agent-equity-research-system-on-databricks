@@ -1,0 +1,16 @@
+{
+  "equities": [
+    {
+      "symbol": "AAPL",
+      "display_name": "Apple Inc.",
+      "alpaca_symbol": "AAPL",
+      "sec_cik": "0000320193"
+    },
+    {
+      "symbol": "MSFT",
+      "display_name": "Microsoft Corporation",
+      "alpaca_symbol": "MSFT",
+      "sec_cik": "0000789019"
+    }
+  ]
+}

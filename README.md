@@ -71,7 +71,150 @@ The application will return:
 
 ## Implementation
 
-Development is organized into three milestones. See [PLAN.md](PLAN.md) for the working checklist.
+Development follows one end-to-end workflow:
+
+1. **Project foundations:** scope, architecture, repository, and Databricks smoke test.
+2. **Data Engineering:** source contracts, Bronze/Silver/Gold pipelines, quality, scheduling, and deployment checks.
+3. **AI Engineering:** retrieval and tools, the multi-agent workflow, tracing, and evaluation.
+4. **Application delivery:** UI, monitoring, deployment, and reproducible demonstration.
+
+Each milestone has a tested completion gate. See [PLAN.md](PLAN.md) for progress and [DATA_CONTRACTS.md](DATA_CONTRACTS.md) for the layer inventory and data rules.
+
+## Local Alpaca access check
+
+This read-only check requests daily AAPL and MSFT bars for
+2026-08-27 using the SIP feed, split adjustment, and USD.
+
+The successful local check used Python 3.14.7. This is not a
+Databricks runtime requirement.
+
+### Setup — Windows PowerShell
+
+With Python installed, run from the repository root:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Create a `.env` file in the repository root and enter your
+Alpaca paper-account credentials privately:
+
+```dotenv
+ALPACA_API_KEY=your_api_key_here
+ALPACA_SECRET_KEY=your_secret_key_here
+```
+
+The `.env` file is ignored by Git. Never commit or share it.
+
+### Run
+
+```powershell
+.\.venv\Scripts\python.exe scripts/check_alpaca_access.py
+```
+
+Expected output:
+
+- `HTTP status: 200`
+- One daily bar for AAPL and one for MSFT.
+- `next_page_token: null`
+
+Inspect all three conditions; HTTP 200 alone does not establish
+sample completeness. If the check fails, investigate without
+automatically switching feeds.
+
+This check does not place trades, create tables, run on Databricks,
+or validate the full data contract.
+
+## Local Alpaca news access check
+
+This read-only script requests one page of AAPL/MSFT news for
+the fixed UTC window specified in the script: August 24–28, 2026.
+It requests up to three articles, including content when available.
+
+Reuse the dependencies and private `.env` configuration described
+above. No additional credentials or packages are required.
+
+Run from the repository root using one of these commands.
+
+With the `.venv` setup above:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/check_alpaca_news_access.py
+```
+
+With an already active environment containing the dependencies,
+such as the project's local `db` environment:
+
+```powershell
+python scripts/check_alpaca_news_access.py
+```
+
+Verified sample output:
+
+```text
+HTTP status: 200
+Articles returned: 3
+More pages available: True
+```
+
+The remaining output shows article metadata and the types and
+lengths of text fields. It does not print credentials, headlines,
+summaries, or article bodies.
+
+`More pages available: True` is expected for the verified sample:
+the script intentionally inspects only the first page.
+
+A future response may differ if provider data or access changes.
+This check does not establish complete news coverage, validate
+the full contract, or create Databricks tables.
+
+See [DATA_CONTRACTS.md](DATA_CONTRACTS.md) for the documented
+schema, validation rules, and content-use boundaries.
+
+## Local SEC access checks
+
+<details>
+<summary>Setup, commands, and expected output</summary>
+
+Reuse the Python dependencies described above. In your private
+`.env`, configure a project identifier and real contact email,
+replacing the placeholder locally:
+
+```dotenv
+SEC_USER_AGENT="EquityResearchLearningProject your-email@example.com"
+```
+
+Never commit `.env` or its private values. The SEC diagnostics
+do not send Alpaca credentials.
+
+From the repository root, with your project environment active:
+
+```powershell
+python scripts/check_sec_access.py
+python scripts/check_sec_company_facts_access.py
+```
+
+With the documented `.venv` setup, use
+`.\.venv\Scripts\python.exe` instead of `python`.
+
+Expected results:
+
+- Directory check: HTTP 200, AAPL CIK `0000320193`,
+  and MSFT CIK `0000789019`.
+- Company-facts check: HTTP 200 for each company, matching CIKs,
+  concept metadata, units, observation counts, and up to two
+  sample observations per inspected concept/unit.
+
+Inspect the output; HTTP 200 alone does not validate the contract.
+Counts and sample data may change. Samples follow response order
+and are not a latest-value selection.
+
+These are local, read-only source diagnostics. They do not save
+response payloads, create Databricks tables, or implement the
+Bronze/Silver/Gold pipeline.
+
+</details>
 
 ## Disclaimer
 
