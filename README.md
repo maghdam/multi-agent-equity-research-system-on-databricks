@@ -71,7 +71,14 @@ The application will return:
 
 ## Implementation
 
-Development is organized into three milestones. See [PLAN.md](PLAN.md) for the working checklist.
+Development follows one end-to-end workflow:
+
+1. **Project foundations:** scope, architecture, repository, and Databricks smoke test.
+2. **Data Engineering:** source contracts, Bronze/Silver/Gold pipelines, quality, scheduling, and deployment checks.
+3. **AI Engineering:** retrieval and tools, the multi-agent workflow, tracing, and evaluation.
+4. **Application delivery:** UI, monitoring, deployment, and reproducible demonstration.
+
+Each milestone has a tested completion gate. See [PLAN.md](PLAN.md) for progress and [DATA_CONTRACTS.md](DATA_CONTRACTS.md) for the layer inventory and data rules.
 
 ## Local Alpaca access check
 
