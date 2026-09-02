@@ -8,6 +8,17 @@ bundle:
 include:
   - resources/*.yml
 
+variables:
+  data_catalog:
+    description: Unity Catalog catalog containing the medallion schemas.
+    default: workspace
+  bronze_schema:
+    description: Unity Catalog schema containing raw Bronze datasets.
+    default: equity_research_bronze
+  alpaca_secret_scope:
+    description: Databricks secret scope containing the Alpaca credentials.
+    default: equity-research-dev
+
 targets:
   dev:
     mode: development

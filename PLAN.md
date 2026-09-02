@@ -2,9 +2,9 @@
 
 Build a small research app that compares AAPL and MSFT using market data, company fundamentals, and cited news/filing evidence. See [README.md](README.md) for the architecture and expected output.
 
-**Current position:** Milestone 1. Development setup, local source-access checks, and the shared AAPL/MSFT configuration/loader are complete. Price, news, and company-facts contracts are reviewed drafts; filing-text rules are partly defined. Production ingestion is not implemented.
+**Current position:** Milestone 1. The Bronze price job is complete for the MVP: 26 offline tests cover configuration, requests, responses, pagination, retries, and date windows; backfill, incremental, multi-page, and safe-rerun behavior are verified in Databricks. Remaining Bronze sources, Silver, Gold, scheduling, and CI/CD remain pending.
 
-**Next:** Review and commit the configuration/documentation checkpoint; then build the first Bronze price job. Finish the remaining filing rules when implementing that source.
+**Next:** Build Bronze news ingestion using the same raw-envelope, reusable-client, retry, pagination, and verification conventions.
 
 ## Working approach
 
@@ -33,8 +33,12 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
 
 ### Build the transformations
 
-- [ ] Confirm provider storage/retention/processing permissions and configure runtime secrets before persistent ingestion. Use synthetic fixtures if permissions remain unresolved.
-- [ ] Build the first Bronze price job with reusable request logic, pagination, bounded retries/rate limits, raw storage, and ingestion metadata.
+- [ ] Confirm provider storage, retention, and processing permissions before sustained ingestion. Use synthetic fixtures if permissions remain unresolved.
+- [x] Configure development runtime secrets and verify serverless Alpaca access without exposing credentials.
+- [x] Deploy and SQL-verify one bounded Bronze price-response append for AAPL and MSFT; see the [successful development run](https://dbc-5e700074-422e.cloud.databricks.com/jobs/260103230393545/runs/898971715711565?o=7474654299884940) (workspace access required).
+- [x] Add reusable price-request construction, response parsing, and bounded cycle-safe pagination with 18 passing offline tests; verify a [two-page development run](https://dbc-5e700074-422e.cloud.databricks.com/jobs/260103230393545/runs/686396093451117?o=7474654299884940) and its continuation-token chain through SQL (workspace access required).
+- [x] Add bounded retry and rate-limit handling with deterministic policy tests; verify a [routine retry-enabled development run](https://dbc-5e700074-422e.cloud.databricks.com/jobs/260103230393545/runs/360486532686779?o=7474654299884940) (workspace access required).
+- [x] Add configurable backfill and rolling incremental windows with 26 passing offline tests; verify an [incremental run](https://dbc-5e700074-422e.cloud.databricks.com/jobs/260103230393545/runs/1002689227433019?o=7474654299884940) and an identical [safe rerun](https://dbc-5e700074-422e.cloud.databricks.com/jobs/260103230393545/runs/424518002298178?o=7474654299884940) preserved under distinct ingestion IDs (workspace access required).
 - [ ] Demonstrate that the first price transformation accepts a third compatible fixture equity without stock-specific pipeline changes; do not expand live scope.
 - [ ] Add Bronze news, company facts, and selected filings using the same ingestion conventions.
 - [ ] Build Silver validation and deduplication with rejection reporting, safe version selection, and replay tests.

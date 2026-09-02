@@ -1,0 +1,8 @@
+resources:
+  schemas:
+    bronze:
+      name: ${var.bronze_schema}
+      catalog_name: ${var.data_catalog}
+      comment: Raw, replayable source responses for the equity research system.
+      lifecycle:
+        prevent_destroy: true
