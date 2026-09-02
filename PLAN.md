@@ -2,9 +2,9 @@
 
 Build a small research app that compares AAPL and MSFT using market data, company fundamentals, and cited news/filing evidence. See [README.md](README.md) for the architecture and expected output.
 
-**Current position:** Milestone 1. The Bronze price and news jobs are complete for the MVP: 45 offline tests cover configuration, requests, responses, pagination, retries, and date windows; backfill, incremental, multi-page, and safe-rerun behavior are verified in Databricks for prices and news. Remaining Bronze sources (SEC company facts and filings), Silver, Gold, scheduling, and CI/CD remain pending.
+**Current position:** Milestone 1. The Bronze price, news, and SEC company-facts ingestion jobs are complete for the MVP: 59 offline tests cover configuration, requests, responses, pagination, retries, date windows, and SEC HTTP policies; append-only provenance and safe-rerun behavior are verified in Databricks for prices, news, and company facts. Remaining Milestone 1 work: SEC filings ingestion, then Silver transformations and validation.
 
-**Next:** Build Bronze company-facts ingestion with the same raw-source provenance and bounded verification approach.
+**Next:** Build Bronze SEC filings ingestion using the same raw-source provenance, conservative SEC access policy, and bounded verification approach.
 
 ## Working approach
 
@@ -49,7 +49,14 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
   - Live bounded backfill (AAPL/MSFT, 2026-08-24–2026-08-28, page limit 3): 84 articles across 29 response pages; full continuation-token chain verified; see [backfill run](https://dbc-5e700074-422e.cloud.databricks.com/jobs/752273509776159/runs/541455067040587?o=7474654299884940) (workspace access required).
   - Live incremental run (7-day overlap, page limit 50): 105 articles across 3 pages (50/50/5).
   - Safe rerun verified: identical historical request produced 29/29 identical payload hashes while preserving both runs under distinct ingestion IDs and distinct response IDs; see [rerun](https://dbc-5e700074-422e.cloud.databricks.com/jobs/752273509776159/runs/764960512099615?o=7474654299884940) (workspace access required).
-- [ ] Add Bronze company facts and selected SEC filings using the same ingestion conventions.
+- [x] Build Bronze SEC company-facts ingestion using the same raw-source provenance and conservative access policy.
+  - Reusable SEC company-facts request path construction and envelope parsing covered by offline tests.
+  - Shared SEC HTTP access policy (User-Agent header, minimum 200ms spacing, bounded retry backoff) implemented in `sec_http.py`.
+  - `company_facts_responses` stores append-only raw SEC JSON response snapshots with CIK, entity name, payload hash, retrieval timestamp, and ingestion-run provenance.
+  - 59 offline tests pass and `databricks bundle validate -t dev` succeeds.
+  - Live Databricks run appends exactly 2 raw company-facts snapshots for AAPL and MSFT with correct CIK/entity mappings and HTTP 200 OK responses; see [company-facts run](https://dbc-5e700074-422e.cloud.databricks.com/jobs/29449776245070/runs/1091317525267833?o=7474654299884940) (workspace access required).
+  - Safe rerun verified: immediate rerun produced identical payload hashes while preserving both runs under distinct ingestion run IDs and response IDs.
+- [ ] Add Bronze selected SEC filings using the same raw-source provenance conventions.
 - [ ] Build Silver validation and deduplication with rejection reporting, safe version selection, and replay tests.
 - [ ] Define comparable periods and filing versions; build Gold market and fundamental metrics with clear `as_of` timestamps and coverage limits.
 
