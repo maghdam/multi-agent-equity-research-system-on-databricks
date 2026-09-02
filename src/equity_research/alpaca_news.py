@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 MAX_NEWS_PAGE_LIMIT = 50
 MAX_NEWS_RESPONSE_PAGES = 100
+DEFAULT_NEWS_INCREMENTAL_LOOKBACK_DAYS = 7
+MAX_NEWS_INCREMENTAL_LOOKBACK_DAYS = 31
+NEWS_ACCESS_DELAY_MINUTES = 15
 
 
 @dataclass(frozen=True)
@@ -25,6 +29,15 @@ class NewsPageCursor:
     page_number: int = 1
     page_token: str | None = None
     seen_page_tokens: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
+class NewsRequestWindow:
+    """Resolved Alpaca news request interval and its load mode."""
+
+    load_mode: str
+    start: str
+    end: str
 
 
 def build_news_request_parameters(
@@ -151,3 +164,97 @@ def advance_news_page(
             cursor.seen_page_tokens | frozenset({normalized_token})
         ),
     )
+
+
+def resolve_news_request_window(
+    load_mode: str,
+    start: str = "",
+    end: str = "",
+    *,
+    lookback_days: int = DEFAULT_NEWS_INCREMENTAL_LOOKBACK_DAYS,
+    now: datetime | None = None,
+) -> NewsRequestWindow:
+    """Resolve an explicit backfill or delayed rolling news interval."""
+
+    normalized_mode = load_mode.strip().lower()
+
+    if normalized_mode not in {"backfill", "incremental"}:
+        raise ValueError("load_mode must be backfill or incremental.")
+
+    normalized_start = start.strip()
+    normalized_end = end.strip()
+
+    if normalized_mode == "backfill":
+        if not normalized_start or not normalized_end:
+            raise ValueError(
+                "backfill mode requires nonblank start and end timestamps."
+            )
+
+        start_datetime = _parse_aware_timestamp(normalized_start, "start")
+        end_datetime = _parse_aware_timestamp(normalized_end, "end")
+
+        if start_datetime >= end_datetime:
+            raise ValueError("backfill start must be earlier than end.")
+
+        return NewsRequestWindow(
+            load_mode=normalized_mode,
+            start=start_datetime.isoformat(),
+            end=end_datetime.isoformat(),
+        )
+
+    if normalized_start or normalized_end:
+        raise ValueError(
+            "incremental mode calculates start and end; leave both blank."
+        )
+
+    if (
+        isinstance(lookback_days, bool)
+        or not isinstance(lookback_days, int)
+        or not 1 <= lookback_days <= MAX_NEWS_INCREMENTAL_LOOKBACK_DAYS
+    ):
+        raise ValueError(
+            "lookback_days must be an integer from 1 to "
+            f"{MAX_NEWS_INCREMENTAL_LOOKBACK_DAYS}."
+        )
+
+    reference_time = now or datetime.now(timezone.utc)
+
+    if reference_time.tzinfo is None or reference_time.utcoffset() is None:
+        raise ValueError("now must be timezone-aware.")
+
+    end_datetime = (
+        reference_time.astimezone(timezone.utc)
+        - timedelta(minutes=NEWS_ACCESS_DELAY_MINUTES)
+    )
+
+    start_datetime = end_datetime - timedelta(days=lookback_days)
+
+    return NewsRequestWindow(
+        load_mode=normalized_mode,
+        start=start_datetime.isoformat(),
+        end=end_datetime.isoformat(),
+    )
+
+
+def _parse_aware_timestamp(value: str, parameter: str) -> datetime:
+    """Parse one RFC-3339-style timestamp and require its UTC offset."""
+
+    normalized_value = (
+        value[:-1] + "+00:00"
+        if value.endswith("Z")
+        else value
+    )
+
+    try:
+        parsed = datetime.fromisoformat(normalized_value)
+    except ValueError as exc:
+        raise ValueError(
+            f"{parameter} must be a valid timezone-aware timestamp."
+        ) from exc
+
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(
+            f"{parameter} must be a valid timezone-aware timestamp."
+        )
+
+    return parsed

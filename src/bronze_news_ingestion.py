@@ -1,11 +1,5 @@
 # Databricks notebook source
-"""Retrieve bounded Alpaca pages and append their raw envelopes to Bronze.
-
-The job retains successful source responses and provenance, follows bounded
-pagination, retries only temporary source failures, and supports explicit
-backfill or completed-day incremental windows. Later slices add safe-rerun
-evidence and scheduling.
-"""
+"""Retrieve bounded Alpaca news pages and append raw envelopes to Bronze."""
 
 import hashlib
 import json
@@ -21,14 +15,14 @@ from equity_research.alpaca_http import (
     calculate_retry_delay,
     is_retryable_http_status,
 )
-from equity_research.alpaca_prices import (
-    DEFAULT_INCREMENTAL_LOOKBACK_DAYS,
-    MAX_PAGE_LIMIT,
-    PricePageCursor,
-    advance_price_page,
-    build_price_request_parameters,
-    parse_price_response_page,
-    resolve_price_request_window,
+from equity_research.alpaca_news import (
+    DEFAULT_NEWS_INCREMENTAL_LOOKBACK_DAYS,
+    MAX_NEWS_PAGE_LIMIT,
+    NewsPageCursor,
+    advance_news_page,
+    build_news_request_parameters,
+    parse_news_response_page,
+    resolve_news_request_window,
 )
 from equity_research.config import load_equities
 from pyspark.sql import SparkSession
@@ -42,8 +36,9 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
+
 ALPACA_HOST = "data.alpaca.markets"
-ALPACA_PATH = "/v2/stocks/bars"
+ALPACA_PATH = "/v1beta1/news"
 IDENTIFIER_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
@@ -51,8 +46,10 @@ def _required_identifier(value: str, parameter: str) -> str:
     """Validate a Unity Catalog identifier supplied by bundle configuration."""
 
     normalized = value.strip()
+
     if not IDENTIFIER_PATTERN.fullmatch(normalized):
         raise ValueError(f"Invalid {parameter} identifier: {value!r}.")
+
     return normalized
 
 
@@ -61,7 +58,7 @@ def _request_alpaca_page(
     api_key: str,
     api_secret: str,
 ) -> tuple[int, bytes, datetime]:
-    """Retrieve one page with bounded retries for temporary failures."""
+    """Retrieve one news page with bounded retries."""
 
     for attempt_number in range(1, MAX_REQUEST_ATTEMPTS + 1):
         connection = HTTPSConnection(ALPACA_HOST, timeout=30)
@@ -76,24 +73,31 @@ def _request_alpaca_page(
                     "Accept": "application/json",
                 },
             )
+
             response = connection.getresponse()
             status = response.status
             retry_after_header = response.getheader("Retry-After")
             response_body = response.read()
             fetched_at = datetime.now(timezone.utc)
+
         except OSError as exc:
             if attempt_number == MAX_REQUEST_ATTEMPTS:
                 raise RuntimeError(
-                    "Alpaca request failed after bounded network retries."
+                    "Alpaca news request failed after bounded network retries."
                 ) from exc
 
             delay_seconds = calculate_retry_delay(attempt_number)
+
             print(
-                "ALPACA_RETRY_SCHEDULED; reason=network; "
-                f"attempt={attempt_number}; delay_seconds={delay_seconds:g}"
+                "ALPACA_RETRY_SCHEDULED; "
+                "source=news; reason=network; "
+                f"attempt={attempt_number}; "
+                f"delay_seconds={delay_seconds:g}"
             )
+
             sleep(delay_seconds)
             continue
+
         finally:
             connection.close()
 
@@ -101,26 +105,30 @@ def _request_alpaca_page(
             return status, response_body, fetched_at
 
         should_retry = is_retryable_http_status(status)
+
         if not should_retry or attempt_number == MAX_REQUEST_ATTEMPTS:
             raise RuntimeError(
-                f"Alpaca returned HTTP {status}; response is not printed."
+                f"Alpaca news returned HTTP {status}; "
+                "response is not printed."
             )
 
         delay_seconds = calculate_retry_delay(
             attempt_number,
             retry_after_header,
         )
+
         print(
             "ALPACA_RETRY_SCHEDULED; "
-            f"reason=http_{status}; attempt={attempt_number}; "
+            f"source=news; reason=http_{status}; "
+            f"attempt={attempt_number}; "
             f"delay_seconds={delay_seconds:g}"
         )
+
         sleep(delay_seconds)
 
-    raise RuntimeError("Alpaca request retry loop ended unexpectedly.")
+    raise RuntimeError("Alpaca news retry loop ended unexpectedly.")
 
 
-# Job parameters keep the environment-specific secret scope out of the code.
 dbutils.widgets.text("catalog", "")  # type: ignore[name-defined]
 dbutils.widgets.text("bronze_schema", "")  # type: ignore[name-defined]
 dbutils.widgets.text("secret_scope", "")  # type: ignore[name-defined]
@@ -129,27 +137,31 @@ dbutils.widgets.text("start", "")  # type: ignore[name-defined]
 dbutils.widgets.text("end", "")  # type: ignore[name-defined]
 dbutils.widgets.text(  # type: ignore[name-defined]
     "lookback_days",
-    str(DEFAULT_INCREMENTAL_LOOKBACK_DAYS),
+    str(DEFAULT_NEWS_INCREMENTAL_LOOKBACK_DAYS),
 )
 dbutils.widgets.text(  # type: ignore[name-defined]
     "page_limit",
-    str(MAX_PAGE_LIMIT),
+    str(MAX_NEWS_PAGE_LIMIT),
 )
+
 
 catalog = _required_identifier(
     dbutils.widgets.get("catalog"),  # type: ignore[name-defined]
     "catalog",
 )
+
 bronze_schema_name = _required_identifier(
     dbutils.widgets.get("bronze_schema"),  # type: ignore[name-defined]
     "bronze_schema",
 )
+
 secret_scope = dbutils.widgets.get("secret_scope").strip()  # type: ignore[name-defined]
 load_mode = dbutils.widgets.get("load_mode").strip()  # type: ignore[name-defined]
 start = dbutils.widgets.get("start").strip()  # type: ignore[name-defined]
 end = dbutils.widgets.get("end").strip()  # type: ignore[name-defined]
 lookback_days_text = dbutils.widgets.get("lookback_days").strip()  # type: ignore[name-defined]
 page_limit_text = dbutils.widgets.get("page_limit").strip()  # type: ignore[name-defined]
+
 
 if (
     not secret_scope
@@ -161,6 +173,7 @@ if (
         "secret_scope, load_mode, lookback_days, and page_limit are required."
     )
 
+
 try:
     lookback_days = int(lookback_days_text)
     page_limit = int(page_limit_text)
@@ -169,40 +182,52 @@ except ValueError as exc:
         "lookback_days and page_limit must be integers."
     ) from exc
 
-if not 1 <= page_limit <= MAX_PAGE_LIMIT:
+
+if not 1 <= page_limit <= MAX_NEWS_PAGE_LIMIT:
     raise ValueError(
-        f"page_limit must be from 1 to {MAX_PAGE_LIMIT}."
+        f"page_limit must be from 1 to {MAX_NEWS_PAGE_LIMIT}."
     )
 
-request_window = resolve_price_request_window(
+
+request_window = resolve_news_request_window(
     load_mode,
     start,
     end,
     lookback_days=lookback_days,
 )
 
+
 equities = load_equities()
 symbols = [equity.alpaca_symbol for equity in equities.values()]
+
 
 api_key = dbutils.secrets.get(  # type: ignore[name-defined]
     scope=secret_scope,
     key="alpaca-api-key",
 )
+
 api_secret = dbutils.secrets.get(  # type: ignore[name-defined]
     scope=secret_scope,
     key="alpaca-secret-key",
 )
 
+
 ingestion_run_id = str(uuid4())
 
-table_name = f"{catalog}.{bronze_schema_name}.price_responses"
+table_name = f"{catalog}.{bronze_schema_name}.news_responses"
+
 quoted_table_name = ".".join(
     f"`{identifier}`"
-    for identifier in (catalog, bronze_schema_name, "price_responses")
+    for identifier in (
+        catalog,
+        bronze_schema_name,
+        "news_responses",
+    )
 )
 
-# The explicit DDL makes the raw storage contract visible and repeatable.
+
 spark = SparkSession.builder.getOrCreate()
+
 spark.sql(
     f"""
     CREATE TABLE IF NOT EXISTS {quoted_table_name} (
@@ -222,13 +247,14 @@ spark.sql(
       ingestion_run_id STRING NOT NULL
     )
     USING DELTA
-    COMMENT 'Raw Alpaca daily-price response pages and retrieval provenance'
+    COMMENT 'Raw Alpaca company-news response pages and retrieval provenance'
     TBLPROPERTIES (
       'quality' = 'bronze',
       'source_system' = 'alpaca'
     )
     """
 )
+
 
 bronze_table_schema = StructType(
     [
@@ -249,24 +275,23 @@ bronze_table_schema = StructType(
     ]
 )
 
-# Retrieve every response page before one Delta append. This prevents a failed
-# later request from leaving a partially written ingestion run.
-cursor: PricePageCursor | None = PricePageCursor()
+
+cursor: NewsPageCursor | None = NewsPageCursor()
 bronze_records: list[tuple[object, ...]] = []
-bar_counts = {symbol: 0 for symbol in symbols}
-configured_symbols = set(symbols)
+articles_received = 0
+
 
 while cursor is not None:
-    request_parameters = build_price_request_parameters(
+    request_parameters = build_news_request_parameters(
         symbols,
         request_window.start,
         request_window.end,
         page_token=cursor.page_token,
         limit=page_limit,
     )
+
     query = urlencode(request_parameters)
 
-    # HTTPSConnection does not follow redirects, so credentials stay here.
     status, response_body, fetched_at = _request_alpaca_page(
         query,
         api_key,
@@ -277,33 +302,27 @@ while cursor is not None:
         response_text = response_body.decode("utf-8")
         payload = json.loads(response_text)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise RuntimeError("Alpaca returned an invalid JSON response.") from exc
-
-    try:
-        response_page = parse_price_response_page(payload)
-    except ValueError as exc:
         raise RuntimeError(
-            "Alpaca returned an invalid price-response page."
+            "Alpaca returned an invalid JSON news response."
         ) from exc
 
-    unexpected_symbols = set(response_page.bars) - configured_symbols
-    if unexpected_symbols:
+    try:
+        response_page = parse_news_response_page(payload)
+    except ValueError as exc:
         raise RuntimeError(
-            "Alpaca returned unrequested symbols; values are not printed."
-        )
+            "Alpaca returned an invalid news-response page."
+        ) from exc
 
-    next_cursor = advance_price_page(
+    next_cursor = advance_news_page(
         cursor,
         response_page.next_page_token,
     )
 
-    for symbol in symbols:
-        bar_counts[symbol] += len(response_page.bars.get(symbol, []))
+    articles_received += response_page.record_count
 
-    source_response_id = str(uuid4())
     bronze_records.append(
         (
-            source_response_id,
+            str(uuid4()),
             "alpaca",
             f"https://{ALPACA_HOST}{ALPACA_PATH}",
             json.dumps(
@@ -326,45 +345,46 @@ while cursor is not None:
 
     cursor = next_cursor
 
-missing_symbols = [
-    symbol for symbol, record_count in bar_counts.items() if record_count == 0
-]
-if missing_symbols:
-    raise RuntimeError(
-        "No completed daily bar was returned for every configured equity."
-    )
 
 rows_appended = len(bronze_records)
+
 
 spark.createDataFrame(
     bronze_records,
     schema=bronze_table_schema,
 ).write.format("delta").mode("append").saveAsTable(table_name)
 
+
 written_rows = (
     spark.table(table_name)
     .filter(col("ingestion_run_id") == ingestion_run_id)
     .count()
 )
+
+
 if written_rows != rows_appended:
     raise RuntimeError(
-        f"Expected {rows_appended} persisted Bronze responses, "
+        f"Expected {rows_appended} persisted Bronze news responses, "
         f"found {written_rows}."
     )
 
-print("BRONZE_PRICE_APPEND=PASSED")
+
+print("BRONZE_NEWS_APPEND=PASSED")
 print(f"bronze_table={table_name}")
 print(f"load_mode={request_window.load_mode}")
 print(f"request_start={request_window.start}")
 print(f"request_end={request_window.end}")
 print(f"configured_symbols={symbols}")
-print(f"bar_counts={bar_counts}")
+print(f"articles_received={articles_received}")
 print(f"pages_retrieved={rows_appended}")
 print(f"ingestion_run_id={ingestion_run_id}")
 print(f"rows_appended={rows_appended}")
 
+
 dbutils.notebook.exit(  # type: ignore[name-defined]
-    "BRONZE_PRICE_APPEND=PASSED; "
-    f"bronze_table={table_name}; rows_appended={rows_appended}; "
+    "BRONZE_NEWS_APPEND=PASSED; "
+    f"bronze_table={table_name}; "
+    f"rows_appended={rows_appended}; "
+    f"articles_received={articles_received}; "
     f"ingestion_run_id={ingestion_run_id}"
 )
