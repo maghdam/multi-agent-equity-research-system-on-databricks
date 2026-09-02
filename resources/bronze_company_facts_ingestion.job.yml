@@ -1,0 +1,22 @@
+resources:
+  jobs:
+    bronze_company_facts_ingestion:
+      name: ${bundle.name}-bronze-company-facts-ingestion
+      description: >-
+        Ingests configured SEC company-facts response snapshots into a managed
+        Bronze Delta table.
+
+      max_concurrent_runs: 1
+
+      tasks:
+        - task_key: ingest_bronze_company_facts
+
+          notebook_task:
+            notebook_path: ../src/bronze_company_facts_ingestion.py
+
+            base_parameters:
+              catalog: ${resources.schemas.bronze.catalog_name}
+              bronze_schema: ${resources.schemas.bronze.name}
+              secret_scope: ${var.alpaca_secret_scope}
+
+          timeout_seconds: 300
