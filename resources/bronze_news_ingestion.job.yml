@@ -1,0 +1,43 @@
+resources:
+  jobs:
+    bronze_news_ingestion:
+      name: ${bundle.name}-bronze-news-ingestion
+      description: >-
+        Ingests configured company-news response pages into a managed
+        Bronze Delta table.
+
+      max_concurrent_runs: 1
+
+      parameters:
+        - name: load_mode
+          default: backfill
+
+        - name: start
+          default: "2026-08-24T00:00:00Z"
+
+        - name: end
+          default: "2026-08-28T23:59:59Z"
+
+        - name: lookback_days
+          default: "7"
+
+        - name: page_limit
+          default: "50"
+
+      tasks:
+        - task_key: ingest_bronze_news
+
+          notebook_task:
+            notebook_path: ../src/bronze_news_ingestion.py
+
+            base_parameters:
+              catalog: ${resources.schemas.bronze.catalog_name}
+              bronze_schema: ${resources.schemas.bronze.name}
+              secret_scope: ${var.alpaca_secret_scope}
+              load_mode: "{{job.parameters.load_mode}}"
+              start: "{{job.parameters.start}}"
+              end: "{{job.parameters.end}}"
+              lookback_days: "{{job.parameters.lookback_days}}"
+              page_limit: "{{job.parameters.page_limit}}"
+
+          timeout_seconds: 300

@@ -1,33 +1,30 @@
-"""Reusable Alpaca daily-price request logic."""
+"""Reusable Alpaca company-news request logic."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, timezone
 
-
-
-MAX_PAGE_LIMIT = 10_000
-MAX_RESPONSE_PAGES = 100
-DEFAULT_INCREMENTAL_LOOKBACK_DAYS = 7
-MAX_INCREMENTAL_LOOKBACK_DAYS = 31
-NEW_YORK_TIMEZONE = ZoneInfo("America/New_York")
+MAX_NEWS_PAGE_LIMIT = 50
+MAX_NEWS_RESPONSE_PAGES = 100
+DEFAULT_NEWS_INCREMENTAL_LOOKBACK_DAYS = 7
+MAX_NEWS_INCREMENTAL_LOOKBACK_DAYS = 31
+NEWS_ACCESS_DELAY_MINUTES = 15
 
 
 @dataclass(frozen=True)
-class PriceResponsePage:
-    """Validated contents and metadata from one Alpaca response page."""
+class NewsResponsePage:
+    """Validated contents and metadata from one Alpaca news response page."""
 
-    bars: dict[str, list[dict[str, object]]]
+    articles: list[dict[str, object]]
     next_page_token: str | None
     record_count: int
 
 
 @dataclass(frozen=True)
-class PricePageCursor:
-    """Position and safety history for an Alpaca pagination sequence."""
+class NewsPageCursor:
+    """Position and safety history for an Alpaca news pagination sequence."""
 
     page_number: int = 1
     page_token: str | None = None
@@ -35,35 +32,31 @@ class PricePageCursor:
 
 
 @dataclass(frozen=True)
-class PriceRequestWindow:
-    """Resolved inclusive Alpaca request interval and its load mode."""
+class NewsRequestWindow:
+    """Resolved Alpaca news request interval and its load mode."""
 
     load_mode: str
     start: str
     end: str
 
 
-def build_price_request_parameters(
+def build_news_request_parameters(
     symbols: Sequence[str],
     start: str,
     end: str,
     *,
     page_token: str | None = None,
-    limit: int = MAX_PAGE_LIMIT,
+    limit: int = MAX_NEWS_PAGE_LIMIT,
 ) -> dict[str, str | int]:
-    """Build one credential-free Alpaca daily-bars request."""
+    """Build one credential-free Alpaca historical-news request."""
 
     if isinstance(symbols, str):
         raise ValueError("symbols must be a sequence, not one string.")
 
     normalized_symbols = tuple(symbol.strip() for symbol in symbols)
 
-    if not normalized_symbols or any(
-        not symbol for symbol in normalized_symbols
-    ):
-        raise ValueError(
-            "symbols must contain at least one nonblank symbol."
-        )
+    if not normalized_symbols or any(not symbol for symbol in normalized_symbols):
+        raise ValueError("symbols must contain at least one nonblank symbol.")
 
     if len(set(normalized_symbols)) != len(normalized_symbols):
         raise ValueError("symbols must not contain duplicates.")
@@ -77,112 +70,69 @@ def build_price_request_parameters(
     if (
         isinstance(limit, bool)
         or not isinstance(limit, int)
-        or not 1 <= limit <= MAX_PAGE_LIMIT
+        or not 1 <= limit <= MAX_NEWS_PAGE_LIMIT
     ):
         raise ValueError(
-            f"limit must be an integer from 1 to {MAX_PAGE_LIMIT}."
+            f"limit must be an integer from 1 to {MAX_NEWS_PAGE_LIMIT}."
         )
 
     parameters: dict[str, str | int] = {
         "symbols": ",".join(normalized_symbols),
-        "timeframe": "1Day",
         "start": normalized_start,
         "end": normalized_end,
-        "feed": "sip",
-        "adjustment": "split",
-        "currency": "USD",
-        "limit": limit,
         "sort": "asc",
+        "limit": limit,
+        "include_content": "true",
+        "exclude_contentless": "false",
     }
 
     if page_token is not None:
         normalized_page_token = page_token.strip()
-
         if not normalized_page_token:
-            raise ValueError(
-                "page_token must be nonblank when provided."
-            )
-
+            raise ValueError("page_token must be nonblank when provided.")
         parameters["page_token"] = normalized_page_token
 
     return parameters
 
 
-def parse_price_response_page(payload: object) -> PriceResponsePage:
-    """Validate and normalize one decoded Alpaca price-response page."""
+def parse_news_response_page(payload: object) -> NewsResponsePage:
+    """Validate and normalize one decoded Alpaca news response page."""
 
     if not isinstance(payload, Mapping):
         raise ValueError("response payload must be a JSON object.")
 
-    raw_bars = payload.get("bars")
+    raw_articles = payload.get("news")
+    if not isinstance(raw_articles, list):
+        raise ValueError("response payload must contain a news list.")
 
-    if not isinstance(raw_bars, Mapping):
-        raise ValueError(
-            "response payload must contain a bars object."
-        )
-
-    normalized_bars: dict[str, list[dict[str, object]]] = {}
-    record_count = 0
-
-    for raw_symbol, raw_records in raw_bars.items():
-        if not isinstance(raw_symbol, str) or not raw_symbol.strip():
-            raise ValueError(
-                "bar symbols must be nonblank strings."
-            )
-
-        symbol = raw_symbol.strip()
-
-        if symbol in normalized_bars:
-            raise ValueError(
-                "bar symbols must be unique after normalization."
-            )
-
-        if not isinstance(raw_records, list):
-            raise ValueError(
-                f"bars for {symbol} must be provided as a list."
-            )
-
-        records: list[dict[str, object]] = []
-
-        for record in raw_records:
-            if not isinstance(record, Mapping):
-                raise ValueError(
-                    f"each bar for {symbol} must be a JSON object."
-                )
-
-            records.append(dict(record))
-
-        normalized_bars[symbol] = records
-        record_count += len(records)
+    articles: list[dict[str, object]] = []
+    for article in raw_articles:
+        if not isinstance(article, Mapping):
+            raise ValueError("each news article must be a JSON object.")
+        articles.append(dict(article))
 
     raw_next_page_token = payload.get("next_page_token")
-
     if raw_next_page_token is None:
         next_page_token = None
-    elif (
-        isinstance(raw_next_page_token, str)
-        and raw_next_page_token.strip()
-    ):
+    elif isinstance(raw_next_page_token, str) and raw_next_page_token.strip():
         next_page_token = raw_next_page_token.strip()
     else:
-        raise ValueError(
-            "next_page_token must be null or a nonblank string."
-        )
+        raise ValueError("next_page_token must be null or a nonblank string.")
 
-    return PriceResponsePage(
-        bars=normalized_bars,
+    return NewsResponsePage(
+        articles=articles,
         next_page_token=next_page_token,
-        record_count=record_count,
+        record_count=len(articles),
     )
 
 
-def advance_price_page(
-    cursor: PricePageCursor,
+def advance_news_page(
+    cursor: NewsPageCursor,
     next_page_token: str | None,
     *,
-    max_pages: int = MAX_RESPONSE_PAGES,
-) -> PricePageCursor | None:
-    """Return the next cursor, or None when pagination is complete."""
+    max_pages: int = MAX_NEWS_RESPONSE_PAGES,
+) -> NewsPageCursor | None:
+    """Return the next news cursor, or None when pagination is complete."""
 
     if (
         isinstance(max_pages, bool)
@@ -195,9 +145,7 @@ def advance_price_page(
         return None
 
     if not isinstance(next_page_token, str) or not next_page_token.strip():
-        raise ValueError(
-            "next_page_token must be null or a nonblank string."
-        )
+        raise ValueError("next_page_token must be null or a nonblank string.")
 
     normalized_token = next_page_token.strip()
 
@@ -209,7 +157,7 @@ def advance_price_page(
             f"Alpaca pagination exceeded the {max_pages}-page limit."
         )
 
-    return PricePageCursor(
+    return NewsPageCursor(
         page_number=cursor.page_number + 1,
         page_token=normalized_token,
         seen_page_tokens=(
@@ -218,20 +166,18 @@ def advance_price_page(
     )
 
 
-
-
-
-def resolve_price_request_window(
+def resolve_news_request_window(
     load_mode: str,
     start: str = "",
     end: str = "",
     *,
-    lookback_days: int = DEFAULT_INCREMENTAL_LOOKBACK_DAYS,
+    lookback_days: int = DEFAULT_NEWS_INCREMENTAL_LOOKBACK_DAYS,
     now: datetime | None = None,
-) -> PriceRequestWindow:
-    """Resolve an explicit backfill or completed-day incremental interval."""
+) -> NewsRequestWindow:
+    """Resolve an explicit backfill or delayed rolling news interval."""
 
     normalized_mode = load_mode.strip().lower()
+
     if normalized_mode not in {"backfill", "incremental"}:
         raise ValueError("load_mode must be backfill or incremental.")
 
@@ -250,7 +196,7 @@ def resolve_price_request_window(
         if start_datetime >= end_datetime:
             raise ValueError("backfill start must be earlier than end.")
 
-        return PriceRequestWindow(
+        return NewsRequestWindow(
             load_mode=normalized_mode,
             start=start_datetime.isoformat(),
             end=end_datetime.isoformat(),
@@ -264,33 +210,26 @@ def resolve_price_request_window(
     if (
         isinstance(lookback_days, bool)
         or not isinstance(lookback_days, int)
-        or not 1 <= lookback_days <= MAX_INCREMENTAL_LOOKBACK_DAYS
+        or not 1 <= lookback_days <= MAX_NEWS_INCREMENTAL_LOOKBACK_DAYS
     ):
         raise ValueError(
             "lookback_days must be an integer from 1 to "
-            f"{MAX_INCREMENTAL_LOOKBACK_DAYS}."
+            f"{MAX_NEWS_INCREMENTAL_LOOKBACK_DAYS}."
         )
 
     reference_time = now or datetime.now(timezone.utc)
+
     if reference_time.tzinfo is None or reference_time.utcoffset() is None:
         raise ValueError("now must be timezone-aware.")
 
-    market_date = reference_time.astimezone(NEW_YORK_TIMEZONE).date()
-    end_date = market_date - timedelta(days=1)
-    start_date = end_date - timedelta(days=lookback_days - 1)
-
-    start_datetime = datetime.combine(
-        start_date,
-        time.min,
-        tzinfo=NEW_YORK_TIMEZONE,
-    )
-    end_datetime = datetime.combine(
-        end_date,
-        time(23, 59, 59),
-        tzinfo=NEW_YORK_TIMEZONE,
+    end_datetime = (
+        reference_time.astimezone(timezone.utc)
+        - timedelta(minutes=NEWS_ACCESS_DELAY_MINUTES)
     )
 
-    return PriceRequestWindow(
+    start_datetime = end_datetime - timedelta(days=lookback_days)
+
+    return NewsRequestWindow(
         load_mode=normalized_mode,
         start=start_datetime.isoformat(),
         end=end_datetime.isoformat(),
@@ -300,7 +239,11 @@ def resolve_price_request_window(
 def _parse_aware_timestamp(value: str, parameter: str) -> datetime:
     """Parse one RFC-3339-style timestamp and require its UTC offset."""
 
-    normalized_value = value[:-1] + "+00:00" if value.endswith("Z") else value
+    normalized_value = (
+        value[:-1] + "+00:00"
+        if value.endswith("Z")
+        else value
+    )
 
     try:
         parsed = datetime.fromisoformat(normalized_value)
