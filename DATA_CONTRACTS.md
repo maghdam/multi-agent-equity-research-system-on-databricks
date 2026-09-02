@@ -35,7 +35,24 @@ Columns are expected to evolve by purpose: Bronze keeps the complete source payl
 
 **One record:** One stock's daily bar. **Key:** `(symbol, bar_timestamp, feed, adjustment)` within this USD dataset.
 
-### Schema
+### Bronze response envelope
+
+The managed Delta table `<data catalog>.<deployed Bronze schema>.price_responses` stores one successful API response page per row. Development mode prefixes the schema for user isolation. Raw payloads remain private and credentials are never stored.
+
+| Field | Type / meaning |
+|---|---|
+| source_response_id | Unique string for this received page |
+| source_system, source_endpoint | `alpaca` and the fixed bars endpoint |
+| request_parameters_json, request_page_token | Non-secret request settings and page token |
+| response_next_page_token, page_number | Pagination provenance |
+| http_status | Successful HTTP status retained with the response |
+| response_payload_json, response_bytes, response_sha256 | Original UTF-8 JSON plus size and content hash |
+| records_received | Number of configured-symbol bars in the page |
+| fetched_at, ingestion_run_id | UTC receipt time and shared execution identifier |
+
+The table is append-only retrieval history. Repeated runs produce new response records; later Silver logic applies business-key deduplication and replay rules.
+
+### Silver schema
 
 All fields are required, together with shared provenance (`source_system = alpaca`).
 
