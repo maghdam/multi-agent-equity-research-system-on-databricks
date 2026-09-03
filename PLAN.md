@@ -2,9 +2,9 @@
 
 Build a small research app that compares AAPL and MSFT using market data, company fundamentals, and cited news/filing evidence. See [README.md](README.md) for the architecture and expected output.
 
-**Current position:** Milestone 1. All four Bronze MVP ingestion pipelines are implemented and live-verified in Databricks: prices, news, SEC company facts, and selected SEC 10-K filing documents. 71 offline tests cover configuration, request construction, response parsing, pagination, retries, date windows, SEC access policy, filing selection, and archive-path construction. Append-only provenance and safe-rerun behavior are verified for all four Bronze datasets. Remaining Milestone 1 work is primarily Silver validation/transformation, Gold metrics, CI, refresh automation, and deployment verification.
+**Current position:** Milestone 1. All four Bronze MVP ingestion pipelines are implemented and live-verified in Databricks: prices, news, SEC company facts, and selected SEC 10-K filing documents. The first Silver slice, `daily_prices`, is also implemented and live-verified. 93 offline tests now cover configuration, request construction, response parsing, pagination, retries, date windows, SEC access policy, filing selection, exact Silver price typing/validation, replay/version selection, conflict handling, and snapshot orchestration. Append-only Bronze provenance is verified for all four Bronze datasets, and the Silver price snapshot has been verified to rebuild deterministically without duplicate accumulation. Remaining Milestone 1 work is primarily the other Silver transformations, Gold metrics, CI, refresh automation, and deployment verification.
 
-**Next:** Build Silver validation and transformations for prices, news, company facts, and selected filing sections. Preserve Bronze as raw retrieval history and move cleaning, deduplication, version interpretation, and Item 1 / Item 1A extraction into Silver.
+**Next:** Build the remaining Silver validation and transformations for news, company facts, and selected filing sections, while adding durable operational rejection/audit reporting where required. Preserve Bronze as raw retrieval history and keep cleaning, deduplication, version interpretation, and Item 1 / Item 1A extraction in Silver.
 
 ## Working approach
 
@@ -110,7 +110,12 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
 
   - Raw SEC HTML responses can vary slightly between retrievals even for the same filing accession. In the verified reruns, document lengths were unchanged and only two small boundary chunks differed for each filing while the document body remained stable. Therefore `response_sha256` records exact retrieval provenance and is not treated as a filing identity or idempotency key.
 
-- [ ] Build Silver validation and deduplication with rejection reporting, safe version selection, and replay tests.
+- [ ] Build Silver validation and deduplication across all four MVP datasets with rejection reporting, safe version selection, and replay tests.
+  - [x] Prices: build `daily_prices` from immutable Bronze `price_responses` using exact DECIMAL(20,8) parsing, completed-day and OHLCV validation, configured-universe scope checks, deterministic replay/version selection, same-time conflict failure, and business-key uniqueness.
+  - [x] Prices: deploy the bundle-managed Silver schema and `silver_price_transformation` job; live-verify a 10-row AAPL/MSFT snapshot with 2 symbols, zero invalid business rows, and no duplicate business keys. Verified run: https://dbc-5e700074-422e.cloud.databricks.com/jobs/674253274066117/runs/924343723620323?o=7474654299884940
+  - [x] Prices: verify a safe rerun produces the same 10-row snapshot and SHA-256 `c31167d5c1bfa3a25e909523f9b3889e3fa4f133922f8dd92f6b68f0a0c2ea80`. Verified rerun: https://dbc-5e700074-422e.cloud.databricks.com/jobs/674253274066117/runs/174807465777710?o=7474654299884940
+  - [ ] Prices: persist durable transformation-run audit/rejection details if required beyond the currently tested rule reasons and aggregate counts.
+  - [ ] Implement Silver news, company-facts, and filing-section transformations and their dataset-specific replay/version rules.
 
 - [ ] Define comparable periods and filing versions; build Gold market and fundamental metrics with clear `as_of` timestamps and coverage limits.
 
