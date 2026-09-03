@@ -2,8 +2,7 @@
 
 The essential rules for the MVP's four datasets.
 
-**Status:** All four Bronze MVP ingestion datasets—prices, news, SEC company facts, and selected SEC filings—are implemented and live-verified in Databricks. Silver validation/transformation is now the active Milestone 1 work. Price Silver rules are defined below; the remaining Silver contracts will be finalized immediately before their implementations. Progress is tracked in [PLAN.md](PLAN.md).
-
+**Status:** All four Bronze MVP ingestion datasets—prices, news, SEC company facts, and selected SEC filings—are implemented and live-verified in Databricks. The first two Silver datasets, `daily_prices` and `news_articles`, are also implemented and live-verified with deterministic safe-rerun behavior. Price and news Silver rules are defined below; company-facts and filing-section Silver contracts will be finalized immediately before their implementations. Progress is tracked in [PLAN.md](PLAN.md).
 
 ## Planned data flow and inventory
 
@@ -90,7 +89,7 @@ Shared provenance is required (`source_system = alpaca`). All fields below are r
 
 | Field | Source / meaning | Type |
 |---|---|---|
-| article_id | `id`; positive integer, not boolean/string | Integer |
+| article_id | `id`; positive integer, not boolean/string | BIGINT |
 | headline | `headline` | String |
 | symbols | Full provider `symbols` list | Array of strings |
 | article_created_at | `created_at` | UTC timestamp |
@@ -98,15 +97,22 @@ Shared provenance is required (`source_system = alpaca`). All fields below are r
 | article_source | `source`; publisher, not API provider | String |
 | url | `url`; citation link | String |
 | summary, content | Corresponding provider fields; content may contain HTML | Optional strings |
+| configured_symbols | Selected article tags intersected with the current configured universe; deterministic unique list | Array of strings |
+| source_response_id | Bronze response page from which the selected observation came | String |
+| fetched_at | Original Bronze retrieval timestamp for the selected observation | UTC timestamp |
+| ingestion_run_id | Original Bronze ingestion run for the selected observation | String |
 
 ### Acceptance and version selection
 
 - Each symbol tag must be a nonblank string. Empty arrays, repeated tags, and other tickers are valid; the publisher is not restricted to the observed Benzinga sample.
 - Require `article_created_at <= article_updated_at <= fetched_at`, with no clock-skew allowance. Citation URLs must be absolute HTTP(S), have a hostname, and contain no username/password; this does not establish safety or reachability.
-- Among valid observations and existing Silver records, select the greatest article_updated_at **before filtering for configured stocks**. Replace all article fields together; never borrow missing text from an older revision.
-- Identical core source fields at the same key/update time are repeats. Compare symbol lists as sets and exclude ingestion metadata from content equality. Keep the earliest fetched_at, breaking ties by the lexicographically smallest ingestion_run_id.
-- Different core fields at the selected update time are a conflict; later retrieval is not a tiebreaker. Fail the whole news Silver refresh before publication and preserve the previous successful snapshot. Final uniqueness failures do the same.
-- Derive stock relationships from the selected version's tags intersected with configuration. Remove outdated relationships; no overlap means ineligible for research, not invalid metadata. Full provider tags remain preserved and never expand the universe.
+- Among valid observations in stored Bronze history for the same `(source_system, article_id)`, select the greatest `article_updated_at` before filtering for configured stocks. The MVP rebuilds the current `news_articles` snapshot from Bronze rather than using the previous Silver snapshot as version-selection input. Replace all article fields together; never borrow missing text or tags from an older revision.
+- At the selected `(source_system, article_id, article_updated_at)`, observations with identical normalized core source fields are repeats. Compare symbol tags as sets for content equality and exclude retrieval provenance from that comparison. Select the earliest `fetched_at`; break remaining ties by lexicographically smallest `ingestion_run_id`, then lexicographically smallest `source_response_id`.
+- If observations at the selected update timestamp contain different normalized core source fields, the article has an unresolved current-version conflict. Fail the whole Silver refresh before publication and preserve the previous successful snapshot. Final business-key uniqueness failures do the same. Conflicting observations that belong only to a strictly older, superseded update timestamp do not override a newer unambiguous selected revision.
+- Derive `configured_symbols` only after selecting the current article version by intersecting its complete provider tag set with the current equities configuration. The intersection is deterministic and unique. A selected valid article with no configured-symbol overlap is out of scope rather than invalid and is excluded from the published `news_articles` snapshot. Full provider tags remain preserved and never expand the configured universe.
+- Preserve the selected Bronze provenance (`source_response_id`, original `fetched_at`, and `ingestion_run_id`) on each published Silver row. Transformation-run metadata is separate from source provenance.
+- Rebuild the MVP `news_articles` snapshot deterministically from stored Bronze history and publish it only after article validation, current-version conflict detection, scope classification, and final key-uniqueness validation succeed. Malformed Bronze response structure or an unresolved selected-version conflict fails publication before replacing the previous successful snapshot.
+- Track accepted candidate, rejected, out-of-scope, duplicate, superseded-version, and selected counts for each transformation run. Rejected in-scope observations retain rule reasons and Bronze provenance without copying full article text into operational diagnostics.
 
 ### Research text
 
