@@ -18,6 +18,21 @@ RETRYABLE_SEC_HTTP_STATUSES = frozenset(
     }
 )
 
+def build_sec_html_request_headers(
+    user_agent: str,
+) -> dict[str, str]:
+    """Build headers for an identified SEC HTML document request."""
+
+    normalized_user_agent = user_agent.strip()
+
+    if not normalized_user_agent:
+        raise ValueError("user_agent must be nonblank.")
+
+    return {
+        "User-Agent": normalized_user_agent,
+        "Accept": "text/html, application/xhtml+xml",
+        "Accept-Encoding": "identity",
+    }
 
 def build_sec_request_headers(
     user_agent: str,

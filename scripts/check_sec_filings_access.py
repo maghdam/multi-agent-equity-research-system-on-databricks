@@ -1,105 +1,128 @@
-"""Inspect SEC filing metadata for the configured sample companies.
+"""Verify SEC filing metadata access and production 10-K selection logic.
 
-This is a read-only access diagnostic; it does not persist filing data or
-implement the production filing-selection rule.
+This is a read-only live diagnostic. It exercises shared project
+configuration and reusable filing-selection helpers without persisting data.
 """
 
+from __future__ import annotations
+
+import sys
 from pathlib import Path
-from time import sleep
+from time import monotonic, sleep
 
 import requests
 from dotenv import dotenv_values
 
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = PROJECT_ROOT / "src"
+
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+from equity_research.config import load_equities
+from equity_research.sec_filings import (
+    build_filing_document_path,
+    build_submissions_path,
+    parse_recent_10k_filings,
+    select_latest_10k,
+)
+from equity_research.sec_http import (
+    build_sec_request_headers,
+    calculate_sec_spacing_delay,
+)
+
+
+SEC_DATA_BASE_URL = "https://data.sec.gov"
+
+
 # Reuse private settings without displaying them.
-env_path = Path(__file__).resolve().parents[1] / ".env"
+env_path = PROJECT_ROOT / ".env"
 config = dotenv_values(env_path, interpolate=False)
+
 user_agent = (config.get("SEC_USER_AGENT") or "").strip()
 
 if not user_agent:
-    raise SystemExit("Missing SEC_USER_AGENT. Check your local .env file.")
+    raise SystemExit(
+        "Missing SEC_USER_AGENT. Check your local .env file."
+    )
 
-# Temporary diagnostic scope; the production job will use shared configuration.
-companies = {
-    "AAPL": "0000320193",
-    "MSFT": "0000789019",
-}
+headers = build_sec_request_headers(user_agent)
+equities = load_equities()
 
-fields = (
-    "accessionNumber",
-    "filingDate",
-    "reportDate",
-    "form",
-    "primaryDocument",
-)
+previous_request_started_at: float | None = None
 
-for index, (symbol, cik) in enumerate(companies.items()):
-    # Space requests to remain respectful of the SEC service.
-    if index > 0:
-        sleep(1)
+for project_symbol, equity in equities.items():
+    if previous_request_started_at is not None:
+        elapsed_seconds = monotonic() - previous_request_started_at
+        spacing_delay = calculate_sec_spacing_delay(elapsed_seconds)
+
+        if spacing_delay > 0:
+            sleep(spacing_delay)
+
+    sec_cik = equity.sec_cik
+    submissions_path = build_submissions_path(sec_cik)
+
+    previous_request_started_at = monotonic()
 
     try:
         response = requests.get(
-            f"https://data.sec.gov/submissions/CIK{cik}.json",
-            headers={
-                "User-Agent": user_agent,
-                "Accept": "application/json",
-            },
+            f"{SEC_DATA_BASE_URL}{submissions_path}",
+            headers=headers,
             timeout=30,
             allow_redirects=False,
         )
     except requests.RequestException:
-        raise SystemExit(f"{symbol}: SEC request failed.") from None
+        raise SystemExit(
+            f"{project_symbol}: SEC submissions request failed."
+        ) from None
 
-    print(f"\n{symbol} HTTP status:", response.status_code)
+    print(
+        f"\n{project_symbol} HTTP status:",
+        response.status_code,
+    )
 
     if response.status_code != 200:
-        raise SystemExit("Submissions access failed. Review the status.")
+        raise SystemExit(
+            f"{project_symbol}: submissions access failed."
+        )
 
     try:
         payload = response.json()
     except ValueError:
-        raise SystemExit("The response was not valid JSON.") from None
+        raise SystemExit(
+            f"{project_symbol}: SEC response was not valid JSON."
+        ) from None
 
-    if not isinstance(payload, dict):
-        raise SystemExit(f"{symbol}: unexpected response structure.")
+    try:
+        filings = parse_recent_10k_filings(
+            payload,
+            sec_cik,
+        )
 
-    returned_cik = str(payload.get("cik", ""))
+        selected = select_latest_10k(filings)
 
-    if (
-        not returned_cik.isascii()
-        or not returned_cik.isdigit()
-        or len(returned_cik) > 10
-        or returned_cik.zfill(10) != cik
-    ):
-        raise SystemExit(f"{symbol}: invalid or mismatched CIK.")
+        document_path = build_filing_document_path(
+            sec_cik,
+            selected,
+        )
+    except ValueError as exc:
+        raise SystemExit(
+            f"{project_symbol}: {exc}"
+        ) from None
 
-    filings = payload.get("filings")
+    print("CIK:", sec_cik)
+    print("Eligible exact 10-K rows:", len(filings))
 
-    if not isinstance(filings, dict):
-        raise SystemExit(f"{symbol}: missing filings structure.")
+    print(
+        "Selected filing:",
+        {
+            "accessionNumber": selected.accession_number,
+            "filingDate": selected.filing_date.isoformat(),
+            "reportDate": selected.report_date.isoformat(),
+            "form": selected.form,
+            "primaryDocument": selected.primary_document,
+        },
+    )
 
-    recent = filings.get("recent")
-
-    if not isinstance(recent, dict) or not all(
-        isinstance(recent.get(field), list) for field in fields
-    ):
-        raise SystemExit(f"{symbol}: invalid recent-filing arrays.")
-
-    # Each position across these arrays describes the same filing.
-    if len({len(recent[field]) for field in fields}) != 1:
-        raise SystemExit(f"{symbol}: filing arrays have different lengths.")
-
-    annual_indices = [
-        i
-        for i, form in enumerate(recent["form"])
-        if form in ("10-K", "10-K/A")
-    ]
-
-    print("CIK:", cik)
-    print("Recent filing rows:", len(recent["form"]))
-    print("10-K / 10-K/A rows in recent history:", len(annual_indices))
-
-    # Bounded samples in response order—not a latest-filing rule.
-    for number, row_index in enumerate(annual_indices[:3], start=1):
-        sample = {field: recent[field][row_index] for field in fields}
-        print(f"Sample {number}:", sample)
+    print("Document path:", document_path)

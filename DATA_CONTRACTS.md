@@ -1,8 +1,9 @@
 # Data Contracts
 
-The essential rules for the MVP's four datasets. These are **planned acceptance rules**, not guarantees made by the providers or evidence of implemented validation.
+The essential rules for the MVP's four datasets.
 
-**Status:** Price, news, and company-facts drafts have been reviewed. Filing-text rules are partly defined. Local access checks passed within the limits below; production ingestion, automated contract tests, and complete coverage checks remain pending. Progress is tracked in [PLAN.md](PLAN.md).
+**Status:** Bronze price, news, and SEC company-facts ingestion are implemented and live-verified in Databricks. SEC selected-filings Bronze ingestion is the remaining Bronze MVP dataset. Silver validation/transformation rules are partly defined and are not yet implemented. Progress is tracked in [PLAN.md](PLAN.md).
+
 
 ## Planned data flow and inventory
 
@@ -111,7 +112,7 @@ Carry article identity, publisher, URL, article timestamps, retrieval provenance
 
 ## 3. SEC company facts
 
-**Use:** Reported business performance and financial position. **Source:** SEC EDGAR Company Facts; `source_system = sec_edgar`.
+**Use:** Reported business performance and financial position. **Source:** SEC EDGAR Company Facts; `source_system = sec`.
 
 **One record:** One concept/unit/period reported in one filing. Different filings remain separate even when amounts match.
 
@@ -162,13 +163,53 @@ Shared provenance is required, plus a unique string `source_response_id` linking
 - Older replays cannot overwrite newer current snapshots. A historical retrieval cutoff `T` uses only stored responses with fetched_at <= T; none means unavailable. Historical reconstruction must not overwrite current Silver.
 - Today's response filtered by an old filing_date is not evidence of what the pipeline knew then. Filing dates are not exact public-availability timestamps. Gold period, filing-version, and coverage rules remain to be defined.
 
-## 4. SEC selected filing text - partial draft
+## 4. SEC selected filing text
 
 **Use:** Company-reported Business (Item 1) and Risk Factors (Item 1A) evidence from annual Form 10-K filings. Quarterly/current-event reports and comprehensive filing coverage are outside the initial scope.
 
-**One record:** One complete selected section of one filing. **Key:** `(source_system, cik, accession_number, section_code)`, with source_system `sec_edgar` and project section codes `item_1` / `item_1a` (not HTML anchor IDs).
+### MVP filing selection
 
-Bronze preserves the document and provenance; Silver contains cleaned section text. Retrieval/extraction history is separate from business identity. Later RAG chunks link back to sections, not the other way around. Preserve filing identity, filing date, source URL, and section name for citations.
+For each configured company, consider only SEC filing metadata whose form is exactly `10-K` and select the candidate with the greatest `filingDate`. The selected candidate must have nonblank accessionNumber, filingDate, reportDate, and primaryDocument metadata. If multiple distinct eligible filings share the greatest filingDate, treat the selection as ambiguous and fail that company's retrieval rather than choosing by response order.
+
+- `10-K/A` amendments are outside the initial MVP selection rule.
+- Selection is based on SEC filing metadata, not document ordering or filenames.
+- The selected filing must match the configured 10-digit CIK.
+- Missing or ambiguous eligible filings fail that company's retrieval rather than silently selecting another form.
+- Adding historical filings or amendment-aware version selection is a later extension.
+
+### Bronze filing-document envelope
+
+The managed Delta table `<data catalog>.<deployed Bronze schema>.filing_documents` stores one successfully retrieved selected SEC primary filing document per row.
+
+| Field | Type / meaning |
+|---|---|
+| source_response_id | Unique string for this retrieved filing document |
+| source_system | `sec` |
+| source_endpoint | Fixed SEC filing-document source |
+| project_symbol | Configured project symbol |
+| sec_cik | Configured 10-digit SEC CIK |
+| accession_number | Selected filing accession number |
+| filing_form | Selected form; initially exactly `10-K` |
+| filing_date | SEC filing date |
+| report_date | SEC reporting-period end |
+| primary_document | SEC primary-document filename |
+| source_url | SEC URL used to retrieve the primary document |
+| filing_metadata_json | Selected non-secret SEC filing metadata preserved as JSON |
+| request_parameters_json | Non-secret retrieval/selection settings |
+| http_status | Successful HTTP status retained with the document |
+| response_payload_html | Original retrieved HTML document |
+| response_bytes | Size of the original response body |
+| response_sha256 | SHA-256 hash of the original response body |
+| fetched_at | UTC timestamp of successful receipt |
+| ingestion_run_id | Shared execution identifier |
+
+The table is append-only retrieval history. Repeated successful runs create new response records and never overwrite earlier filing snapshots.
+
+Bronze validates retrieval success, configured CIK and selected filing metadata, and basic response integrity. It does not extract Item 1 or Item 1A, clean filing text, chunk content, interpret amendments, or decide research relevance. Those operations belong to Silver and the later retrieval layer.
+
+**One Silver record:** One complete selected section of one filing. **Key:** `(source_system, cik, accession_number, section_code)`, with `source_system = sec` and project section codes `item_1` / `item_1a` rather than HTML anchor IDs.
+
+Silver contains cleaned section text. Retrieval/extraction history is separate from business identity. Later RAG chunks link back to sections, not the other way around. Preserve filing identity, filing date, source URL, and section name for citations.
 
 ### Agreed identity checks
 
@@ -177,7 +218,7 @@ Bronze preserves the document and provenance; Silver contains cleaned section te
 - Document form must match metadata. Decode dates only with supported format rules; document/context period ends must match reportDate, not filingDate. Duration start must not exceed end.
 - Company name is descriptive. Record amendment status without treating it as proof of version eligibility. Exclude missing, conflicting, or unsupported identity data from research with a recorded reason.
 
-**Still to define and test:** Filing-version selection, amendment handling, final field mappings/provenance, section-boundary and extraction-quality checks, and content-use boundaries. Automated identity validation and extraction are not implemented; these details do not block the first price pipeline.
+**Still to define for Silver:** Historical/amendment-aware filing-version policy, section-boundary and extraction-quality checks, and content-use boundaries.
 
 ## Crucial test coverage - planned, not yet automated
 
