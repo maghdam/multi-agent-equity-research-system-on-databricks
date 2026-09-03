@@ -2,7 +2,7 @@
 
 The essential rules for the MVP's four datasets.
 
-**Status:** Bronze price, news, and SEC company-facts ingestion are implemented and live-verified in Databricks. SEC selected-filings Bronze ingestion is the remaining Bronze MVP dataset. Silver validation/transformation rules are partly defined and are not yet implemented. Progress is tracked in [PLAN.md](PLAN.md).
+**Status:** All four Bronze MVP ingestion datasets—prices, news, SEC company facts, and selected SEC filings—are implemented and live-verified in Databricks. Silver validation/transformation is now the active Milestone 1 work. Price Silver rules are defined below; the remaining Silver contracts will be finalized immediately before their implementations. Progress is tracked in [PLAN.md](PLAN.md).
 
 
 ## Planned data flow and inventory
@@ -73,6 +73,10 @@ All fields are required, together with shared provenance (`source_system = alpac
 - Validate exact DECIMAL(20,8) storage, including decimal volume; allow at most 12 integer and 8 fractional digits.
 - Keep one valid record per key. Identical repeats do not add rows; changed values use the latest valid original fetched_at. Older replays cannot overwrite newer observations.
 - Flag conflicting versions that cannot be ordered reliably rather than choosing arbitrarily. Exclude invalid records with reasons; fail final uniqueness validation.
+- Silver preserves the selected Bronze provenance: `source_response_id`, original `fetched_at`, and original `ingestion_run_id`. Transformation-run metadata is tracked separately and does not replace source provenance.
+- For the MVP, rebuild the current `daily_prices` snapshot deterministically from stored Bronze history and publish it atomically. A malformed response envelope or unresolved same-time conflict fails publication and preserves the previous successful Silver snapshot.
+- For candidates with the same business key and original `fetched_at`, identical normalized business fields are duplicates; select the lexicographically smallest `source_response_id` only as a deterministic provenance tiebreaker. Different normalized business fields at the same timestamp are an unresolved conflict and must fail publication.
+- Bars for symbols outside the configured universe are out of scope rather than invalid. Invalid in-scope bars are excluded with recorded rule reasons. Track accepted, rejected, out-of-scope, and duplicate counts for each transformation run.
 
 ## 2. Company news
 
