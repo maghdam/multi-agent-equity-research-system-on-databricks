@@ -1,0 +1,22 @@
+resources:
+  jobs:
+    bronze_sec_filings_ingestion:
+      name: ${bundle.name}-bronze-sec-filings-ingestion
+      description: >-
+        Ingests the selected SEC 10-K primary filing documents into a managed
+        Bronze Delta table.
+
+      max_concurrent_runs: 1
+
+      tasks:
+        - task_key: ingest_bronze_sec_filings
+
+          notebook_task:
+            notebook_path: ../src/bronze_sec_filings_ingestion.py
+
+            base_parameters:
+              catalog: ${resources.schemas.bronze.catalog_name}
+              bronze_schema: ${resources.schemas.bronze.name}
+              secret_scope: ${var.alpaca_secret_scope}
+
+          timeout_seconds: 300

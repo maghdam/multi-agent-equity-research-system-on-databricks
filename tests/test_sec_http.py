@@ -10,6 +10,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from equity_research.sec_http import (  # noqa: E402
     MIN_SEC_REQUEST_INTERVAL_SECONDS,
+    build_sec_html_request_headers,
     build_sec_request_headers,
     calculate_sec_retry_delay,
     calculate_sec_spacing_delay,
@@ -21,7 +22,7 @@ class SecRequestHeaderTests(unittest.TestCase):
     """Verify identified SEC request headers."""
 
     def test_builds_identified_json_request_headers(self) -> None:
-        """Declare the automated client and accepted response format."""
+        """Declare the automated client and accepted JSON format."""
 
         headers = build_sec_request_headers(
             "equity-research-system contact@example.com"
@@ -39,13 +40,40 @@ class SecRequestHeaderTests(unittest.TestCase):
         )
 
     def test_rejects_blank_user_agent(self) -> None:
-        """Never send an undeclared automated SEC request."""
+        """Never send an undeclared automated SEC JSON request."""
 
         with self.assertRaisesRegex(
             ValueError,
             "user_agent must be nonblank",
         ):
             build_sec_request_headers("  ")
+
+    def test_builds_identified_html_request_headers(self) -> None:
+        """Declare the automated client and accepted HTML formats."""
+
+        headers = build_sec_html_request_headers(
+            "equity-research-system contact@example.com"
+        )
+
+        self.assertEqual(
+            headers,
+            {
+                "User-Agent": (
+                    "equity-research-system contact@example.com"
+                ),
+                "Accept": "text/html, application/xhtml+xml",
+                "Accept-Encoding": "identity",
+            },
+        )
+
+    def test_rejects_blank_html_user_agent(self) -> None:
+        """Never send an undeclared automated SEC HTML request."""
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "user_agent must be nonblank",
+        ):
+            build_sec_html_request_headers("  ")
 
 
 class SecRetryPolicyTests(unittest.TestCase):
@@ -69,9 +97,20 @@ class SecRetryPolicyTests(unittest.TestCase):
     def test_calculates_exponential_backoff(self) -> None:
         """Increase delays predictably across consecutive failures."""
 
-        self.assertEqual(calculate_sec_retry_delay(1), 1.0)
-        self.assertEqual(calculate_sec_retry_delay(2), 2.0)
-        self.assertEqual(calculate_sec_retry_delay(3), 4.0)
+        self.assertEqual(
+            calculate_sec_retry_delay(1),
+            1.0,
+        )
+
+        self.assertEqual(
+            calculate_sec_retry_delay(2),
+            2.0,
+        )
+
+        self.assertEqual(
+            calculate_sec_retry_delay(3),
+            4.0,
+        )
 
     def test_respects_bounded_retry_after(self) -> None:
         """Honor numeric server guidance without exceeding the cap."""
@@ -80,10 +119,12 @@ class SecRetryPolicyTests(unittest.TestCase):
             calculate_sec_retry_delay(1, "5"),
             5.0,
         )
+
         self.assertEqual(
             calculate_sec_retry_delay(1, "100"),
             30.0,
         )
+
         self.assertEqual(
             calculate_sec_retry_delay(1, "invalid"),
             1.0,
