@@ -2,7 +2,7 @@
 
 The essential rules for the MVP's four datasets.
 
-**Status:** All four Bronze MVP ingestion datasets—prices, news, SEC company facts, and selected SEC filings—are implemented and live-verified in Databricks. All four Silver MVP datasets—`daily_prices`, `news_articles`, `company_facts`, and `filing_sections`—are also implemented and live-verified with deterministic safe-rerun behavior. Their Silver rules are defined below. Progress is tracked in [PLAN.md](PLAN.md).
+**Status:** All four Bronze MVP ingestion datasets and all four Silver MVP datasets are implemented and live-verified in Databricks with deterministic safe-rerun behavior. Gold `market_metrics` is also implemented and live-verified; `fundamental_metrics` remains pending. Progress is tracked in [PLAN.md](PLAN.md).
 
 ## Planned data flow and inventory
 
@@ -17,7 +17,7 @@ The MVP plans three Databricks schemas: Bronze for raw source history, Silver fo
 
 This initial inventory contains four Bronze datasets, four Silver datasets, two Gold data products, and one shared retrieval-document dataset plus its vector index. It excludes configuration and operational audit/quarantine records. Physical identifiers and storage details will be finalized immediately before implementing each layer.
 
-Columns are expected to evolve by purpose: Bronze keeps the complete source payload plus provenance; Silver selects, renames, derives, types, validates, and deduplicates the fields defined below; Gold changes the grain again to provide reusable comparison measures. Unused source fields remain recoverable from Bronze. Final Gold grains, formulas, and columns remain pending and must be documented and tested before Gold implementation.
+Columns are expected to evolve by purpose: Bronze keeps the complete source payload plus provenance; Silver selects, renames, derives, types, validates, and deduplicates the fields defined below; Gold changes the grain again to provide reusable comparison measures. Unused source fields remain recoverable from Bronze. The `market_metrics` Gold grain, formulas, and columns are finalized below before implementation. `fundamental_metrics` remains pending and will be contracted separately before its implementation.
 
 ## Shared conventions
 
@@ -303,6 +303,117 @@ All fields are required unless marked optional.
 - Identical Bronze history must rebuild the same section text and section hashes without accumulating duplicate business keys.
 - Preserve the selected Bronze retrieval provenance on every Silver section. Transformation-run metadata remains separate from source provenance.
 
+
+## 5. Gold market metrics
+
+**Use:** Current cross-company market comparison from validated Silver
+`daily_prices`. Returns are split-adjusted close-to-close price returns and
+exclude dividend income.
+
+**One Gold record:** One configured symbol at one common current market
+`as_of_date`.
+
+**Key:** `(symbol, as_of_date)` within the fixed Alpaca SIP / split-adjusted /
+1Day / USD dataset.
+
+The MVP publishes a current snapshot rather than a historical metric series.
+There must be exactly one row per configured symbol and every published row
+must share the same `as_of_date`.
+
+### Common as-of date and coverage
+
+1. Use only validated Silver rows with `source_system = alpaca`, `feed = sip`,
+   `adjustment = split`, `timeframe = 1Day`, and `currency = USD`.
+2. Determine the greatest `trading_date` available for each configured symbol.
+   Every configured symbol must have the same greatest date. A stale or
+   mismatched symbol fails the refresh rather than causing Gold to silently
+   fall back to an older common date.
+3. That shared greatest trading date is `as_of_date`. Preserve its source
+   `bar_timestamp` as `as_of_bar_timestamp`.
+4. Lookback windows are counts of observed trading sessions, not calendar-day
+   intervals.
+5. Require at least 61 ordered closes per configured symbol through
+   `as_of_date`. The last 61 trading dates must be identical across the
+   configured universe. A missing or extra session in this comparison window
+   fails publication.
+6. The 61-close window supports 60 one-session returns and the 60-session
+   return. The 20- and 5-session windows are deterministic suffixes of the
+   same aligned history.
+7. Gold does not publish partial rows or null metrics. Insufficient or
+   misaligned coverage fails the complete refresh and preserves the previous
+   successful Gold snapshot.
+
+### Schema
+
+| Field | Meaning | Type |
+|---|---|---|
+| source_system | `alpaca` | String |
+| symbol | Configured project symbol | String |
+| as_of_date | Shared latest completed trading date in America/New_York | Date |
+| as_of_bar_timestamp | Silver timestamp of the as-of daily bar | UTC timestamp |
+| close | Exact as-of Silver close | DECIMAL(20,8) |
+| window_start_date_60d | Trading date at `t-60`, the first close in the 61-close comparison window | Date |
+| observations_available | Number of validated Silver daily bars available for the symbol through `as_of_date` | Integer |
+| return_1d | One-session close-to-close return | DECIMAL(20,10) |
+| return_5d | Five-session close-to-close return | DECIMAL(20,10) |
+| return_20d | Twenty-session close-to-close return | DECIMAL(20,10) |
+| return_60d | Sixty-session close-to-close return | DECIMAL(20,10) |
+| annualized_volatility_20d | Annualized sample standard deviation of the last 20 one-session returns | DECIMAL(20,10) |
+| annualized_volatility_60d | Annualized sample standard deviation of the last 60 one-session returns | DECIMAL(20,10) |
+| current_drawdown_60d | As-of close relative to the maximum close in the 61-close window | DECIMAL(20,10) |
+| max_drawdown_60d | Worst peak-to-subsequent-close drawdown inside the 61-close window | DECIMAL(20,10) |
+| sma_20 | Arithmetic mean of the latest 20 closes | DECIMAL(28,10) |
+| sma_60 | Arithmetic mean of the latest 60 closes | DECIMAL(28,10) |
+| close_vs_sma_20 | `close / sma_20 - 1` | DECIMAL(20,10) |
+| close_vs_sma_60 | `close / sma_60 - 1` | DECIMAL(20,10) |
+| sma_20_vs_sma_60 | `sma_20 / sma_60 - 1` | DECIMAL(20,10) |
+| feed | `sip` | String |
+| adjustment | `split` | String |
+| timeframe | `1Day` | String |
+| currency | `USD` | String |
+| latest_source_response_id | Silver provenance of the as-of bar | String |
+| latest_source_fetched_at | Original Bronze retrieval time of the as-of bar | UTC timestamp |
+| latest_source_ingestion_run_id | Original Bronze ingestion run of the as-of bar | String |
+
+Rate fields are decimal fractions: for example, `0.0500000000` means 5%.
+
+### Metric formulas
+
+For close `C[t]` and trading-session offset `N`:
+
+- `return_Nd = C[t] / C[t-N] - 1` for `N` in 1, 5, 20, and 60.
+- One-session return `r[i] = C[i] / C[i-1] - 1`.
+- `annualized_volatility_Nd = sample_stddev(last N r[i]) * sqrt(252)` for
+  `N` in 20 and 60.
+- `current_drawdown_60d = C[t] / max(C[t-60:t]) - 1`.
+- `max_drawdown_60d` is the minimum value of
+  `C[j] / running_max(C[t-60:j]) - 1` over the 61-close window.
+- `sma_20` and `sma_60` are arithmetic means of the latest 20 and 60 closes.
+- Relative trend measures use the ratios defined in the schema.
+
+Calculations start from exact Silver decimal closes. Derived values are rounded
+only once at publication to their declared scale using deterministic
+round-half-even behavior. Missing values are never treated as zero.
+
+### Validation, publication, and replay
+
+- Validate configured-universe completeness, common `as_of_date`, aligned
+  61-session date coverage, required source settings, positive closes, and
+  final metric ranges before publication.
+- Returns and trend ratios must be finite. Annualized volatility must be
+  nonnegative. Drawdowns must lie in `[-1, 0]`.
+- Final `(symbol, as_of_date)` keys must be unique and every configured symbol
+  must appear exactly once.
+- Rebuild the current Gold snapshot deterministically from the current
+  validated Silver `daily_prices` snapshot; do not use an older Gold snapshot
+  as calculation input.
+- Publish the complete `market_metrics` snapshot atomically only after all
+  companies and metrics pass validation. A failed refresh preserves the
+  previous successful Gold table.
+- Preserve the as-of Silver bar's original Bronze provenance. Gold
+  transformation-run metadata remains separate from source provenance.
+
+
 ## Crucial test coverage - planned, not yet automated
 
 Use synthetic fixtures; the checklist below replaces the long walkthrough examples.
@@ -317,6 +428,7 @@ Use synthetic fixtures; the checklist below replaces the long walkthrough exampl
 | Company facts | Negative income and instant assets pass; missing duration start fails; distinct filings stay separate; same-response conflicts fail publication. |
 | SEC snapshots | Newest complete response wins; no gap-filling or older-replay overwrite; ambiguous ties fail; unavailable historical snapshots are explicit. |
 | Filing text | Wrong/ambiguous identity is rejected; representative section extraction must match actual section bodies, not table-of-contents entries. |
+| Gold market metrics | Aligned 61-close history produces one row per configured symbol; insufficient history, stale/mismatched latest dates, or a missing comparison-window session fail; formulas and deterministic rounding match fixtures; replay produces identical output. |
 | Pipeline | Check completeness/freshness separately; refresh-level failures preserve prior output without labelling it fresh. |
 
 ## Source checks already completed

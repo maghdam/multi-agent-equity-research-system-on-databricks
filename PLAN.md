@@ -2,9 +2,9 @@
 
 Build a small research app that compares AAPL and MSFT using market data, company fundamentals, and cited news/filing evidence. See [README.md](README.md) for the architecture and expected output.
 
-**Current position:** Milestone 1. All four Bronze MVP ingestion pipelines and all four Silver MVP transformations are implemented and live-verified in Databricks: `daily_prices`, `news_articles`, `company_facts`, and `filing_sections`. 178 offline tests cover configuration, request construction, response parsing, pagination, retries, date windows, SEC access policy, filing selection, Silver validation and extraction, deterministic replay/version selection, conflict handling, configured-universe scope rules, and snapshot orchestration. Append-only Bronze provenance is verified for all four Bronze datasets. All four Silver snapshots have been verified to rebuild deterministically without duplicate accumulation or content drift. Remaining Milestone 1 work is primarily Gold metrics, durable operational audit/rejection reporting where required, CI, refresh automation, and deployment verification.
+**Current position:** Milestone 1. All four Bronze MVP ingestion pipelines and all four Silver MVP transformations are implemented and live-verified in Databricks. Gold `market_metrics` is also implemented and live-verified from the expanded 2026 YTD Silver price history. 186 offline tests pass. Bronze append-only provenance and deterministic Silver/Gold snapshot replay have been verified. Remaining Milestone 1 work includes Gold `fundamental_metrics`, durable operational audit/rejection reporting where required, CI, refresh automation, and controlled deployment verification.
 
-**Next:** Define comparable periods and `as_of` semantics, then build Gold `market_metrics` and `fundamental_metrics` from the validated Silver price and company-facts datasets.
+**Next:** Define the Gold `fundamental_metrics` contract and build it from validated Silver `company_facts`.
 
 ## Implementation roadmap
 
@@ -37,7 +37,7 @@ flowchart TB
 
     subgraph G["Gold - Application-oriented metrics"]
         direction LR
-        G1["market_metrics"]
+        G1["market_metrics ✅"]
         G2["fundamental_metrics"]
     end
 
@@ -203,7 +203,11 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
   - [x] Filing sections: deploy the bundle-managed serverless `silver_filing_sections_transformation` job and live-verify exactly four current sections: Item 1 and Item 1A for AAPL and MSFT, with no duplicate business keys or invalid short sections. Verified run: https://dbc-5e700074-422e.cloud.databricks.com/jobs/26343410926444/runs/518763745914111?o=7474654299884940
   - [x] Filing sections: verify deterministic safe rerun. Delta versions 2 and 3 contain zero rows in either directional `EXCEPT ALL` comparison.
   - [ ] Filing sections: persist durable transformation-run audit/rejection details if required beyond fail-before-publication validation and aggregate diagnostics.
-- [ ] Define comparable periods and filing versions; build Gold market and fundamental metrics with clear `as_of` timestamps and coverage limits.
+- [ ] Build the two Gold analytical metric tables with explicit comparison semantics and coverage limits.
+  - [x] Market metrics: define the current-snapshot contract and implement `market_metrics` from validated Silver `daily_prices` using one common `as_of_date`, aligned 61-session coverage, 1/5/20/60-session returns, 20/60-session annualized volatility, 60-session drawdown, and 20/60-session trend measures.
+  - [x] Market metrics: expand AAPL/MSFT Silver price history to 169 sessions from 2026-01-02 through 2026-09-03, deploy the bundle-managed Gold schema/job, and live-verify a 2-row snapshot with common `as_of_date = 2026-09-03`, common 60-session start `2026-06-09`, and no duplicate business keys. Verified run: https://dbc-5e700074-422e.cloud.databricks.com/jobs/841252067804639/runs/271599418325298?o=7474654299884940
+  - [x] Market metrics: verify deterministic safe rerun. Delta versions 1 and 2 contain zero rows in either directional `EXCEPT ALL` comparison. Verified rerun: https://dbc-5e700074-422e.cloud.databricks.com/jobs/841252067804639/runs/484651814470942?o=7474654299884940
+  - [ ] Fundamental metrics: define comparable filing/period selection, `as_of` semantics, formulas, and coverage rules; then implement from validated Silver `company_facts`.
 
 ### Automate and verify
 
