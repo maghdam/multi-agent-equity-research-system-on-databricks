@@ -2,7 +2,7 @@
 
 The essential rules for the MVP's four datasets.
 
-**Status:** All four Bronze MVP ingestion datasets—prices, news, SEC company facts, and selected SEC filings—are implemented and live-verified in Databricks. Three Silver datasets—`daily_prices`, `news_articles`, and `company_facts`—are also implemented and live-verified with deterministic safe-rerun behavior. Their Silver rules are defined below; `filing_sections` is the remaining Silver MVP dataset and its contract is finalized below immediately before implementation. Progress is tracked in [PLAN.md](PLAN.md).
+**Status:** All four Bronze MVP ingestion datasets—prices, news, SEC company facts, and selected SEC filings—are implemented and live-verified in Databricks. All four Silver MVP datasets—`daily_prices`, `news_articles`, `company_facts`, and `filing_sections`—are also implemented and live-verified with deterministic safe-rerun behavior. Their Silver rules are defined below. Progress is tracked in [PLAN.md](PLAN.md).
 
 ## Planned data flow and inventory
 
