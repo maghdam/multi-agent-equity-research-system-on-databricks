@@ -18,6 +18,9 @@ variables:
   silver_schema:
     description: Unity Catalog schema containing validated Silver datasets.
     default: equity_research_silver
+  gold_schema:
+    description: Unity Catalog schema containing analytical Gold datasets.
+    default: equity_research_gold
   alpaca_secret_scope:
     description: Databricks secret scope containing the Alpaca credentials.
     default: equity-research-dev
