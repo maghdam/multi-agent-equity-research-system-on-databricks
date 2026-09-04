@@ -2,9 +2,9 @@
 
 Build a small research app that compares AAPL and MSFT using market data, company fundamentals, and cited news/filing evidence. See [README.md](README.md) for the architecture and expected output.
 
-**Current position:** Milestone 1. All four Bronze MVP ingestion pipelines, all four Silver MVP transformations, and both Gold analytical metric tables are implemented and live-verified in Databricks. Gold `market_metrics` uses the expanded 2026 YTD Silver price history, while `fundamental_metrics` provides comparable TTM revenue/net-income, profitability, assets, and latest-fiscal-year change metrics from validated Silver company facts. 195 offline tests pass. Bronze append-only provenance and deterministic Silver/Gold snapshot replay have been verified. Remaining Milestone 1 work includes durable operational audit/rejection reporting where required, CI, refresh automation, quality/freshness verification, and controlled deployment verification.
+**Current position:** Milestone 1. All four Bronze MVP ingestion pipelines, all four Silver MVP transformations, and both Gold analytical metric tables are implemented and live-verified in Databricks. Gold `market_metrics` uses the expanded 2026 YTD Silver price history, while `fundamental_metrics` provides comparable TTM revenue/net-income, profitability, assets, and latest-fiscal-year change metrics from validated Silver company facts. 195 offline tests pass. Credential-free GitHub Actions CI now runs Ruff correctness lint and the full offline contract/unit test suite on pull requests and pushes to `main`. Bronze append-only provenance and deterministic Silver/Gold snapshot replay have been verified. Remaining Milestone 1 work includes durable operational audit/rejection reporting where required, scheduled refresh automation, quality/freshness and failure-visibility verification, and controlled deployment verification.
 
-**Next:** Complete the remaining Milestone 1 orchestration, quality, CI, refresh, and controlled deployment-verification work.
+**Next:** Configure scheduled incremental refreshes and verify freshness, missing-data reporting, failure visibility, and safe reruns; then add controlled deployment verification.
 
 ## Implementation roadmap
 
@@ -213,7 +213,9 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
 
 ### Automate and verify
 
-- [ ] Add GitHub Actions CI for formatting, linting, contract/unit tests, and bundle validation on pull requests and `main`; no live credentials required.
+- [x] Add credential-free GitHub Actions CI on pull requests and pushes to `main`, using Ruff correctness lint plus the full offline contract/unit test suite. First PR run passed with all 195 tests.
+  - Ruff formatting is intentionally deferred because adopting the formatter would currently cause a broad repository-wide cosmetic rewrite.
+  - `databricks bundle validate -t dev` remains a local/pre-deploy or controlled-deployment check because real bundle validation resolves Databricks workspace context and is not part of credential-free PR CI.
 
 - [ ] Configure initial backfills and scheduled incremental refreshes; verify quality, freshness, missing-data reporting, failure visibility, and safe reruns.
 
