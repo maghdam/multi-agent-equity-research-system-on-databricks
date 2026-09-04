@@ -2,9 +2,9 @@
 
 Build a small research app that compares AAPL and MSFT using market data, company fundamentals, and cited news/filing evidence. See [README.md](README.md) for the architecture and expected output.
 
-**Current position:** Milestone 1. All four Bronze MVP ingestion pipelines are implemented and live-verified in Databricks: prices, news, SEC company facts, and selected SEC 10-K filing documents. Three Silver slices, `daily_prices`, `news_articles`, and `company_facts`, are also implemented and live-verified. 147 offline tests now cover configuration, request construction, response parsing, pagination, retries, date windows, SEC access policy, filing selection, Silver price, news, and company-facts validation, deterministic replay/version selection, conflict handling, configured-universe scope rules, and snapshot orchestration. Append-only Bronze provenance is verified for all four Bronze datasets. The Silver price, news, and company-facts snapshots have been verified to rebuild deterministically without duplicate accumulation or content drift. Remaining Milestone 1 work is primarily Silver filing sections, Gold metrics, durable operational audit/rejection reporting where required, CI, refresh automation, and deployment verification.
+**Current position:** Milestone 1. All four Bronze MVP ingestion pipelines and all four Silver MVP transformations are implemented and live-verified in Databricks: `daily_prices`, `news_articles`, `company_facts`, and `filing_sections`. 178 offline tests cover configuration, request construction, response parsing, pagination, retries, date windows, SEC access policy, filing selection, Silver validation and extraction, deterministic replay/version selection, conflict handling, configured-universe scope rules, and snapshot orchestration. Append-only Bronze provenance is verified for all four Bronze datasets. All four Silver snapshots have been verified to rebuild deterministically without duplicate accumulation or content drift. Remaining Milestone 1 work is primarily Gold metrics, durable operational audit/rejection reporting where required, CI, refresh automation, and deployment verification.
 
-**Next:** Build Silver validation and transformation for selected filing sections, including amendment/version interpretation and Item 1 / Item 1A extraction. Continue preserving Bronze as raw retrieval history and keep cleaning, deduplication, version interpretation, and extraction in Silver.
+**Next:** Define comparable periods and `as_of` semantics, then build Gold `market_metrics` and `fundamental_metrics` from the validated Silver price and company-facts datasets.
 
 ## Implementation roadmap
 
@@ -27,7 +27,7 @@ flowchart TB
         S1["daily_prices ✅"]
         S2["news_articles ✅"]
         S3["company_facts ✅"]
-        S4["filing_sections - NEXT"]
+        S4["filing_sections ✅"]
     end
 
     B1 --> S1
@@ -110,7 +110,7 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
 
 - [x] Define and test the MVP SEC filing-selection rule: configured CIK, exact Form 10-K only, greatest `filingDate`, required metadata, and failure on ambiguous latest candidates. `10-K/A` amendment interpretation is outside the Bronze MVP.
 
-- [ ] Finish Silver filing-version/amendment policy, Item 1 / Item 1A extraction boundaries, extraction-quality rules, and representative transformation tests.
+- [x] Finish Silver filing-version/amendment policy, Item 1 / Item 1A extraction boundaries, extraction-quality rules, and representative transformation tests.
 
 - [x] Create the shared AAPL/MSFT configuration and validated loader; verify the real configuration and configuration-only expansion with four passing offline tests.
 
@@ -199,7 +199,10 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
   - [x] Company facts: deploy the bundle-managed `silver_company_facts_transformation` job and live-verify a 1,217-row AAPL/MSFT snapshot across the configured Revenue, Net Income, and Assets concepts, with 2 selected Bronze responses, 0 rejected facts, 0 required-field failures, 0 scope violations, 0 period-semantics violations, and 0 duplicate business-key groups. Verified run: https://dbc-5e700074-422e.cloud.databricks.com/jobs/773749962306837/runs/899803416844748?o=7474654299884940
   - [x] Company facts: verify a safe rerun produces an identical 1,217-row snapshot. Delta versions 0 and 1 have zero rows in either directional `EXCEPT ALL` comparison. Verified rerun: https://dbc-5e700074-422e.cloud.databricks.com/jobs/773749962306837/runs/766808997430233?o=7474654299884940
   - [ ] Company facts: persist durable transformation-run audit/rejection details if required beyond the currently tested rule reasons and aggregate counts.
-  - [ ] Implement Silver filing-section transformation, amendment/version interpretation, and Item 1 / Item 1A extraction rules.
+  - [x] Filing sections: build `filing_sections` from immutable Bronze `filing_documents` using deterministic latest-filing/latest-retrieval selection, exact 10-K scope, inline-XBRL DEI/context identity validation, generic Item 1 / Item 1A boundary detection, minimum-content checks, terminal SEC page-marker/footer cleanup, section-text SHA-256 hashes, and Bronze provenance preservation.
+  - [x] Filing sections: deploy the bundle-managed serverless `silver_filing_sections_transformation` job and live-verify exactly four current sections: Item 1 and Item 1A for AAPL and MSFT, with no duplicate business keys or invalid short sections. Verified run: https://dbc-5e700074-422e.cloud.databricks.com/jobs/26343410926444/runs/518763745914111?o=7474654299884940
+  - [x] Filing sections: verify deterministic safe rerun. Delta versions 2 and 3 contain zero rows in either directional `EXCEPT ALL` comparison.
+  - [ ] Filing sections: persist durable transformation-run audit/rejection details if required beyond fail-before-publication validation and aggregate diagnostics.
 - [ ] Define comparable periods and filing versions; build Gold market and fundamental metrics with clear `as_of` timestamps and coverage limits.
 
 ### Automate and verify
