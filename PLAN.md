@@ -2,9 +2,9 @@
 
 Build a small research app that compares AAPL and MSFT using market data, company fundamentals, and cited news/filing evidence. See [README.md](README.md) for the architecture and expected output.
 
-**Current position:** Milestone 1. All four Bronze MVP ingestion pipelines are implemented and live-verified in Databricks: prices, news, SEC company facts, and selected SEC 10-K filing documents. The first two Silver slices, `daily_prices` and `news_articles`, are also implemented and live-verified. 121 offline tests now cover configuration, request construction, response parsing, pagination, retries, date windows, SEC access policy, filing selection, Silver price and news validation, deterministic replay/version selection, conflict handling, configured-universe scope rules, and snapshot orchestration. Append-only Bronze provenance is verified for all four Bronze datasets. The Silver price and news snapshots have both been verified to rebuild deterministically without duplicate accumulation or content drift. Remaining Milestone 1 work is primarily Silver company facts and filing sections, Gold metrics, durable operational audit/rejection reporting where required, CI, refresh automation, and deployment verification.
+**Current position:** Milestone 1. All four Bronze MVP ingestion pipelines are implemented and live-verified in Databricks: prices, news, SEC company facts, and selected SEC 10-K filing documents. Three Silver slices, `daily_prices`, `news_articles`, and `company_facts`, are also implemented and live-verified. 147 offline tests now cover configuration, request construction, response parsing, pagination, retries, date windows, SEC access policy, filing selection, Silver price, news, and company-facts validation, deterministic replay/version selection, conflict handling, configured-universe scope rules, and snapshot orchestration. Append-only Bronze provenance is verified for all four Bronze datasets. The Silver price, news, and company-facts snapshots have been verified to rebuild deterministically without duplicate accumulation or content drift. Remaining Milestone 1 work is primarily Silver filing sections, Gold metrics, durable operational audit/rejection reporting where required, CI, refresh automation, and deployment verification.
 
-**Next:** Build Silver validation and transformation for SEC company facts, followed by selected filing sections and Item 1 / Item 1A extraction. Continue preserving Bronze as raw retrieval history and keep cleaning, deduplication, version interpretation, and extraction in Silver.
+**Next:** Build Silver validation and transformation for selected filing sections, including amendment/version interpretation and Item 1 / Item 1A extraction. Continue preserving Bronze as raw retrieval history and keep cleaning, deduplication, version interpretation, and extraction in Silver.
 
 ## Implementation roadmap
 
@@ -26,8 +26,8 @@ flowchart TB
         direction LR
         S1["daily_prices ✅"]
         S2["news_articles ✅"]
-        S3["company_facts - NEXT"]
-        S4["filing_sections"]
+        S3["company_facts ✅"]
+        S4["filing_sections - NEXT"]
     end
 
     B1 --> S1
@@ -195,9 +195,11 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
   - [x] News: deploy the bundle-managed `silver_news_transformation` job and live-verify a 150-row snapshot with 150 distinct article IDs, zero invalid business rows, no duplicate business keys, and zero configured-universe scope violations. Verified run: https://dbc-5e700074-422e.cloud.databricks.com/jobs/859797368121284/runs/891515634779290?o=7474654299884940
   - [x] News: verify a safe rerun produces an identical 150-row snapshot. Delta versions 0 and 1 have zero rows in either directional `EXCEPT ALL` comparison. Verified rerun: https://dbc-5e700074-422e.cloud.databricks.com/jobs/859797368121284/runs/407427103933376?o=7474654299884940
   - [ ] News: persist durable transformation-run audit/rejection details if required beyond the currently tested rule reasons and aggregate counts.
-  - [ ] Implement Silver company-facts transformation and its snapshot/version/replay rules.
+  - [x] Company facts: build `company_facts` from immutable Bronze `company_facts_responses` using deterministic latest-response selection per configured company, configured-CIK validation, scoped `us-gaap` / USD extraction, DECIMAL(28,8) preservation, duration/instant period validation, exact duplicate collapse, conflicting-key failure, and Bronze provenance preservation.
+  - [x] Company facts: deploy the bundle-managed `silver_company_facts_transformation` job and live-verify a 1,217-row AAPL/MSFT snapshot across the configured Revenue, Net Income, and Assets concepts, with 2 selected Bronze responses, 0 rejected facts, 0 required-field failures, 0 scope violations, 0 period-semantics violations, and 0 duplicate business-key groups. Verified run: https://dbc-5e700074-422e.cloud.databricks.com/jobs/773749962306837/runs/899803416844748?o=7474654299884940
+  - [x] Company facts: verify a safe rerun produces an identical 1,217-row snapshot. Delta versions 0 and 1 have zero rows in either directional `EXCEPT ALL` comparison. Verified rerun: https://dbc-5e700074-422e.cloud.databricks.com/jobs/773749962306837/runs/766808997430233?o=7474654299884940
+  - [ ] Company facts: persist durable transformation-run audit/rejection details if required beyond the currently tested rule reasons and aggregate counts.
   - [ ] Implement Silver filing-section transformation, amendment/version interpretation, and Item 1 / Item 1A extraction rules.
-
 - [ ] Define comparable periods and filing versions; build Gold market and fundamental metrics with clear `as_of` timestamps and coverage limits.
 
 ### Automate and verify
