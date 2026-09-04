@@ -2,7 +2,7 @@
 
 > A production-oriented portfolio project combining data engineering and AI engineering on Databricks.
 
-**Status:** Planning and MVP development
+**Status:** Milestone 1 in progress — Bronze 4/4 live-verified; Silver 2/4 live-verified
 
 ## Overview
 
@@ -28,21 +28,64 @@ The first version will:
 
 The MVP will not include trading execution, price prediction, portfolio optimization, GDELT, cTrader, or live Alpaca MCP access.
 
+## Current progress
+
+- **Bronze:** 4/4 MVP datasets implemented and live-verified.
+- **Silver:** 2/4 datasets implemented and live-verified: `daily_prices` and `news_articles`.
+- **Next:** build Silver `company_facts`, then `filing_sections`.
+- **Gold:** 0/2 analytical metric tables implemented so far.
+- Detailed implementation evidence and run links are tracked in [PLAN.md](PLAN.md).
+
 ## Architecture
 
 ```mermaid
-flowchart LR
-    A[Alpaca API] --> B[Bronze]
-    S[SEC EDGAR API] --> B
-    B --> C[Silver]
-    C --> G[Gold analytics]
-    C --> V[Document chunks and vector index]
-    G --> M[Market Analyst]
-    V --> R[Company Researcher]
-    M --> P[Supervisor]
-    R --> P
-    P --> U[Dashboard, report, and follow-up chat]
+flowchart TB
+    subgraph SRC["Sources"]
+        direction LR
+        A1["Alpaca Market Data"]
+        A2["Alpaca News"]
+        E1["SEC Company Facts"]
+        E2["SEC Filings"]
+    end
+
+    subgraph B["Bronze - Raw provider history"]
+        direction LR
+        B1["price_responses ✅"]
+        B2["news_responses ✅"]
+        B3["company_facts_responses ✅"]
+        B4["filing_documents ✅"]
+    end
+
+    subgraph S["Silver - Validated business records"]
+        direction LR
+        S1["daily_prices ✅"]
+        S2["news_articles ✅"]
+        S3["company_facts - NEXT"]
+        S4["filing_sections"]
+    end
+
+    subgraph G["Gold - Analytical metrics"]
+        direction LR
+        G1["market_metrics"]
+        G2["fundamental_metrics"]
+    end
+
+    R["Retrieval / indexing assets<br/>news + filing evidence"]
+
+    A1 --> B1 --> S1 --> G1
+    A2 --> B2 --> S2 --> R
+    E1 --> B3 --> S3 --> G2
+    E2 --> B4 --> S4 --> R
+
+    G1 --> M["Market Analyst"]
+    G2 --> M
+    R --> C["Company Researcher"]
+    M --> P["LangGraph Supervisor"]
+    C --> P
+    P --> U["Dashboard, cited report, and follow-up chat"]
 ```
+
+Gold is intentionally **not** a one-to-one mirror of Silver. Structured price and fundamental data feed analytical Gold tables, while validated news and filing text primarily become retrieval/indexing assets for the AI layer.
 
 ## Expected output
 

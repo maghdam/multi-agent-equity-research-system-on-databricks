@@ -6,6 +6,82 @@ Build a small research app that compares AAPL and MSFT using market data, compan
 
 **Next:** Build Silver validation and transformation for SEC company facts, followed by selected filing sections and Item 1 / Item 1A extraction. Continue preserving Bronze as raw retrieval history and keep cleaning, deduplication, version interpretation, and extraction in Silver.
 
+## Implementation roadmap
+
+The project is deliberately split into a trustworthy data-engineering foundation and a grounded AI-engineering layer. Gold is not a one-to-one mirror of Silver: structured price and fundamental data feed analytical Gold tables, while validated news and filing text primarily feed retrieval/indexing assets for the AI system.
+
+### Phase 1 - Data Engineering
+
+```mermaid
+flowchart TB
+    subgraph B["Bronze - Raw provider history (4/4 live-verified ✅)"]
+        direction LR
+        B1["price_responses ✅"]
+        B2["news_responses ✅"]
+        B3["company_facts_responses ✅"]
+        B4["filing_documents ✅"]
+    end
+
+    subgraph S["Silver - Validated business records"]
+        direction LR
+        S1["daily_prices ✅"]
+        S2["news_articles ✅"]
+        S3["company_facts - NEXT"]
+        S4["filing_sections"]
+    end
+
+    B1 --> S1
+    B2 --> S2
+    B3 --> S3
+    B4 --> S4
+
+    subgraph G["Gold - Application-oriented metrics"]
+        direction LR
+        G1["market_metrics"]
+        G2["fundamental_metrics"]
+    end
+
+    S1 --> G1
+    S3 --> G2
+
+    S2 -. "Phase 2 retrieval" .-> R["Retrieval / indexing assets"]
+    S4 -. "Phase 2 retrieval" .-> R
+
+    G1 --> O
+    G2 --> O
+
+    subgraph O["Orchestration and verification"]
+        direction TB
+        O1["Connect job dependencies"]
+        O2["Backfill / incremental refresh"]
+        O3["Quality and freshness checks"]
+        O4["GitHub Actions CI"]
+        O5["Controlled deployment verification"]
+    end
+
+    O --> F["DATA ENGINEERING FOUNDATION COMPLETE"]
+```
+
+### Phase 2 - AI Engineering
+
+```mermaid
+flowchart TB
+    A["Validated news_articles + filing_sections"]
+    A --> B["Prepare research text"]
+    B --> C["Chunking / embeddings / vector index"]
+    C --> D["Controlled SQL + retrieval tools"]
+
+    D --> E1["Market Analyst"]
+    D --> E2["Company Researcher"]
+
+    E1 --> F["LangGraph Supervisor"]
+    E2 --> F
+
+    F --> G["Structured reports + citations"]
+    G --> H["MLflow tracing + evaluation"]
+    H --> I["Deployment / application integration"]
+```
+
 ## Working approach
 
 For each meaningful step: explain its purpose, implement one coherent piece, test normal behavior and important failures, then record the result and tick the task. Keep teaching and routine diagnostic output in chat. Keep lasting decisions, reproducible checks, and milestone evidence in the repository.
