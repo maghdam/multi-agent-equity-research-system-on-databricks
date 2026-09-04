@@ -1,0 +1,7 @@
+[tool.ruff.lint]
+select = ["E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/*_ingestion.py" = ["F821"]
+"src/*_transformation.py" = ["F821"]
+"src/phase_0_smoke_test.py" = ["F821"]
