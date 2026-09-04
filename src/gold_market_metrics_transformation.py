@@ -20,7 +20,6 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col,
     count,
-    countDistinct,
 )
 from pyspark.sql.types import (
     DateType,

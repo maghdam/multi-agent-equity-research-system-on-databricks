@@ -213,20 +213,20 @@ class GoldMarketMetricsTests(unittest.TestCase):
             base=Decimal("200"),
         )
 
-        replacement_date = (
-            START_DATE + timedelta(days=30, hours=0)
-        )
-
-        msft[30] = _observation(
-            "MSFT",
-            30,
-            close=Decimal("230"),
-            trading_date=replacement_date + timedelta(days=1),
+        del msft[30]
+        msft.insert(
+            0,
+            _observation(
+                "MSFT",
+                -1,
+                close=Decimal("199"),
+                trading_date=START_DATE - timedelta(days=1),
+            ),
         )
 
         with self.assertRaisesRegex(
             ValueError,
-            "duplicate Silver trading date|61-session",
+            "61-session",
         ):
             build_market_metrics_snapshot(
                 observations=aapl + msft,
