@@ -2,7 +2,7 @@
 
 The essential rules for the MVP's four datasets.
 
-**Status:** All four Bronze MVP ingestion datasets—prices, news, SEC company facts, and selected SEC filings—are implemented and live-verified in Databricks. The first two Silver datasets, `daily_prices` and `news_articles`, are also implemented and live-verified with deterministic safe-rerun behavior. Price and news Silver rules are defined below; company-facts and filing-section Silver contracts will be finalized immediately before their implementations. Progress is tracked in [PLAN.md](PLAN.md).
+**Status:** All four Bronze MVP ingestion datasets—prices, news, SEC company facts, and selected SEC filings—are implemented and live-verified in Databricks. All four Silver MVP datasets—`daily_prices`, `news_articles`, `company_facts`, and `filing_sections`—are also implemented and live-verified with deterministic safe-rerun behavior. Their Silver rules are defined below. Progress is tracked in [PLAN.md](PLAN.md).
 
 ## Planned data flow and inventory
 
@@ -233,18 +233,75 @@ The table is append-only retrieval history. Repeated successful runs create new 
 
 Bronze validates retrieval success, configured CIK and selected filing metadata, and basic response integrity. It does not extract Item 1 or Item 1A, clean filing text, chunk content, interpret amendments, or decide research relevance. Those operations belong to Silver and the later retrieval layer.
 
-**One Silver record:** One complete selected section of one filing. **Key:** `(source_system, cik, accession_number, section_code)`, with `source_system = sec` and project section codes `item_1` / `item_1a` rather than HTML anchor IDs.
+### Silver `filing_sections`
 
-Silver contains cleaned section text. Retrieval/extraction history is separate from business identity. Later RAG chunks link back to sections, not the other way around. Preserve filing identity, filing date, source URL, and section name for citations.
+**One Silver record:** One complete cleaned section of one selected filing.
 
-### Agreed identity checks
+**Key:** `(source_system, cik, accession_number, section_code)`, where `source_system = sec` and the initial project section codes are `item_1` and `item_1a`.
 
-- Use expected CIK, form, and reportDate from configuration and selected SEC metadata, not a fixed sample.
-- Required identity values must be nonblank, non-nil, and unambiguous; context references must resolve uniquely. Document/context CIKs and the SEC identifier scheme must match expectations.
-- Document form must match metadata. Decode dates only with supported format rules; document/context period ends must match reportDate, not filingDate. Duration start must not exceed end.
-- Company name is descriptive. Record amendment status without treating it as proof of version eligibility. Exclude missing, conflicting, or unsupported identity data from research with a recorded reason.
+#### Current filing and retrieval selection
 
-**Still to define for Silver:** Historical/amendment-aware filing-version policy, section-boundary and extraction-quality checks, and content-use boundaries.
+For each configured company:
+
+1. Consider only Bronze rows whose configured CIK matches and whose filing form is exactly `10-K`.
+2. Select the greatest `filing_date`.
+3. If multiple distinct accessions occur at that greatest filing date, fail the Silver refresh as ambiguous.
+4. For the selected accession, select the retrieval with the greatest original `fetched_at`.
+5. If multiple retrievals share that greatest timestamp, choose the lexicographically smallest `source_response_id` only when their raw HTML is identical; otherwise fail the refresh.
+
+`response_sha256` describes one exact retrieval and is provenance, not filing identity. The same filing accession may therefore have different response hashes across retrievals.
+
+Selection happens before section extraction and validation. Silver never falls back to an older filing or older retrieval because extraction from the selected response fails.
+
+The current Bronze MVP ingests exact `10-K` filings only. `10-K/A` amendments are therefore outside the current Silver version policy; amendment-aware interpretation requires a later Bronze expansion and contract revision.
+
+#### Schema
+
+All fields are required unless marked optional.
+
+| Field | Source / meaning | Type |
+|---|---|---|
+| source_system | `sec` | String |
+| cik | Validated configured SEC CIK | 10-digit string |
+| project_symbol | Configured project symbol | String |
+| accession_number | Selected filing accession | String |
+| filing_form | Selected filing form; initially exactly `10-K` | String |
+| filing_date | SEC filing date | Date |
+| report_date | Filing reporting-period end | Date |
+| primary_document | SEC primary-document filename | String |
+| source_url | SEC filing-document citation URL | String |
+| section_code | Project section identity: `item_1` or `item_1a` | String |
+| section_title | `Business` or `Risk Factors` | String |
+| section_text | Cleaned complete section body | String |
+| section_text_sha256 | SHA-256 of normalized `section_text` | String |
+| source_response_id | Selected Bronze filing retrieval | String |
+| response_sha256 | SHA-256 of the selected raw Bronze HTML retrieval | String |
+| fetched_at | Original Bronze retrieval timestamp | UTC timestamp |
+| ingestion_run_id | Original Bronze ingestion run | String |
+
+#### Identity and extraction
+
+- Validate the configured CIK, exact `10-K` form, accession format, filing/report dates, primary document, source URL, and selected Bronze provenance before extraction.
+- Validate the filing's inline-XBRL DEI identity against the selected Bronze metadata: `EntityCentralIndexKey` must match the configured CIK, `DocumentType` must match the selected filing form, and `DocumentPeriodEndDate` must match `report_date`. Repeated identity facts are allowed only when their normalized values agree; conflicting values fail the refresh.
+- Referenced XBRL contexts used for document identity must resolve consistently to the expected SEC CIK identifier scheme and reporting-period end. Unsupported or ambiguous identity/date representations fail validation rather than being guessed.
+- Treat filing HTML as untrusted evidence. Parse text only; do not execute scripts or load linked resources.
+- Remove non-content elements such as script/style content, decode HTML entities, and normalize whitespace without rewriting the filing's substantive wording.
+- Heading recognition must tolerate inline-XBRL formatting and whitespace splits such as `b usiness` or `ris k factors`.
+- A heading candidate must contain the expected item code and section title as a heading relationship, not merely mention another section in narrative text.
+- Reject table-of-contents entries and narrative cross-references as section boundaries.
+- `item_1` starts at the validated `Item 1 — Business` body heading and ends immediately before the validated `Item 1A — Risk Factors` body heading.
+- `item_1a` starts at the validated `Item 1A — Risk Factors` body heading and ends immediately before the earliest valid subsequent body heading among Item 1B, Item 1C, and Item 2.
+- Heading boundaries must be uniquely determined and correctly ordered. Missing or ambiguous boundaries fail the Silver refresh rather than guessing.
+- After heading removal and whitespace normalization, each selected section must contain at least 500 characters of substantive text. Shorter extraction is treated as an extraction-quality failure, not published as a section.
+- Store only Item 1 and Item 1A in the MVP `filing_sections` table. Other filing sections remain recoverable from Bronze.
+
+#### Publication and replay
+
+- Both required sections must be successfully extracted for every configured company before publication.
+- Publish the complete current `filing_sections` snapshot atomically; a selection, identity, extraction, quality, or final uniqueness failure preserves the previous successful Silver table.
+- Never combine Item 1 from one retrieval with Item 1A from another retrieval.
+- Identical Bronze history must rebuild the same section text and section hashes without accumulating duplicate business keys.
+- Preserve the selected Bronze retrieval provenance on every Silver section. Transformation-run metadata remains separate from source provenance.
 
 ## Crucial test coverage - planned, not yet automated
 

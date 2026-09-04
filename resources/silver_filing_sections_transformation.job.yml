@@ -1,0 +1,31 @@
+resources:
+  jobs:
+    silver_filing_sections_transformation:
+      name: ${bundle.name}-silver-filing-sections-transformation
+      description: >-
+        Rebuilds the validated current SEC filing-sections snapshot from
+        immutable Bronze selected 10-K filing-document history.
+
+      max_concurrent_runs: 1
+
+      tasks:
+        - task_key: transform_silver_filing_sections
+
+          notebook_task:
+            notebook_path: ../src/silver_filing_sections_transformation.py
+
+            base_parameters:
+              catalog: ${resources.schemas.silver.catalog_name}
+              bronze_schema: ${resources.schemas.bronze.name}
+              silver_schema: ${resources.schemas.silver.name}
+
+          environment_key: default
+
+          timeout_seconds: 300
+
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "5"
+            dependencies:
+              - beautifulsoup4==4.15.0
