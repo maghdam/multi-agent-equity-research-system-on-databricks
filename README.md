@@ -33,7 +33,7 @@ The MVP will not include trading execution, price prediction, portfolio optimiza
 - **Bronze:** 4/4 MVP datasets implemented and live-verified.
 - **Silver:** 4/4 MVP datasets implemented and live-verified: `daily_prices`, `news_articles`, `company_facts`, and `filing_sections`.
 - **Gold:** 2/2 analytical metric tables implemented and live-verified: `market_metrics` and `fundamental_metrics`.
-- **Next:** complete the remaining Milestone 1 orchestration, quality, CI, refresh, and deployment-verification work.
+- **Next:** complete scheduled incremental refreshes, quality/freshness and failure-visibility checks, then controlled deployment verification.
 - Detailed implementation evidence and run links are tracked in [PLAN.md](PLAN.md).
 
 ## Architecture
