@@ -128,6 +128,18 @@ Carry article identity, publisher, URL, article timestamps, retrieval provenance
 
 **Key:** `(source_system, cik, taxonomy, concept, unit, period_start, period_end, accession_number)`. Compare null period_start values as equal for instant facts.
 
+### Transformation summary
+
+`company_facts_responses`
+→ select the latest complete Bronze response for each configured company by original `fetched_at`
+→ validate response identity and configured CIK
+→ extract only the configured `us-gaap` concepts in USD
+→ validate individual observations
+→ collapse exact duplicate business keys and fail conflicting duplicates
+→ atomically publish the current `company_facts` snapshot.
+
+Selection happens before individual fact validation. Silver never fills missing or invalid facts from an older Bronze response.
+
 ### Scope and schema
 
 Initial Silver scope is the following `us-gaap` concepts in USD. Presence was observed for both companies; recent coverage and Gold comparability are not yet established.
@@ -143,6 +155,7 @@ All fields are required unless marked optional or conditional.
 | Field | Source / meaning | Type |
 |---|---|---|
 | cik | Top-level `cik`; validated company identifier | 10-digit string |
+| project_symbol | Configured project symbol for convenient downstream joins; descriptive mapping, not the authoritative company identifier | String |
 | taxonomy, concept, unit | Keys in `facts` and its `units` mapping | Strings |
 | accession_number | Observation `accn`; preserve hyphens | String |
 | fact_value | `val`; original USD amount/sign | DECIMAL(28,8) |
@@ -153,6 +166,9 @@ All fields are required unless marked optional or conditional.
 | entity_name, concept_label | Top-level `entityName`, concept `label` | Optional strings |
 | filing_fiscal_year | `fy`; filing label, not necessarily fact year | Optional integer |
 | filing_fiscal_period, frame | `fp`, `frame`; source labels | Optional strings |
+| source_response_id | Selected Bronze company-facts response | String |
+| fetched_at | Original retrieval time of the selected Bronze response | UTC timestamp |
+| ingestion_run_id | Original Bronze ingestion run | String |
 
 Shared provenance is required, plus a unique string `source_response_id` linking all extracted facts to their original Bronze response. New retrievals receive new IDs; replay preserves them.
 
