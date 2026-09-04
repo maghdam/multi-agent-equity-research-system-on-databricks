@@ -1,0 +1,22 @@
+resources:
+  jobs:
+    gold_fundamental_metrics_transformation:
+      name: ${bundle.name}-gold-fundamental-metrics-transformation
+      description: >-
+        Rebuilds the current comparable fundamental-metrics snapshot from
+        validated Silver company-facts history.
+
+      max_concurrent_runs: 1
+
+      tasks:
+        - task_key: transform_gold_fundamental_metrics
+
+          notebook_task:
+            notebook_path: ../src/gold_fundamental_metrics_transformation.py
+
+            base_parameters:
+              catalog: ${resources.schemas.gold.catalog_name}
+              silver_schema: ${resources.schemas.silver.name}
+              gold_schema: ${resources.schemas.gold.name}
+
+          timeout_seconds: 300

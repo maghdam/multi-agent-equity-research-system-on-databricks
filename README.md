@@ -2,7 +2,7 @@
 
 > A production-oriented portfolio project combining data engineering and AI engineering on Databricks.
 
-**Status:** Milestone 1 in progress — Bronze 4/4 live-verified; Silver 4/4 live-verified; Gold 1/2 live-verified
+**Status:** Milestone 1 in progress — Bronze 4/4 live-verified; Silver 4/4 live-verified; Gold 2/2 live-verified
 
 ## Overview
 
@@ -32,8 +32,8 @@ The MVP will not include trading execution, price prediction, portfolio optimiza
 
 - **Bronze:** 4/4 MVP datasets implemented and live-verified.
 - **Silver:** 4/4 MVP datasets implemented and live-verified: `daily_prices`, `news_articles`, `company_facts`, and `filing_sections`.
-- **Gold:** 1/2 analytical metric tables implemented and live-verified: `market_metrics`.
-- **Next:** build Gold `fundamental_metrics` from validated `company_facts`.
+- **Gold:** 2/2 analytical metric tables implemented and live-verified: `market_metrics` and `fundamental_metrics`.
+- **Next:** complete the remaining Milestone 1 orchestration, quality, CI, refresh, and deployment-verification work.
 - Detailed implementation evidence and run links are tracked in [PLAN.md](PLAN.md).
 
 ## Architecture
@@ -67,7 +67,7 @@ flowchart TB
     subgraph G["Gold - Analytical metrics"]
         direction LR
         G1["market_metrics ✅"]
-        G2["fundamental_metrics"]
+        G2["fundamental_metrics ✅"]
     end
 
     R["Retrieval / indexing assets<br/>news + filing evidence"]

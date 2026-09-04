@@ -414,6 +414,157 @@ round-half-even behavior. Missing values are never treated as zero.
   transformation-run metadata remains separate from source provenance.
 
 
+## 6. Gold fundamental metrics
+
+**Use:** Current cross-company fundamental comparison from validated Silver
+`company_facts`.
+
+**One Gold record:** One configured company using its latest eligible SEC
+financial filing and the current Silver company-facts snapshot.
+
+**Key:** `(symbol, as_of_date)`, where `as_of_date` is the filing date of the
+selected latest eligible filing.
+
+The MVP publishes one current snapshot rather than a historical metric series.
+There must be exactly one row per configured company. Fundamental `as_of_date`
+and reporting-period ends do not need to match across companies because SEC
+filing calendars differ. Comparability is provided by trailing-twelve-month
+construction and explicit period metadata.
+
+### Source scope and latest filing
+
+1. Use only validated Silver facts with `source_system = sec`,
+   `taxonomy = us-gaap`, `unit = USD`, and the configured company identity.
+2. Gold uses only these concepts:
+   `RevenueFromContractWithCustomerExcludingAssessedTax`,
+   `NetIncomeLoss`, and `Assets`.
+3. Only exact `10-K` and `10-Q` filings are eligible for the current reporting
+   filing. `8-K`, `10-K/A`, `10-Q/A`, and other forms are outside the MVP Gold
+   selection rule.
+4. Select the eligible filing with the greatest `filing_date` for each company.
+   Multiple distinct accessions at that greatest date are ambiguous and fail
+   publication.
+5. The selected latest filing must provide the current-period revenue,
+   net-income, and asset facts required by the rules below. Gold does not fall
+   back to an older filing when the selected filing is incomplete.
+6. All facts are read from the current Silver company-facts snapshot. Preserve
+   the selected Silver snapshot's Bronze response provenance on the Gold row.
+
+### Full-year fact version selection
+
+For annual calculations, use exact `10-K` duration facts whose observed
+duration is between 330 and 380 days.
+
+For the same concept and actual `(period_start, period_end)`, prefer the
+disclosure with the greatest `filing_date`. If multiple disclosures at that
+greatest filing date disagree in value or period identity, fail rather than
+choosing by input order.
+
+Revenue and net-income annual periods used together must have identical
+`period_start` and `period_end`.
+
+### Current TTM construction
+
+The selected latest filing determines one `fundamental_period_end`.
+
+#### Latest filing is a 10-K
+
+- Require current full-year revenue and net income ending on
+  `fundamental_period_end`.
+- `revenue_ttm` equals that full-year revenue.
+- `net_income_ttm` equals that full-year net income.
+- `ttm_derivation_method = annual`.
+
+#### Latest filing is a 10-Q
+
+- For revenue and net income, select the longest duration fact in the selected
+  accession ending on `fundamental_period_end`. This is the current fiscal-YTD
+  period. Revenue and net income must use the same YTD start and end dates.
+- Select the comparative prior-year YTD facts disclosed in the same accession.
+  Their duration must differ from the current YTD duration by no more than two
+  days, and their period end must be 350 to 380 days before the current YTD
+  period end.
+- Select the latest-version full-year `10-K` facts whose `period_end` is exactly
+  one day before the current YTD `period_start`.
+- Derive:
+  `TTM = latest_full_year + current_YTD - prior_year_comparable_YTD`.
+- Apply the formula independently to revenue and net income.
+- `ttm_derivation_method = annual_plus_ytd_minus_prior_ytd`.
+
+Gold never sums quarterly disclosures to construct TTM when the deterministic
+annual-plus-YTD bridge is available.
+
+### Latest assets
+
+Select the `Assets` instant fact from the selected latest filing whose
+`period_end = fundamental_period_end`.
+
+The fact must have no `period_start` and must be nonnegative. Gold does not
+substitute a prior-quarter or prior-year asset value if the selected filing's
+current asset fact is unavailable.
+
+### Growth and profitability metrics
+
+- `net_margin_ttm = net_income_ttm / revenue_ttm`.
+- Revenue TTM must be positive.
+- Select the latest and immediately preceding comparable full-year revenue
+  facts after the annual version-selection rule.
+- `revenue_growth_latest_fy =
+  latest_fy_revenue / prior_fy_revenue - 1`.
+- Prior full-year revenue must be positive.
+- Select matching latest and immediately preceding full-year net-income facts.
+- `net_income_change_latest_fy =
+  latest_fy_net_income - prior_fy_net_income`.
+
+The MVP intentionally uses an absolute net-income change rather than a
+percentage growth rate because a zero or negative prior-year net income makes
+percentage growth undefined or economically misleading.
+
+### Schema
+
+| Field | Meaning | Type |
+|---|---|---|
+| source_system | `sec` | String |
+| symbol | Configured project symbol | String |
+| cik | Validated configured SEC CIK | 10-digit string |
+| as_of_date | Filing date of selected latest eligible filing | Date |
+| fundamental_period_end | Current reporting-period end used by TTM and assets | Date |
+| latest_filing_form | Selected `10-K` or `10-Q` | String |
+| latest_accession_number | Selected current filing accession | String |
+| revenue_ttm | Current trailing-twelve-month revenue | DECIMAL(30,8) |
+| net_income_ttm | Current trailing-twelve-month net income | DECIMAL(30,8) |
+| net_margin_ttm | `net_income_ttm / revenue_ttm` | DECIMAL(20,10) |
+| assets_latest | Assets at `fundamental_period_end` | DECIMAL(30,8) |
+| revenue_growth_latest_fy | Latest full-year revenue growth versus preceding full year | DECIMAL(20,10) |
+| net_income_change_latest_fy | Latest full-year net income minus preceding full-year net income | DECIMAL(30,8) |
+| latest_fy_end | Period end of latest full-year comparison basis | Date |
+| prior_fy_end | Period end of preceding full-year comparison basis | Date |
+| ttm_derivation_method | `annual` or `annual_plus_ytd_minus_prior_ytd` | String |
+| latest_source_response_id | Bronze company-facts response underlying current Silver snapshot | String |
+| latest_source_fetched_at | Original Bronze retrieval timestamp | UTC timestamp |
+| latest_source_ingestion_run_id | Original Bronze ingestion run | String |
+
+Rate fields are decimal fractions. Calculations start from exact Silver
+decimal values and round derived rates only once at publication using
+round-half-even behavior.
+
+### Validation, publication, and replay
+
+- Require every configured company exactly once.
+- Require one unambiguous latest eligible filing per company.
+- Require aligned revenue/net-income periods for every annual and YTD pair.
+- Require the selected latest filing's current assets, revenue, and net income.
+- Require all TTM bridge components when the latest filing is a `10-Q`.
+- Require two comparable full-year periods for annual growth/change metrics.
+- Require finite derived rates, positive TTM revenue, and nonnegative assets.
+- Final `(symbol, as_of_date)` keys must be unique.
+- Publish the complete `fundamental_metrics` snapshot atomically only after all
+  configured companies pass validation.
+- A failed refresh preserves the previous successful Gold snapshot.
+- Identical Silver input must rebuild identical Gold output without duplicate
+  accumulation or metric drift.
+
+
 ## Crucial test coverage - planned, not yet automated
 
 Use synthetic fixtures; the checklist below replaces the long walkthrough examples.
