@@ -1,0 +1,79 @@
+resources:
+  jobs:
+    daily_market_refresh:
+      name: ${bundle.name}-daily-market-refresh
+      description: >-
+        Orchestrates the scheduled incremental market-data and company-news
+        refresh from Bronze through Silver and Gold.
+
+      max_concurrent_runs: 1
+
+      schedule:
+        quartz_cron_expression: "0 0 1 ? * TUE-SAT"
+        timezone_id: America/New_York
+        pause_status: UNPAUSED
+
+      tasks:
+        - task_key: ingest_bronze_prices
+
+          run_job_task:
+            job_id: ${resources.jobs.bronze_price_ingestion.id}
+            job_parameters:
+              load_mode: incremental
+              start: ""
+              end: ""
+              lookback_days: "7"
+              page_limit: "10000"
+
+        - task_key: ingest_bronze_news
+
+          run_job_task:
+            job_id: ${resources.jobs.bronze_news_ingestion.id}
+            job_parameters:
+              load_mode: incremental
+              start: ""
+              end: ""
+              lookback_days: "7"
+              page_limit: "50"
+
+        - task_key: transform_silver_prices
+
+          depends_on:
+            - task_key: ingest_bronze_prices
+
+          run_job_task:
+            job_id: ${resources.jobs.silver_price_transformation.id}
+
+        - task_key: transform_silver_news
+
+          depends_on:
+            - task_key: ingest_bronze_news
+
+          run_job_task:
+            job_id: ${resources.jobs.silver_news_transformation.id}
+
+        - task_key: transform_gold_market_metrics
+
+          depends_on:
+            - task_key: transform_silver_prices
+
+          run_job_task:
+            job_id: ${resources.jobs.gold_market_metrics_transformation.id}
+
+        - task_key: verify_daily_refresh
+
+          depends_on:
+            - task_key: transform_silver_prices
+            - task_key: transform_silver_news
+            - task_key: transform_gold_market_metrics
+
+          notebook_task:
+            notebook_path: ../src/daily_market_refresh_verification.py
+
+            base_parameters:
+              catalog: ${resources.schemas.gold.catalog_name}
+              bronze_schema: ${resources.schemas.bronze.name}
+              silver_schema: ${resources.schemas.silver.name}
+              gold_schema: ${resources.schemas.gold.name}
+
+          timeout_seconds: 300

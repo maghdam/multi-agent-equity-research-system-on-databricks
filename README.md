@@ -33,7 +33,8 @@ The MVP will not include trading execution, price prediction, portfolio optimiza
 - **Bronze:** 4/4 MVP datasets implemented and live-verified.
 - **Silver:** 4/4 MVP datasets implemented and live-verified: `daily_prices`, `news_articles`, `company_facts`, and `filing_sections`.
 - **Gold:** 2/2 analytical metric tables implemented and live-verified: `market_metrics` and `fundamental_metrics`.
-- **Next:** complete scheduled incremental refreshes, quality/freshness and failure-visibility checks, then controlled deployment verification.
+- **Daily market/news refresh:** scheduled and live-verified at 01:00 America/New_York Tuesday-Saturday, with incremental Bronze ingestion, Silver/Gold rebuilds, and an automated quality/freshness/lineage verification gate.
+- **Next:** add the lower-frequency SEC/fundamentals scheduled refresh and its verification gate, then complete controlled deployment verification.
 - Detailed implementation evidence and run links are tracked in [PLAN.md](PLAN.md).
 
 ## Architecture
