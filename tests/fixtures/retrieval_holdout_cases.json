@@ -1,0 +1,79 @@
+{
+  "version": "retrieval-holdout-v1",
+  "benchmark_role": "independent_holdout",
+  "description": "Retrieval holdout selected and human-reviewed directly from research_chunks before any ANN or HYBRID query was run for these cases. This set is separate from retrieval-eval-v1, whose labels were reviewed from baseline ANN candidates.",
+  "cases": [
+    {
+      "case_id": "H1_AAPL_COMPETITION",
+      "query": "How does Apple's vertically integrated product design approach relate to the competitive factors it says are important, including ecosystem strength, distribution, innovation, reputation, and intellectual-property protection?",
+      "expected_symbol": "AAPL",
+      "expected_source_type": "filing",
+      "expected_section_code": "item_1",
+      "relevant_chunk_ids": [
+        "0ff6cd4769abcfd629671d893c110f66596945a32f0d3de8dc172c60fc344b97"
+      ],
+      "label_status": "reviewed",
+      "source_selection_method": "AAPL Item 1 chunk index 2 selected before retrieval."
+    },
+    {
+      "case_id": "H2_AAPL_IP_REGULATORY_RISK",
+      "query": "How could regulatory requirements, government investigations, or litigation weaken Apple's intellectual-property protection and competitive advantage?",
+      "expected_symbol": "AAPL",
+      "expected_source_type": "filing",
+      "expected_section_code": "item_1a",
+      "relevant_chunk_ids": [
+        "b5a62bafcaf37adeed8d392c1e517b9352c6e31008b82dc06fbbc1bee837e2e9"
+      ],
+      "label_status": "reviewed",
+      "source_selection_method": "AAPL Item 1A chunk index 5 selected before retrieval."
+    },
+    {
+      "case_id": "H3_MSFT_AI_STRATEGY",
+      "query": "How does Microsoft describe using Microsoft 365 Copilot and agents, enterprise AI intelligence, and AI skilling to transform customer work and business processes?",
+      "expected_symbol": "MSFT",
+      "expected_source_type": "filing",
+      "expected_section_code": "item_1",
+      "relevant_chunk_ids": [
+        "bbe984aa673eaa56dd5aabbf653d41f049070d62a3d27db761304aaade975ccd"
+      ],
+      "label_status": "reviewed",
+      "source_selection_method": "MSFT Item 1 chunk index 2 selected before retrieval."
+    },
+    {
+      "case_id": "H4_MSFT_CLOUD_AI_DEMAND_RISK",
+      "query": "How could infrastructure capacity constraints and changing customer demand affect Microsoft's cloud and AI business, and what execution areas matter for adoption and monetization?",
+      "expected_symbol": "MSFT",
+      "expected_source_type": "filing",
+      "expected_section_code": "item_1a",
+      "relevant_chunk_ids": [
+        "2077edf645784ca4173829c49133c8acd8aefb6a26d13eeb009288c394430393"
+      ],
+      "label_status": "reviewed",
+      "source_selection_method": "MSFT Item 1A chunk index 5 selected before retrieval."
+    },
+    {
+      "case_id": "H5_AAPL_ECOSYSTEM_MODEL",
+      "query": "How is Apple's business model described in terms of its iPhone-centered ecosystem, internally designed software and semiconductors, manufacturing partners, and direct versus indirect distribution?",
+      "expected_symbol": "AAPL",
+      "expected_source_type": "news",
+      "expected_section_code": null,
+      "relevant_chunk_ids": [
+        "d98116b1b6d7c7dd653abda8b4196928ebab0583cad20887817dd25cfd0faa18"
+      ],
+      "label_status": "reviewed",
+      "source_selection_method": "Mechanically selected news candidate retained after source-text review before retrieval."
+    },
+    {
+      "case_id": "H6_MSFT_AI_INVESTMENT_ECONOMICS",
+      "query": "What recent evidence suggests Microsoft's AI infrastructure investments are beginning to show improving economics, and why could that support continued capital spending?",
+      "expected_symbol": "MSFT",
+      "expected_source_type": "news",
+      "expected_section_code": null,
+      "relevant_chunk_ids": [
+        "08b183857e17e31129120fb98f504eca3d61e5efd888ddd843cc9303802e5559"
+      ],
+      "label_status": "reviewed",
+      "source_selection_method": "Microsoft-title news candidate selected and human-reviewed before retrieval."
+    }
+  ]
+}

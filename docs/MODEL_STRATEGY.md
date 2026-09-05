@@ -156,11 +156,64 @@ the live evaluation pipeline is reproducible and that the reviewed positive
 chunks remain highly ranked; they are not an unbiased estimate of retrieval
 quality.
 
-This four-case set is retained as a regression/sanity benchmark. Before making
-ANN-versus-HYBRID, filtering, chunking, or reranking quality claims, the project
-will add an independently labelled holdout/challenge set. Precision@k and
-recall@k are also deferred until relevance judgements are sufficiently
+This four-case set is retained as a regression/sanity benchmark. Precision@k
+and recall@k remain deferred until relevance judgements are sufficiently
 exhaustive for those metrics to be meaningful.
+
+### Independent retrieval holdout
+
+A separate six-case holdout was then created before running ANN or HYBRID
+retrieval against those questions. Source chunks were selected and reviewed
+directly from the `research_chunks` Delta table without using Vector Search to
+choose the expected positives. The questions and exact gold chunk IDs were
+frozen in Git before retrieval execution.
+
+The holdout covers:
+
+- AAPL competitive positioning from Item 1;
+- AAPL intellectual-property and regulatory risk from Item 1A;
+- MSFT AI strategy from Item 1;
+- MSFT cloud/AI demand and execution risk from Item 1A;
+- an AAPL news case describing its ecosystem, semiconductor design,
+  manufacturing partners, and distribution model;
+- an MSFT news case describing improving AI-infrastructure economics.
+
+The first independent comparison returned:
+
+| Metric | ANN | HYBRID |
+|---|---:|---:|
+| Hit@1 | 0.333 | 0.667 |
+| Hit@3 | 0.667 | 0.833 |
+| Hit@5 | 0.833 | 0.833 |
+| MRR | 0.542 | 0.778 |
+| Symbol match@5 | 0.900 | 0.867 |
+| Source-type match@5 | 0.867 | 0.867 |
+| Section match@5 | 0.700 | 0.700 |
+| Duplicate-document rate@5 | 0.467 | 0.367 |
+
+On this small frozen holdout, HYBRID ranked known relevant evidence materially
+earlier than ANN while preserving the same Hit@5. HYBRID is therefore the
+current retrieval baseline for the next controlled-tool implementation, but
+the six-case result is not treated as a broad population-level quality claim.
+
+A follow-up H5 diagnostic showed an important corpus and evaluation limitation.
+Several separately published AAPL peer-comparison news articles contain
+near-duplicate Apple background text. HYBRID retrieved multiple equivalent
+articles ahead of the single frozen gold chunk. Applying `AAPL` plus `news`
+metadata filters correctly constrained the result scope to AAPL news, but did
+not improve the exact frozen gold chunk rank. The holdout labels remain
+unchanged after evaluation.
+
+This result has two implications for the next retrieval iterations:
+
+- metadata filtering is useful for controlled company/source scoping;
+- near-duplicate evidence and result diversification should be measured and
+  addressed separately from semantic relevance.
+
+No chunking change is justified by this six-case experiment alone. The next
+implementation step is to build controlled retrieval and SQL tools with
+configured-symbol and data-readiness checks, using HYBRID as the provisional
+retrieval baseline.
 
 ## 4. Initial chunking strategy and model relationship
 
