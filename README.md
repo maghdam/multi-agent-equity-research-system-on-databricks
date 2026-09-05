@@ -37,7 +37,7 @@ The MVP will not include trading execution, price prediction, portfolio optimiza
 - **Weekly SEC/fundamentals refresh:** scheduled at 02:00 America/New_York Sunday, with SEC company-facts and selected 10-K ingestion, Silver rebuilds, Gold fundamental metrics, and a final freshness/coverage/lineage verification gate. The full DAG is manually live-verified; the first periodic Sunday execution is pending.
 - **Milestone 1 — Data Engineering:** complete. Bronze, Silver, Gold, CI, scheduled refresh orchestration, quality/freshness/lineage gates, safe replay behavior, and controlled deployment verification are all implemented and verified. The deployment gate was executed from the CI-tested `main` commit `caa3dcb` and completed with a converged bundle plan plus a successful serverless Spark smoke test.
 - **Operational audit policy:** the MVP uses fail-before-publication validation rather than partial publication plus quarantine tables. Immutable Bronze provenance, validation diagnostics, deterministic replay, Databricks job history, and final verification gates provide the required operational evidence; dedicated row-level rejection tables are deferred until a mixed valid/invalid batch workflow requires them.
-- **Milestone 2 — AI Engineering:** in progress. Deterministic `research_documents` and `research_chunks` are implemented, offline-tested, persisted as managed Delta tables in the AI schema, and live-verified on real validated Alpaca news and SEC filing inputs. The verified corpus contains 149 documents and 329 chunks; an unchanged rerun reproduced the same corpus identity and document/chunk fingerprints. Embeddings, vector indexing, controlled retrieval tools, agents, and MLflow GenAI evaluation remain pending.
+- **Milestone 2 — AI Engineering:** in progress. Deterministic `research_documents` and `research_chunks` are implemented, offline-tested, persisted as managed Delta tables in the AI schema, and live-verified on real validated Alpaca news and SEC filing inputs. The verified corpus contains 149 documents and 329 chunks; an unchanged rerun reproduced the same corpus identity and document/chunk fingerprints. Managed embeddings and a bundle-managed Databricks AI Search Delta Sync index are now live-verified on all 329 chunks using `databricks-gte-large-en`. Two initial ANN smoke tests for MSFT cyber/AI risk and AAPL supply-chain risk each returned 5/5 company-matching results, with 4/5 results from SEC Item 1A. Controlled retrieval tools, agents, and MLflow GenAI evaluation remain pending.
 - Detailed implementation evidence and run links are tracked in [PLAN.md](PLAN.md).
 
 ## Architecture
@@ -73,8 +73,7 @@ flowchart TB
         G1["market_metrics ✅"]
         G2["fundamental_metrics ✅"]
     end
-
-    R["RAG retrieval layer<br/>research_documents + research_chunks ✅ live<br/>embeddings + vector index planned"]
+    R["RAG retrieval layer<br/>research_documents + research_chunks ✅ live<br/>managed embeddings + AI Search vector index ✅ live"]
 
     A1 --> B1 --> S1 --> G1
     A2 --> B2 --> S2 --> R

@@ -27,6 +27,12 @@ variables:
   alpaca_secret_scope:
     description: Databricks secret scope containing the Alpaca credentials.
     default: equity-research-dev
+  vector_search_endpoint_name:
+    description: Existing Databricks AI Search endpoint used by the RAG index.
+    default: vector_search_endpoint
+  embedding_model_endpoint_name:
+    description: Databricks embedding endpoint used for document and query embeddings.
+    default: databricks-gte-large-en
 
 targets:
   dev:

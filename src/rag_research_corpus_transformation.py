@@ -1071,7 +1071,8 @@ try:
           'dataset_role' = 'research_chunks',
           'corpus_snapshot_id' = '{corpus_snapshot_id}',
           'chunking_strategy_version' =
-            '{chunking_strategy.chunking_strategy_version}'
+            '{chunking_strategy.chunking_strategy_version}',
+          'delta.enableChangeDataFeed' = 'true'
         )
         AS
         SELECT *

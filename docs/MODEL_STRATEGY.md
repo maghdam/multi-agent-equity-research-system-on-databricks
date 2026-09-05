@@ -96,6 +96,31 @@ Databricks GTE endpoint does **not** return normalized embeddings. Similarity
 configuration must therefore be validated rather than assuming unit-length
 vectors.
 
+### Live embedding and index verification
+
+Development verification on 2026-09-05 confirmed the initial embedding and
+vector-search baseline:
+
+- a synthetic request to `databricks-gte-large-en` resolved to
+  `gte-large-en-v1.5`, returned a 1024-dimensional embedding, and reported
+  13 prompt tokens;
+- Change Data Feed is enabled on the managed `research_chunks` Delta table;
+- a bundle-managed `DELTA_SYNC` Databricks AI Search index uses the existing
+  Standard `vector_search_endpoint`, `chunk_id` as the primary key,
+  `chunk_text` as the managed embedding source, and `TRIGGERED` synchronization;
+- the live index reached ready state with all 329 research chunks indexed;
+- an MSFT ANN smoke query about cybersecurity, AI, operations, and reputation
+  returned 5/5 MSFT results in the top five, including 4/5 SEC Item 1A chunks;
+- an AAPL ANN smoke query about supply-chain, manufacturing-partner, and
+  geopolitical risk returned 5/5 AAPL results in the top five, including
+  4/5 SEC Item 1A chunks.
+
+These smoke tests establish that the live embedding/index path works and that
+the first semantic rankings are directionally sensible. They are not formal
+retrieval-quality evidence. The next evaluation step uses labelled retrieval
+cases and deterministic metrics such as hit-rate@k and MRR before chunking,
+retrieval mode, filters, or reranking are changed.
+
 ## 4. Initial chunking strategy and model relationship
 
 The first chunking baseline to evaluate is:
