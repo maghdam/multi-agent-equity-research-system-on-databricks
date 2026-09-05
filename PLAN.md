@@ -235,13 +235,17 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
 
 - [x] Define the report structure, agent responsibilities, important failure behavior, and a small representative evaluation set. See `docs/AI_RESEARCH_CONTRACT.md`.
 
-- [ ] Build the RAG foundation: confirm indexing/model-processing permissions; prepare cleaned news/filing `research_documents`, deterministic chunks and metadata, embeddings, and a vector index.
+- [x] Define and offline-test the deterministic RAG corpus foundation: `research_documents`, `research_chunks`, source/version identities, cleaning, chunking, citation metadata, replay/invalidation behavior, and synthetic safety fixtures. See `DATA_CONTRACTS.md`.
+
+- [x] Define the initial model and evaluation strategy. Baselines: `databricks-gte-large-en` for embeddings, GPT OSS 20B for worker agents, GPT OSS 120B for the Supervisor/final synthesis, and MLflow 3 for deterministic retrieval metrics, code-based scorers, built-in judges, custom criteria, and later multi-turn evaluation. Endpoint availability was confirmed without sending real provider text. See `docs/MODEL_STRATEGY.md`.
+
+- [ ] Confirm indexing/model-processing permissions for real source text; then build versioned embeddings from `research_chunks`, validate token limits/dimensions/similarity assumptions, and create the vector index.
 
 - [ ] Build and independently test controlled SQL and retrieval tools that check configured symbols and data readiness.
 
 - [ ] Implement the Market Analyst, Company Researcher, and LangGraph Supervisor with structured reports, citations, and clear errors.
 
-- [ ] Add MLflow tracing and evaluate numerical correctness, retrieval relevance, citation support, missing/stale evidence, tool routing, latency, and cost.
+- [ ] Add MLflow tracing and GenAI evaluation. Combine deterministic numerical/citation checks with retrieval metrics such as precision@k, recall@k, hit-rate@k, and MRR, plus MLflow judges for retrieval relevance/groundedness/sufficiency, response relevance, correctness, safety, and project guidelines.
 
 - [ ] Correct measured weaknesses and rerun the same evaluations to check for regressions.
 
@@ -250,6 +254,8 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
 **Gate:** Representative one-stock and comparison requests produce grounded reports: numbers match Gold, narrative claims have supporting citations, and missing or stale evidence is disclosed.
 
 ## Milestone 3 - Application and end-to-end delivery (pending)
+
+- [x] Select the initial app-facing chat-model baseline and multi-turn evaluation strategy. The application routes user requests directly to the LangGraph Supervisor using `databricks-gpt-oss-120b`; evaluation will compare that configuration with a GPT OSS 20B Supervisor using the same worker agents. See `docs/MODEL_STRATEGY.md`.
 
 - [ ] Build configured stock/period selection, charts, comparison metrics, a cited report, and evidence-grounded follow-up chat.
 
