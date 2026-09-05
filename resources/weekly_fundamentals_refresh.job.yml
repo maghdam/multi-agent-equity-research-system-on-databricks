@@ -1,0 +1,67 @@
+resources:
+  jobs:
+    weekly_fundamentals_refresh:
+      name: ${bundle.name}-weekly-fundamentals-refresh
+      description: >-
+        Orchestrates the scheduled SEC company-facts and filing refresh from
+        Bronze through Silver and Gold.
+
+      max_concurrent_runs: 1
+
+      schedule:
+        quartz_cron_expression: "0 0 2 ? * SUN"
+        timezone_id: America/New_York
+        pause_status: UNPAUSED
+
+      tasks:
+        - task_key: ingest_bronze_company_facts
+
+          run_job_task:
+            job_id: ${resources.jobs.bronze_company_facts_ingestion.id}
+
+        - task_key: ingest_bronze_sec_filings
+
+          run_job_task:
+            job_id: ${resources.jobs.bronze_sec_filings_ingestion.id}
+
+        - task_key: transform_silver_company_facts
+
+          depends_on:
+            - task_key: ingest_bronze_company_facts
+
+          run_job_task:
+            job_id: ${resources.jobs.silver_company_facts_transformation.id}
+
+        - task_key: transform_silver_filing_sections
+
+          depends_on:
+            - task_key: ingest_bronze_sec_filings
+
+          run_job_task:
+            job_id: ${resources.jobs.silver_filing_sections_transformation.id}
+
+        - task_key: transform_gold_fundamental_metrics
+
+          depends_on:
+            - task_key: transform_silver_company_facts
+
+          run_job_task:
+            job_id: ${resources.jobs.gold_fundamental_metrics_transformation.id}
+
+        - task_key: verify_weekly_fundamentals_refresh
+
+          depends_on:
+            - task_key: transform_silver_company_facts
+            - task_key: transform_silver_filing_sections
+            - task_key: transform_gold_fundamental_metrics
+
+          notebook_task:
+            notebook_path: ../src/weekly_fundamentals_refresh_verification.py
+
+            base_parameters:
+              catalog: ${resources.schemas.gold.catalog_name}
+              bronze_schema: ${resources.schemas.bronze.name}
+              silver_schema: ${resources.schemas.silver.name}
+              gold_schema: ${resources.schemas.gold.name}
+
+          timeout_seconds: 300
