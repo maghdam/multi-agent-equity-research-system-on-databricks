@@ -2,9 +2,9 @@
 
 Build a small research app that compares AAPL and MSFT using market data, company fundamentals, and cited news/filing evidence. See [README.md](README.md) for the architecture and expected output.
 
-**Current position:** Milestone 1 — Data Engineering is complete. All four Bronze ingestion pipelines, all four Silver transformations, and both Gold analytical metric tables are implemented and live-verified in Databricks. Credential-free GitHub Actions CI runs Ruff correctness lint and all 195 offline contract/unit tests on pull requests and pushes to `main`. The daily market/news and weekly SEC/fundamentals refresh DAGs are bundle-managed, enabled, and protected by final freshness/quality/lineage verification gates. The daily path has also completed its first real `PERIODIC` scheduler run successfully. Controlled deployment was verified from CI-tested `main` commit `caa3dcb1a21eb08544a79808ef8fe274804dbda1`: bundle validation passed, pre- and post-deploy plans converged at 0 add / 0 change / 0 delete with 16 unchanged resources, and the serverless Phase 0 smoke test completed successfully. Durable row-level rejection tables are intentionally deferred because the MVP transformations use fail-before-publication validation, immutable Bronze provenance, deterministic replay, Databricks run history, and explicit final verification gates.
+**Current position:** Milestone 1 — Data Engineering is complete. All four Bronze ingestion pipelines, all four Silver transformations, and both Gold analytical metric tables are implemented and live-verified in Databricks. Credential-free GitHub Actions CI runs Ruff correctness lint and all 239 offline contract/unit tests on pull requests and pushes to `main`. The daily market/news and weekly SEC/fundamentals refresh DAGs are bundle-managed, enabled, and protected by final freshness/quality/lineage verification gates. The daily path has also completed its first real `PERIODIC` scheduler run successfully. Controlled deployment was verified from CI-tested `main` commit `caa3dcb1a21eb08544a79808ef8fe274804dbda1`: bundle validation passed, pre- and post-deploy plans converged at 0 add / 0 change / 0 delete with 16 unchanged resources, and the serverless Phase 0 smoke test completed successfully. Durable row-level rejection tables are intentionally deferred because the MVP transformations use fail-before-publication validation, immutable Bronze provenance, deterministic replay, Databricks run history, and explicit final verification gates.
 
-**Next:** Begin Milestone 2 — AI Engineering by turning validated Silver news and filing sections into research-ready retrieval assets, then add controlled structured-data and retrieval tools before building the Market Analyst, Company Researcher, and LangGraph supervisor.
+**Next:** Build an independently labelled retrieval challenge/holdout set for defensible retrieval comparisons, then add controlled structured-data and retrieval tools before building the Market Analyst, Company Researcher, and LangGraph Supervisor.
 
 ## Implementation roadmap
 
@@ -235,13 +235,21 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
 
 - [x] Define the report structure, agent responsibilities, important failure behavior, and a small representative evaluation set. See `docs/AI_RESEARCH_CONTRACT.md`.
 
-- [ ] Build the RAG foundation: confirm indexing/model-processing permissions; prepare cleaned news/filing `research_documents`, deterministic chunks and metadata, embeddings, and a vector index.
+- [x] Define, implement, and live-verify the deterministic RAG corpus foundation: `research_documents`, `research_chunks`, source/version identities, cleaning, chunking, citation metadata, and replay/invalidation behavior. The managed AI-schema tables were built from real validated Silver news and filing inputs with 149 documents (145 news, 4 filing sections) and 329 chunks (239 news, 90 filing). Chunk lengths ranged from 715 to 3,178 characters under the 3,200-character maximum. First successful run: https://dbc-5e700074-422e.cloud.databricks.com/jobs/596994557123827/runs/976594885443876?o=7474654299884940 . An unchanged rerun reproduced the same 149 documents, 329 chunks, corpus snapshot ID, document fingerprint, and chunk fingerprint: https://dbc-5e700074-422e.cloud.databricks.com/jobs/596994557123827/runs/940226443163415?o=7474654299884940 . See `DATA_CONTRACTS.md`.
+
+- [x] Define the initial model and evaluation strategy. Baselines: `databricks-gte-large-en` for embeddings, GPT OSS 20B for worker agents, GPT OSS 120B for the Supervisor/final synthesis, and MLflow 3 for deterministic retrieval metrics, code-based scorers, built-in judges, custom criteria, and later multi-turn evaluation. Endpoint availability was confirmed without sending real provider text. See `docs/MODEL_STRATEGY.md`.
+
+- [x] Confirm the private-runtime data-use boundary for real source text. Real SEC filing evidence and real Alpaca/Benzinga news may be processed in the owner's private, personal, non-commercial runtime; provider source content is excluded from public redistribution. See `docs/DATA_USAGE_PERMISSIONS.md`.
+
+- [x] Build and live-verify managed embeddings and the vector index from `research_chunks`. Change Data Feed is enabled on the source Delta table; a bundle-managed `DELTA_SYNC` index on the existing Standard endpoint `vector_search_endpoint` uses `chunk_id` as the primary key, `chunk_text` as the embedding source, `databricks-gte-large-en`, and `TRIGGERED` sync. The live index is ready with 329/329 chunks indexed, and the bundle converges at 0 add / 0 change / 0 delete / 19 unchanged. Synthetic endpoint verification confirmed `gte-large-en-v1.5` with 1024-dimensional output. Initial ANN smoke tests for MSFT cyber/AI risk and AAPL supply-chain risk each returned 5/5 company-matching top results, with 4/5 SEC Item 1A results; these are qualitative smoke tests, not substitutes for the labelled retrieval evaluation planned below.
+
+- [x] Build and live-verify the first deterministic retrieval-evaluation harness and ANN sanity baseline. Four reviewed component-level cases cover MSFT cyber/AI risk, AAPL supply-chain risk, and recent MSFT/AAPL business developments. Credential-free metric code reports Hit@1/3/5, MRR, symbol/source/section diagnostics, and duplicate-document rate; a thin CLI-backed live runner queries the existing AI Search index without adding a Python Databricks SDK dependency. The 2026-09-05 ANN sanity run returned Hit@1/3/5 = 1.000, MRR = 1.000, symbol@5 = 1.000, source@5 = 0.850, section@5 = 0.800, and duplicate-document-rate@5 = 0.400. Because the relevance labels were reviewed from candidates produced by this same ANN baseline, these results validate the evaluation pipeline but are not an independent retrieval-quality estimate. An independently labelled holdout/challenge set is required before ANN-vs-HYBRID, filtering, chunking, or reranking quality claims.
 
 - [ ] Build and independently test controlled SQL and retrieval tools that check configured symbols and data readiness.
 
 - [ ] Implement the Market Analyst, Company Researcher, and LangGraph Supervisor with structured reports, citations, and clear errors.
 
-- [ ] Add MLflow tracing and evaluate numerical correctness, retrieval relevance, citation support, missing/stale evidence, tool routing, latency, and cost.
+- [ ] Add MLflow tracing and GenAI evaluation. Combine deterministic numerical/citation checks with retrieval metrics such as hit-rate@k and MRR, plus precision@k and recall@k when relevance labels are sufficiently exhaustive, plus MLflow judges for retrieval relevance/groundedness/sufficiency, response relevance, correctness, safety, and project guidelines.
 
 - [ ] Correct measured weaknesses and rerun the same evaluations to check for regressions.
 
@@ -251,17 +259,19 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
 
 ## Milestone 3 - Application and end-to-end delivery (pending)
 
+- [x] Select the initial app-facing chat-model baseline and multi-turn evaluation strategy. The application routes user requests directly to the LangGraph Supervisor using `databricks-gpt-oss-120b`; evaluation will compare that configuration with a GPT OSS 20B Supervisor using the same worker agents. See `docs/MODEL_STRATEGY.md`.
+
 - [ ] Build configured stock/period selection, charts, comparison metrics, a cited report, and evidence-grounded follow-up chat.
 
 - [ ] Add application logging, monitoring, feedback collection, and secure secret handling.
 
-- [ ] Confirm public display/redistribution permissions for provider data and derived outputs; use clearly labelled synthetic demo data if unresolved.
+- [ ] Enforce the portfolio publication boundary: keep the Databricks application private, exclude credentials/raw Alpaca responses/article bodies/real-news chunk exports from the public repository, and use repository code, documentation, tests, screenshots, and non-sensitive evaluation evidence for the employer-facing showcase.
 
 - [ ] Deploy the app on Databricks and extend controlled deployment with startup, health, and end-to-end verification.
 
 - [ ] Add screenshots, example output, a short demo, and concise reproduction instructions covering CI, authentication, release checks, and redeploying a known-good version.
 
-**Gate:** An intended user can access the deployed app, research one supported stock or compare both, inspect citations, and follow the repository's reproduction/deployment instructions. Access requirements and Free Edition limitations are explicit.
+**Gate:** The privately deployed application supports the project owner's end-to-end one-stock and comparison research workflow with citations and follow-up chat. The public portfolio repository demonstrates the implementation through code, documentation, tests, CI evidence, screenshots, and reproducible non-sensitive artifacts without redistributing provider source content.
 
 ## Outside the MVP
 

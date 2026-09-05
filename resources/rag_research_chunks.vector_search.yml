@@ -1,0 +1,15 @@
+resources:
+  vector_search_indexes:
+    research_chunks:
+      name: ${resources.schemas.ai.catalog_name}.${resources.schemas.ai.name}.research_chunks_index
+      endpoint_name: ${var.vector_search_endpoint_name}
+      primary_key: chunk_id
+      index_type: DELTA_SYNC
+
+      delta_sync_index_spec:
+        source_table: ${resources.schemas.ai.catalog_name}.${resources.schemas.ai.name}.research_chunks
+        pipeline_type: TRIGGERED
+
+        embedding_source_columns:
+          - name: chunk_text
+            embedding_model_endpoint_name: ${var.embedding_model_endpoint_name}

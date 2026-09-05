@@ -2,7 +2,7 @@
 
 > A production-oriented portfolio project combining data engineering and AI engineering on Databricks.
 
-**Status:** Milestone 1 — Data Engineering complete; Milestone 2 — AI Engineering next
+**Status:** Milestone 1 — Data Engineering complete; Milestone 2 — AI Engineering in progress
 
 ## Overview
 
@@ -12,7 +12,7 @@ The application is designed as a research assistant. It will not execute trades,
 
 ## Target user
 
-An individual investor or junior equity analyst who wants to research one company or compare two companies without manually assembling information from multiple systems.
+The private application is built for the project owner as an individual investor/researcher who wants to research one company or compare two companies without manually assembling information from multiple systems. The public portfolio surface is the GitHub repository, documentation, tests, and selected screenshots rather than a public interactive application.
 
 ## MVP
 
@@ -37,7 +37,7 @@ The MVP will not include trading execution, price prediction, portfolio optimiza
 - **Weekly SEC/fundamentals refresh:** scheduled at 02:00 America/New_York Sunday, with SEC company-facts and selected 10-K ingestion, Silver rebuilds, Gold fundamental metrics, and a final freshness/coverage/lineage verification gate. The full DAG is manually live-verified; the first periodic Sunday execution is pending.
 - **Milestone 1 — Data Engineering:** complete. Bronze, Silver, Gold, CI, scheduled refresh orchestration, quality/freshness/lineage gates, safe replay behavior, and controlled deployment verification are all implemented and verified. The deployment gate was executed from the CI-tested `main` commit `caa3dcb` and completed with a converged bundle plan plus a successful serverless Spark smoke test.
 - **Operational audit policy:** the MVP uses fail-before-publication validation rather than partial publication plus quarantine tables. Immutable Bronze provenance, validation diagnostics, deterministic replay, Databricks job history, and final verification gates provide the required operational evidence; dedicated row-level rejection tables are deferred until a mixed valid/invalid batch workflow requires them.
-- **Next:** begin Milestone 2 — AI Engineering with research-ready retrieval assets from validated news and filing text, followed by controlled tools and the multi-agent research workflow.
+- **Milestone 2 — AI Engineering:** in progress. Deterministic `research_documents` and `research_chunks` are implemented, offline-tested, persisted as managed Delta tables in the AI schema, and live-verified on real validated Alpaca news and SEC filing inputs. The verified corpus contains 149 documents and 329 chunks; an unchanged rerun reproduced the same corpus identity and document/chunk fingerprints. Managed embeddings and a bundle-managed Databricks AI Search Delta Sync index are now live-verified on all 329 chunks using `databricks-gte-large-en`. Two initial ANN smoke tests for MSFT cyber/AI risk and AAPL supply-chain risk each returned 5/5 company-matching results, with 4/5 results from SEC Item 1A. Controlled retrieval tools, agents, and MLflow GenAI evaluation remain pending.
 - Detailed implementation evidence and run links are tracked in [PLAN.md](PLAN.md).
 
 ## Architecture
@@ -73,8 +73,7 @@ flowchart TB
         G1["market_metrics ✅"]
         G2["fundamental_metrics ✅"]
     end
-
-    R["RAG retrieval layer<br/>research documents + embeddings + vector index"]
+    R["RAG retrieval layer<br/>research_documents + research_chunks ✅ live<br/>managed embeddings + AI Search vector index ✅ live"]
 
     A1 --> B1 --> S1 --> G1
     A2 --> B2 --> S2 --> R
@@ -113,7 +112,9 @@ The application will return:
 - Alpaca Market Data and News APIs
 - SEC EDGAR APIs
 - LangGraph multi-agent orchestration
-- Retrieval-Augmented Generation (RAG) with embeddings and vector retrieval for filings and news
+- Retrieval-Augmented Generation (RAG) with deterministic research documents/chunks, embeddings, and vector retrieval for filings and news
+- Databricks Foundation Model APIs: GTE Large (En) embedding baseline, GPT OSS worker/Supervisor models
+- MLflow 3 tracing and GenAI evaluation with deterministic retrieval metrics, code-based scorers, and LLM judges
 - Automated data-quality and agent evaluations
 
 ## Implementation
@@ -125,7 +126,7 @@ Development follows one end-to-end workflow:
 3. **AI Engineering:** retrieval and tools, the multi-agent workflow, tracing, and evaluation.
 4. **Application delivery:** UI, monitoring, deployment, and reproducible demonstration.
 
-Each milestone has a tested completion gate. See [PLAN.md](PLAN.md) for progress and [DATA_CONTRACTS.md](DATA_CONTRACTS.md) for the layer inventory and data rules.
+Each milestone has a tested completion gate. See [PLAN.md](PLAN.md) for progress, [DATA_CONTRACTS.md](DATA_CONTRACTS.md) for data and RAG corpus rules, [docs/AI_RESEARCH_CONTRACT.md](docs/AI_RESEARCH_CONTRACT.md) for behavioral requirements, [docs/MODEL_STRATEGY.md](docs/MODEL_STRATEGY.md) for model allocation, limits, chunking baselines, and MLflow evaluation strategy, and [docs/DATA_USAGE_PERMISSIONS.md](docs/DATA_USAGE_PERMISSIONS.md) for the private-runtime and public-portfolio data-use boundary.
 
 ## Local Alpaca access check
 

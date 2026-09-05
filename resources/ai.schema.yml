@@ -1,0 +1,8 @@
+resources:
+  schemas:
+    ai:
+      name: ${var.ai_schema}
+      catalog_name: ${var.data_catalog}
+      comment: Retrieval documents, chunks, embeddings, and AI-serving assets for the equity research system.
+      lifecycle:
+        prevent_destroy: true

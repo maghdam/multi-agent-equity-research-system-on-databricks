@@ -10,7 +10,7 @@ include:
 
 variables:
   data_catalog:
-    description: Unity Catalog catalog containing the medallion schemas.
+    description: Unity Catalog catalog containing the project schemas.
     default: workspace
   bronze_schema:
     description: Unity Catalog schema containing raw Bronze datasets.
@@ -21,9 +21,18 @@ variables:
   gold_schema:
     description: Unity Catalog schema containing analytical Gold datasets.
     default: equity_research_gold
+  ai_schema:
+    description: Unity Catalog schema containing AI retrieval datasets and indexes.
+    default: equity_research_ai
   alpaca_secret_scope:
     description: Databricks secret scope containing the Alpaca credentials.
     default: equity-research-dev
+  vector_search_endpoint_name:
+    description: Existing Databricks AI Search endpoint used by the RAG index.
+    default: vector_search_endpoint
+  embedding_model_endpoint_name:
+    description: Databricks embedding endpoint used for document and query embeddings.
+    default: databricks-gte-large-en
 
 targets:
   dev:

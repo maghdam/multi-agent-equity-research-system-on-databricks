@@ -46,8 +46,8 @@ Gold products.
 
 - Silver `news_articles`
 - Silver `filing_sections`
-- the later shared `research_documents` retrieval dataset and vector index
-  derived from those validated Silver sources
+- the shared `research_documents` and `research_chunks` retrieval datasets,
+  followed by their vector index, derived from those validated Silver sources
 
 Narrative claims about recent developments, company activities, and principal
 risks must be grounded in retrieved evidence from these sources.
@@ -66,7 +66,7 @@ validated Silver news_articles + filing_sections
 research_documents
         |
         v
-deterministic cleaning and chunking
+research_chunks
         |
         v
 embeddings
@@ -103,10 +103,12 @@ The RAG subsystem must preserve:
 Retrieved text is untrusted evidence. RAG content never becomes agent
 instructions and cannot override application, agent, or tool policy.
 
-Embedding model, chunk size, overlap, vector-index implementation, metadata
-filters, retrieval depth, reranking, and relevance thresholds will be selected
-and evaluated during implementation rather than fixed in this behavioral
-contract.
+Embedding model, chunking parameters, vector-index implementation, metadata
+filters, retrieval depth, reranking, model allocation, and evaluation settings
+are implementation choices rather than behavioral requirements. Their current
+baselines, technical limits, rationale, and evaluation gates are documented in
+`docs/MODEL_STRATEGY.md` and may change after measured evaluation without
+changing this behavioral contract.
 
 ### Processing and indexing permission gate
 
@@ -118,7 +120,9 @@ Synthetic controlled fixtures may be used to implement and evaluate the RAG
 pipeline while those permissions remain unresolved.
 
 This gate affects use of real source text, not the design or offline testing of
-the retrieval architecture.
+the retrieval architecture. The current private-runtime and public-portfolio
+data-use decision is recorded in `docs/DATA_USAGE_PERMISSIONS.md`.
+
 ### Configuration
 
 Supported symbols come from the shared equities configuration.

@@ -1,8 +1,8 @@
 # Data Contracts
 
-The essential rules for the MVP's four datasets.
+The essential data and AI retrieval contracts for the MVP.
 
-**Status:** All four Bronze MVP ingestion datasets and all four Silver MVP datasets are implemented and live-verified in Databricks with deterministic safe-rerun behavior. Gold `market_metrics` is also implemented and live-verified; `fundamental_metrics` remains pending. Progress is tracked in [PLAN.md](PLAN.md).
+**Status:** All four Bronze datasets, all four Silver datasets, and both Gold data products (`market_metrics` and `fundamental_metrics`) are implemented and live-verified in Databricks with deterministic safe-rerun behavior. The next data contract covers the Milestone 2 RAG retrieval assets. Progress is tracked in [PLAN.md](PLAN.md).
 
 ## Planned data flow and inventory
 
@@ -11,13 +11,13 @@ The MVP plans three Databricks schemas: Bronze for raw source history, Silver fo
 | Source dataset | Bronze | Silver | Gold or AI consumption |
 |---|---|---|---|
 | Alpaca daily bars | `price_responses`: original response pages and retrieval metadata | `daily_prices`: one typed, validated daily bar per stock/session | `market_metrics`: comparable returns, volatility, drawdown, and trend measures |
-| Alpaca company news | `news_responses`: original article versions and retrieval metadata | `news_articles`: one selected, validated version per article | Current cited evidence in `research_documents` and its vector index |
+| Alpaca company news | `news_responses`: original article versions and retrieval metadata | `news_articles`: one selected, validated version per article | `research_documents` -> `research_chunks` -> RAG vector index |
 | SEC company facts | `company_facts_responses`: original company snapshots and retrieval metadata | `company_facts`: filing-level typed facts with periods and provenance | `fundamental_metrics`: selected comparable financial measures |
-| SEC selected filings | `filing_documents`: filing metadata and original HTML | `filing_sections`: cleaned Item 1 and Item 1A sections with provenance | Cited chunks in the shared `research_documents` dataset and vector index |
+| SEC selected filings | `filing_documents`: filing metadata and original HTML | `filing_sections`: cleaned Item 1 and Item 1A sections with provenance | `research_documents` -> `research_chunks` -> RAG vector index |
 
-This initial inventory contains four Bronze datasets, four Silver datasets, two Gold data products, and one shared retrieval-document dataset plus its vector index. It excludes configuration and operational audit/quarantine records. Physical identifiers and storage details will be finalized immediately before implementing each layer.
+This inventory contains four Bronze datasets, four Silver datasets, two Gold data products, two shared AI retrieval datasets (`research_documents` and `research_chunks`), and a later vector index built from the chunk dataset. It excludes configuration and operational audit/quarantine records. Physical identifiers and storage details are finalized immediately before implementing each layer.
 
-Columns are expected to evolve by purpose: Bronze keeps the complete source payload plus provenance; Silver selects, renames, derives, types, validates, and deduplicates the fields defined below; Gold changes the grain again to provide reusable comparison measures. Unused source fields remain recoverable from Bronze. The `market_metrics` Gold grain, formulas, and columns are finalized below before implementation. `fundamental_metrics` remains pending and will be contracted separately before its implementation.
+Columns evolve by purpose: Bronze keeps the complete source payload plus provenance; Silver selects, renames, derives, types, validates, and deduplicates the fields defined below; Gold changes the grain again to provide reusable comparison measures; the RAG retrieval assets transform validated Silver text into citation-ready documents and deterministic chunks. Unused source fields remain recoverable from Bronze.
 
 ## Shared conventions
 
@@ -565,9 +565,611 @@ round-half-even behavior.
   accumulation or metric drift.
 
 
-## Crucial test coverage - planned, not yet automated
+## 7. AI retrieval documents and chunks
 
-Use synthetic fixtures; the checklist below replaces the long walkthrough examples.
+**Use:** Retrieval-Augmented Generation (RAG) over validated company news and
+SEC filing evidence.
+
+These datasets are AI retrieval assets derived from Silver text. They are not
+an additional medallion layer and do not replace the structured Gold products.
+
+The retrieval flow is:
+
+```text
+Silver news_articles + filing_sections
+        |
+        v
+research_documents
+        |
+        v
+research_chunks
+        |
+        v
+embeddings
+        |
+        v
+vector index
+        |
+        v
+controlled retrieval tool
+        |
+        v
+Company Researcher
+```
+
+Structured numerical analysis continues to use controlled Gold-data tools.
+The retrieval datasets exist for unstructured narrative evidence.
+
+### 7.1 Why documents and chunks are separate
+
+`research_documents` represents the current validated source document and its
+source-level identity, version, cleaned text, citation metadata, and
+provenance.
+
+`research_chunks` represents the bounded retrieval units deterministically
+derived from one exact document version.
+
+The separation is intentional:
+
+- Source-document identity remains independent of chunking parameters.
+- Article or filing version changes can invalidate all child chunks cleanly.
+- Chunking can be changed and re-evaluated without redefining source identity.
+- One news article tagged to multiple configured companies is stored once
+  rather than duplicated once per symbol.
+- Citation lineage remains explicit from chunk to document to Silver and
+  ultimately Bronze provenance.
+- Document preparation can be tested independently from retrieval behavior.
+- Vector indexes can be rebuilt from chunks without rebuilding unchanged source
+  documents.
+- A new chunking strategy can create new chunk identities while preserving the
+  same document identity and document version.
+
+The two datasets therefore separate two concerns:
+
+```text
+research_documents
+    source identity + source version + citation lineage
+
+research_chunks
+    retrieval boundaries + retrieval identity + index metadata
+```
+
+### 7.2 `research_documents`
+
+**One record:** One active retrieval-eligible source document version.
+
+For news, one provider article is one document even when it has more than one
+configured symbol.
+
+For SEC filings, one validated filing section is one document. Item 1 and
+Item 1A are separate documents because they are distinct evidence and citation
+units.
+
+The MVP publishes a current retrieval-document snapshot rather than an
+append-only retrieval history. Superseded source versions remain recoverable
+through existing Bronze/Silver lineage but must not remain active in current
+RAG retrieval.
+
+#### Document identity
+
+`document_id` is stable across retrievals of the same logical source document.
+
+Initial identities are:
+
+```text
+News:
+alpaca:news:<article_id>
+
+Filing:
+sec:filing:<accession_number>:<section_code>
+```
+
+`document_version_id` identifies the exact retrieval-visible version of that
+logical document.
+
+The version identifier is a deterministic SHA-256 derived from canonical
+source-version and citation fields, the cleaning strategy version, and
+`document_text_sha256`. It does not include retrieval-only provenance such as
+`source_response_id`, `source_fetched_at`, or
+`source_ingestion_run_id`.
+
+This distinction is important:
+
+```text
+same source content + later identical retrieval
+    -> same document_version_id
+
+changed article revision, citation metadata, configured-symbol scope,
+cleaning rules, or cleaned source text
+    -> new document_version_id
+
+same document version + different Bronze retrieval provenance
+    -> same document_version_id, selected provenance may differ
+```
+
+The canonical version fields are source-specific.
+
+For news they include:
+
+- `document_id`;
+- sorted configured symbols;
+- headline;
+- text origin;
+- cleaning strategy version;
+- cleaned text hash;
+- citation URL;
+- article creation timestamp;
+- article update timestamp;
+- publisher.
+
+For filing sections they include:
+
+- `document_id`;
+- configured symbol;
+- filing form;
+- filing date;
+- report date;
+- section code;
+- section title;
+- cleaning strategy version;
+- cleaned section-text hash;
+- citation URL.
+
+Canonical serialization and hashing rules must be fixed in code and covered by
+offline tests.
+
+#### Schema
+
+| Field | Meaning | Type |
+|---|---|---|
+| document_id | Stable logical source-document identity | String |
+| document_version_id | SHA-256 identity of the current retrieval-visible document version | String |
+| cleaning_strategy_version | Version of deterministic retrieval-text cleaning rules | String |
+| source_type | `news` or `filing` | String |
+| source_system | `alpaca` or `sec` | String |
+| configured_symbols | Deterministic sorted unique configured-symbol set | Array of strings |
+| title | News headline or deterministic filing-section title | String |
+| document_text | Cleaned canonical retrieval text | String |
+| document_text_sha256 | SHA-256 of exact UTF-8 `document_text` | String |
+| text_origin | `content`, `summary`, or `filing_section` | String |
+| evidence_date | Primary source date used for filtering and report context | Date |
+| source_url | Original citation URL from Silver | String |
+| article_id | Alpaca article identity; null for filings | Optional BIGINT |
+| article_source | News publisher; null for filings | Optional string |
+| article_created_at | Original news creation timestamp; null for filings | Optional UTC timestamp |
+| article_updated_at | Selected news version timestamp; null for filings | Optional UTC timestamp |
+| cik | SEC company CIK; null for news | Optional string |
+| accession_number | SEC filing accession; null for news | Optional string |
+| filing_form | Filing form; null for news | Optional string |
+| filing_date | SEC filing date; null for news | Optional date |
+| report_date | SEC reporting-period end; null for news | Optional date |
+| section_code | Filing section identity; null for news | Optional string |
+| section_title | Filing section title; null for news | Optional string |
+| source_response_id | Selected Silver row's Bronze response provenance | String |
+| source_fetched_at | Original Bronze retrieval timestamp | UTC timestamp |
+| source_ingestion_run_id | Original Bronze ingestion run | String |
+
+`configured_symbols` is always nonempty. It is sorted and unique so the same
+logical scope has one deterministic representation.
+
+#### News mapping
+
+For one selected Silver `news_articles` row:
+
+```text
+source_type             = news
+source_system           = alpaca
+document_id             = alpaca:news:<article_id>
+configured_symbols      = Silver configured_symbols
+title                   = headline
+source_url              = url
+article_id              = article_id
+article_source          = article_source
+article_created_at      = article_created_at
+article_updated_at      = article_updated_at
+evidence_date           = UTC date of article_created_at
+```
+
+Research-text selection is deterministic:
+
+1. Clean `content`.
+2. If cleaned content is usable, use it with `text_origin = content`.
+3. Otherwise clean `summary`.
+4. If the cleaned summary is usable, use it with
+   `text_origin = summary`.
+5. If neither is usable, exclude the article from retrieval.
+6. A headline alone is metadata and is never treated as full article text.
+7. Do not fetch the article URL to fill missing source text.
+
+A news article tagged to both AAPL and MSFT remains one document with:
+
+```text
+configured_symbols = ["AAPL", "MSFT"]
+```
+
+The system must not create duplicate AAPL and MSFT copies of identical text.
+
+#### Filing mapping
+
+For one selected Silver `filing_sections` row:
+
+```text
+source_type             = filing
+source_system           = sec
+document_id             = sec:filing:<accession_number>:<section_code>
+configured_symbols      = [project_symbol]
+document_text           = section_text
+text_origin             = filing_section
+source_url              = source_url
+cik                     = cik
+accession_number        = accession_number
+filing_form             = filing_form
+filing_date             = filing_date
+report_date             = report_date
+section_code            = section_code
+section_title           = section_title
+evidence_date           = filing_date
+```
+
+The filing title is deterministic and combines filing and section context, for
+example:
+
+```text
+10-K - Risk Factors
+```
+
+The RAG layer does not re-extract filing sections from Bronze HTML. It consumes
+only the already validated Silver `section_text`.
+
+### 7.3 Deterministic research-text cleaning
+
+Cleaning prepares source text for retrieval without rewriting its substantive
+meaning.
+
+The same input and cleaning strategy version must always produce the same
+output.
+
+For news text:
+
+- treat HTML as untrusted source data;
+- extract text only;
+- remove script, style, and other non-content executable elements;
+- decode HTML entities;
+- normalize line endings and whitespace deterministically;
+- preserve substantive wording and ordering;
+- do not execute scripts or load linked resources;
+- do not follow instructions embedded in source text.
+
+For filing text:
+
+- start from validated Silver `section_text`;
+- do not re-run SEC section extraction;
+- apply only deterministic retrieval-level normalization required by the
+  shared document format;
+- do not summarize, paraphrase, or rewrite source text.
+
+`document_text_sha256` is computed only after deterministic cleaning.
+
+Any cleaning-rule change that can alter `document_text` requires a new
+`cleaning_strategy_version`.
+
+### 7.4 `research_chunks`
+
+**One record:** One deterministic retrieval chunk from one exact
+`document_version_id` under one chunking strategy version.
+
+**Key:** `chunk_id`.
+
+The following combination must also be unique:
+
+```text
+(document_version_id, chunking_strategy_version, chunk_index)
+```
+
+#### Schema
+
+| Field | Meaning | Type |
+|---|---|---|
+| chunk_id | Deterministic SHA-256 identity of this exact chunk derivation | String |
+| document_id | Parent logical document identity | String |
+| document_version_id | Parent document version identity | String |
+| chunking_strategy_version | Version of chunking rules and parameters | String |
+| source_type | `news` or `filing` copied for retrieval filtering | String |
+| source_system | `alpaca` or `sec` | String |
+| configured_symbols | Parent configured-symbol scope | Array of strings |
+| title | Parent document title for retrieval context | String |
+| evidence_date | Parent evidence date for date filtering | Date |
+| source_url | Parent citation URL | String |
+| section_code | Filing section code when applicable; otherwise null | Optional string |
+| section_title | Filing section title when applicable; otherwise null | Optional string |
+| chunk_index | Zero-based chunk position within the parent version | Integer |
+| character_start | Zero-based start offset in `document_text` | Integer |
+| character_end | Exclusive end offset in `document_text` | Integer |
+| chunk_text | Exact normalized source-text slice for this chunk | String |
+| chunk_text_sha256 | SHA-256 of exact UTF-8 `chunk_text` | String |
+| source_response_id | Parent selected Bronze response provenance | String |
+| source_fetched_at | Parent original Bronze retrieval timestamp | UTC timestamp |
+| source_ingestion_run_id | Parent original Bronze ingestion run | String |
+
+Canonical source metadata remains in `research_documents`. The chunk table
+copies only metadata needed for filtering, retrieval, citation display, and
+lineage without requiring a document join for every vector-search result.
+
+### 7.5 Chunking strategy and rationale
+
+The MVP chunking strategy is deterministic and structure-aware.
+
+Its purpose is to produce retrieval units that are small enough for specific
+semantic retrieval while retaining enough surrounding context to support a
+claim.
+
+Whole long filing sections are poor retrieval units because unrelated topics
+can dilute embedding similarity. Extremely small fragments are also poor
+retrieval units because they lose the context needed to interpret a claim.
+
+The strategy therefore prefers meaningful text boundaries rather than
+arbitrary cuts.
+
+Boundary preference is:
+
+preserved paragraph boundary, when available
+        |
+        v
+sentence boundary
+        |
+        v
+whitespace boundary
+        |
+        v
+hard character boundary only when necessary
+
+Paragraph structure is source-dependent. News cleaning may preserve meaningful
+paragraph boundaries from source HTML, while the current validated SEC
+filing_sections.section_text is already whitespace-normalized and therefore
+cannot be assumed to retain original paragraph breaks.```
+
+The implementation must:
+
+1. operate on the exact normalized `document_text`;
+2. preserve original source order;
+3. identify deterministic paragraph and sentence boundaries;
+4. accumulate text units toward a configured target size;
+5. enforce a configured maximum size;
+6. split an individually oversized text unit deterministically at whitespace,
+   falling back to a hard character boundary only when required;
+7. optionally carry a bounded amount of trailing source context into the next
+   chunk;
+8. assign contiguous zero-based `chunk_index` values;
+9. preserve exact half-open character offsets
+   `[character_start, character_end)`;
+10. require `chunk_text` to equal the corresponding source-text slice;
+11. exclude empty or whitespace-only chunks;
+12. compute a deterministic hash for every final chunk.
+
+Overlap is allowed only as a deliberate configured strategy. It must be bounded
+and deterministic. Overlap preserves exact source text rather than generating
+rewritten context.
+
+The exact initial target size, maximum size, and overlap are not guessed in
+this contract. They will be selected after measuring the actual Silver news
+and filing text-length distributions and considering the chosen embedding
+model's input constraints.
+
+Those values become part of `chunking_strategy_version` and must be covered by
+offline tests.
+
+This allows the project to evaluate chunking rather than presenting an
+arbitrary chunk size as universally correct.
+
+### 7.6 Chunk identity and chunking-version behavior
+
+`chunk_id` changes whenever the retrieval unit itself changes.
+
+It is derived deterministically from at least:
+
+```text
+document_version_id
+chunking_strategy_version
+chunk_index
+character_start
+character_end
+chunk_text_sha256
+```
+
+Therefore:
+
+```text
+same document + same strategy + same boundaries + same text
+    -> same chunk_id
+
+same document + changed chunking parameters
+    -> different chunk_id
+
+changed source document version
+    -> different child chunk_ids
+```
+
+A change to target size, maximum size, overlap, sentence-boundary logic, or any
+other rule that can change chunk boundaries requires a new
+`chunking_strategy_version`.
+
+Changing chunking strategy does not change `document_id` or
+`document_version_id` when the underlying retrieval-visible source document
+has not changed.
+
+### 7.7 Citation and provenance lineage
+
+Every retrieval result must support this lineage:
+
+```text
+chunk_id
+    |
+    v
+document_version_id
+    |
+    v
+document_id
+    |
+    v
+Silver source business identity
+    |
+    v
+source_response_id
+    |
+    v
+Bronze retrieval provenance
+```
+
+A retrieved chunk must therefore be sufficient to recover:
+
+- configured company scope;
+- source type;
+- news article or filing identity;
+- source date;
+- title or filing-section context;
+- citation URL;
+- exact parent document version;
+- original selected Bronze provenance.
+
+The model may cite evidence only through citation identifiers produced from
+controlled retrieval results. It must not invent source URLs, document IDs, or
+chunk IDs.
+
+### 7.8 Validation and publication
+
+Before `research_documents` publication:
+
+- all document IDs and document-version IDs must be valid and deterministic;
+- every `document_id` must appear at most once in the current snapshot;
+- every `document_version_id` must be unique;
+- configured-symbol arrays must be nonempty, sorted, unique, and restricted to
+  the configured project universe;
+- required source-specific metadata must be present;
+- text must be nonblank after cleaning;
+- stored text hashes must match the exact stored text;
+- citation URLs must come from validated Silver source rows;
+- source provenance must match the selected Silver row.
+
+Before `research_chunks` publication:
+
+- every chunk must reference an existing current document version;
+- chunk indexes must be contiguous from zero for each document version;
+- offsets must be valid and ordered;
+- `chunk_text` must equal the exact parent-text slice indicated by its offsets;
+- chunk hashes and chunk IDs must recompute exactly;
+- final chunk IDs must be unique;
+- every substantive source-text region must remain represented by the chunk
+  sequence, allowing only explicitly configured overlap.
+
+Both datasets use deterministic full-snapshot rebuilding for the MVP and are
+published only after complete validation succeeds.
+
+A failed rebuild preserves the previous successful snapshot.
+
+### 7.9 Replay and invalidation
+
+Identical validated Silver input plus identical cleaning and chunking versions
+must reproduce identical:
+
+- document IDs;
+- document-version IDs;
+- document text and text hashes;
+- chunk boundaries;
+- chunk indexes;
+- chunk text and hashes;
+- chunk IDs.
+
+When a current Silver news article is revised, becomes ineligible, or changes
+configured-symbol scope, the next successful document snapshot replaces its
+previous active RAG representation.
+
+When a filing section changes, its document version changes and its previous
+chunks are no longer active.
+
+When a document disappears from the current eligible source snapshot, its
+document and chunks disappear from the current retrieval snapshot.
+
+The later vector-index synchronization must remove or invalidate entries whose
+`chunk_id` is no longer present in the current successful
+`research_chunks` snapshot.
+
+### 7.10 Embedding boundary
+
+`research_chunks` contains source text and retrieval metadata, not embedding
+vectors.
+
+Embedding generation is a separate model-processing step:
+
+```text
+research_chunks
+        |
+        v
+versioned embedding input
+        |
+        v
+embedding model
+        |
+        v
+vector index
+```
+
+This keeps deterministic text preparation independently testable from
+model-specific behavior.
+
+The embedding model, embedding-input formatting, vector-index implementation,
+similarity metric, retrieval depth, relevance threshold, and optional reranker
+are separate implementation and evaluation decisions.
+
+Title or other metadata may later be supplied to the embedding model as
+versioned embedding context, but that must not modify canonical `chunk_text` or
+its source offsets.
+
+### 7.11 Processing, indexing, and public-data gate
+
+Real provider text, derived chunks, embeddings, and vector indexes must follow
+the permission gate defined in `docs/AI_RESEARCH_CONTRACT.md` and the shared
+safe-use rules in this data contract.
+
+Until the applicable storage, processing, indexing, model-use, and
+redistribution permissions are confirmed:
+
+- implement document and chunk transformations with synthetic controlled
+  fixtures;
+- run deterministic offline tests against synthetic text;
+- do not commit real article bodies, filing bodies, derived chunks, embeddings,
+  or indexes to the public repository;
+- do not send real provider text to an external model or embedding provider;
+- do not treat API access alone as permission for redistribution or external
+  model processing.
+
+Permission verification is an explicit gate before a live real-text embedding
+or vector-index build.
+
+### 7.12 Initial implementation gate
+
+The document/chunk foundation is ready for embedding work when:
+
+- both source mappings are implemented;
+- one multi-symbol news article remains one document;
+- content-to-summary fallback is deterministic;
+- filing sections remain traceable to accession and section;
+- document identity and versioning tests pass;
+- cleaning is deterministic and versioned;
+- chunking is deterministic and versioned;
+- chunk offsets reproduce exact source text;
+- citation and Bronze/Silver lineage are preserved;
+- superseded chunks cannot remain active after a successful rebuild;
+- synthetic prompt-injection text remains data rather than instructions;
+- the full offline test suite remains green.
+
+Passing this gate does not mean the RAG system is complete. It means the
+retrieval corpus is deterministic, traceable, citation-ready, and safe to use
+as input to the later embedding and vector-index stages.
+
+
+## Crucial test coverage
+
+Use deterministic synthetic fixtures where appropriate. Existing data-layer rules are covered by offline tests; the RAG rows define the next retrieval-layer test targets.
 
 | Area | Essential expected outcomes |
 |---|---|
@@ -580,6 +1182,9 @@ Use synthetic fixtures; the checklist below replaces the long walkthrough exampl
 | SEC snapshots | Newest complete response wins; no gap-filling or older-replay overwrite; ambiguous ties fail; unavailable historical snapshots are explicit. |
 | Filing text | Wrong/ambiguous identity is rejected; representative section extraction must match actual section bodies, not table-of-contents entries. |
 | Gold market metrics | Aligned 61-close history produces one row per configured symbol; insufficient history, stale/mismatched latest dates, or a missing comparison-window session fail; formulas and deterministic rounding match fixtures; replay produces identical output. |
+| Gold fundamental metrics | Annual and annual-plus-YTD-minus-prior-YTD construction follows the contracted filing/period rules; missing bridge components, ambiguous filings, invalid assets/revenue, or mismatched periods fail; replay reproduces identical metrics. |
+| RAG documents | News content-to-summary fallback is deterministic; one multi-symbol article remains one document; filing sections retain citation/provenance lineage; identical input reproduces identical document/version IDs. |
+| RAG chunks | Deterministic boundaries, offsets, hashes, and IDs reproduce exactly; changed chunking strategy changes chunk IDs without changing unchanged document identity; prompt-like source text remains data only. |
 | Pipeline | Check completeness/freshness separately; refresh-level failures preserve prior output without labelling it fresh. |
 
 ## Source checks already completed
