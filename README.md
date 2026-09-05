@@ -22,7 +22,7 @@ The first version will:
 - Ingest historical market data and recent news from Alpaca.
 - Ingest company fundamentals and selected filing sections from SEC EDGAR.
 - Process data through Bronze, Silver, and Gold Delta tables.
-- Provide structured financial analytics and document retrieval with citations.
+- Provide structured financial analytics plus Retrieval-Augmented Generation (RAG) over validated news and SEC filing evidence with citations.
 - Coordinate a Supervisor, Market Analyst, and Company Researcher with LangGraph.
 - Present results in a dashboard with follow-up chat.
 
@@ -74,7 +74,7 @@ flowchart TB
         G2["fundamental_metrics ✅"]
     end
 
-    R["Retrieval / indexing assets<br/>news + filing evidence"]
+    R["RAG retrieval layer<br/>research documents + embeddings + vector index"]
 
     A1 --> B1 --> S1 --> G1
     A2 --> B2 --> S2 --> R
@@ -113,7 +113,7 @@ The application will return:
 - Alpaca Market Data and News APIs
 - SEC EDGAR APIs
 - LangGraph multi-agent orchestration
-- Vector retrieval for filings and news
+- Retrieval-Augmented Generation (RAG) with embeddings and vector retrieval for filings and news
 - Automated data-quality and agent evaluations
 
 ## Implementation

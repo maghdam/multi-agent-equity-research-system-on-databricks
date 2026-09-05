@@ -233,9 +233,9 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
 
 ## Milestone 2 - AI Engineering: grounded research (pending)
 
-- [ ] Define the report structure, agent responsibilities, important failure behavior, and a small representative evaluation set.
+- [x] Define the report structure, agent responsibilities, important failure behavior, and a small representative evaluation set. See `docs/AI_RESEARCH_CONTRACT.md`.
 
-- [ ] Confirm indexing/model-processing permissions; prepare cleaned news/filing documents, chunks, metadata, and a vector index.
+- [ ] Build the RAG foundation: confirm indexing/model-processing permissions; prepare cleaned news/filing `research_documents`, deterministic chunks and metadata, embeddings, and a vector index.
 
 - [ ] Build and independently test controlled SQL and retrieval tools that check configured symbols and data readiness.
 
