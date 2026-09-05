@@ -1,0 +1,34 @@
+resources:
+  jobs:
+    rag_research_corpus_transformation:
+      name: ${bundle.name}-rag-research-corpus-transformation
+      description: >-
+        Rebuilds deterministic research_documents and research_chunks from the
+        current validated Silver news and SEC filing-section snapshots.
+
+      max_concurrent_runs: 1
+
+      tasks:
+        - task_key: build_rag_research_corpus
+
+          notebook_task:
+            notebook_path: ../src/rag_research_corpus_transformation.py
+
+            base_parameters:
+              catalog: ${resources.schemas.ai.catalog_name}
+              silver_schema: ${resources.schemas.silver.name}
+              ai_schema: ${resources.schemas.ai.name}
+              target_chars: "2400"
+              max_chars: "3200"
+              overlap_chars: "300"
+
+          environment_key: default
+
+          timeout_seconds: 300
+
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "5"
+            dependencies:
+              - beautifulsoup4==4.15.0

@@ -682,9 +682,9 @@ The project should distinguish three kinds of evaluation:
 As of the initial RAG foundation implementation:
 
 ```text
-research_documents                    implemented + offline tested
-research_chunks                       implemented + offline tested
-chunking production baseline          proposed for evaluation
+research_documents                    implemented + offline tested + live persisted
+research_chunks                       implemented + offline tested + live persisted
+chunking production baseline          live verified at 2400 / 3200 / 300; evaluation still pending
 GTE embedding endpoint                available in workspace
 GPT OSS 20B endpoint                  available in workspace
 GPT OSS 120B endpoint                 available in workspace

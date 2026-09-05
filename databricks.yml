@@ -10,7 +10,7 @@ include:
 
 variables:
   data_catalog:
-    description: Unity Catalog catalog containing the medallion schemas.
+    description: Unity Catalog catalog containing the project schemas.
     default: workspace
   bronze_schema:
     description: Unity Catalog schema containing raw Bronze datasets.
@@ -21,6 +21,9 @@ variables:
   gold_schema:
     description: Unity Catalog schema containing analytical Gold datasets.
     default: equity_research_gold
+  ai_schema:
+    description: Unity Catalog schema containing AI retrieval datasets and indexes.
+    default: equity_research_ai
   alpaca_secret_scope:
     description: Databricks secret scope containing the Alpaca credentials.
     default: equity-research-dev
