@@ -2,7 +2,7 @@
 
 > A production-oriented portfolio project combining data engineering and AI engineering on Databricks.
 
-**Status:** Milestone 1 in progress — Bronze 4/4 live-verified; Silver 4/4 live-verified; Gold 2/2 live-verified
+**Status:** Milestone 1 — Data Engineering complete; Milestone 2 — AI Engineering next
 
 ## Overview
 
@@ -35,7 +35,9 @@ The MVP will not include trading execution, price prediction, portfolio optimiza
 - **Gold:** 2/2 analytical metric tables implemented and live-verified: `market_metrics` and `fundamental_metrics`.
 - **Daily market/news refresh:** scheduled at 01:00 America/New_York Tuesday-Saturday, with incremental Bronze ingestion, Silver/Gold rebuilds, and an automated quality/freshness/lineage verification gate. The first real periodic scheduler run completed successfully end-to-end.
 - **Weekly SEC/fundamentals refresh:** scheduled at 02:00 America/New_York Sunday, with SEC company-facts and selected 10-K ingestion, Silver rebuilds, Gold fundamental metrics, and a final freshness/coverage/lineage verification gate. The full DAG is manually live-verified; the first periodic Sunday execution is pending.
-- **Next:** complete controlled deployment verification and close any remaining operational audit/rejection-reporting gaps required for Milestone 1.
+- **Milestone 1 — Data Engineering:** complete. Bronze, Silver, Gold, CI, scheduled refresh orchestration, quality/freshness/lineage gates, safe replay behavior, and controlled deployment verification are all implemented and verified. The deployment gate was executed from the CI-tested `main` commit `caa3dcb` and completed with a converged bundle plan plus a successful serverless Spark smoke test.
+- **Operational audit policy:** the MVP uses fail-before-publication validation rather than partial publication plus quarantine tables. Immutable Bronze provenance, validation diagnostics, deterministic replay, Databricks job history, and final verification gates provide the required operational evidence; dedicated row-level rejection tables are deferred until a mixed valid/invalid batch workflow requires them.
+- **Next:** begin Milestone 2 — AI Engineering with research-ready retrieval assets from validated news and filing text, followed by controlled tools and the multi-agent research workflow.
 - Detailed implementation evidence and run links are tracked in [PLAN.md](PLAN.md).
 
 ## Architecture
