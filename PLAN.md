@@ -239,7 +239,9 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
 
 - [x] Define the initial model and evaluation strategy. Baselines: `databricks-gte-large-en` for embeddings, GPT OSS 20B for worker agents, GPT OSS 120B for the Supervisor/final synthesis, and MLflow 3 for deterministic retrieval metrics, code-based scorers, built-in judges, custom criteria, and later multi-turn evaluation. Endpoint availability was confirmed without sending real provider text. See `docs/MODEL_STRATEGY.md`.
 
-- [ ] Confirm indexing/model-processing permissions for real source text; then build versioned embeddings from `research_chunks`, validate token limits/dimensions/similarity assumptions, and create the vector index.
+- [x] Confirm the private-runtime data-use boundary for real source text. Real SEC filing evidence and real Alpaca/Benzinga news may be processed in the owner's private, personal, non-commercial runtime; provider source content is excluded from public redistribution. See `docs/DATA_USAGE_PERMISSIONS.md`.
+
+- [ ] Build versioned embeddings from `research_chunks`, validate token limits/dimensions/similarity assumptions, and create the vector index.
 
 - [ ] Build and independently test controlled SQL and retrieval tools that check configured symbols and data readiness.
 
@@ -261,13 +263,13 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
 
 - [ ] Add application logging, monitoring, feedback collection, and secure secret handling.
 
-- [ ] Confirm public display/redistribution permissions for provider data and derived outputs; use clearly labelled synthetic demo data if unresolved.
+- [ ] Enforce the portfolio publication boundary: keep the Databricks application private, exclude credentials/raw Alpaca responses/article bodies/real-news chunk exports from the public repository, and use repository code, documentation, tests, screenshots, and non-sensitive evaluation evidence for the employer-facing showcase.
 
 - [ ] Deploy the app on Databricks and extend controlled deployment with startup, health, and end-to-end verification.
 
 - [ ] Add screenshots, example output, a short demo, and concise reproduction instructions covering CI, authentication, release checks, and redeploying a known-good version.
 
-**Gate:** An intended user can access the deployed app, research one supported stock or compare both, inspect citations, and follow the repository's reproduction/deployment instructions. Access requirements and Free Edition limitations are explicit.
+**Gate:** The privately deployed application supports the project owner's end-to-end one-stock and comparison research workflow with citations and follow-up chat. The public portfolio repository demonstrates the implementation through code, documentation, tests, CI evidence, screenshots, and reproducible non-sensitive artifacts without redistributing provider source content.
 
 ## Outside the MVP
 

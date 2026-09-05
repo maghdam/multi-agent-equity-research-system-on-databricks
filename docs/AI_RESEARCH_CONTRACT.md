@@ -120,7 +120,8 @@ Synthetic controlled fixtures may be used to implement and evaluate the RAG
 pipeline while those permissions remain unresolved.
 
 This gate affects use of real source text, not the design or offline testing of
-the retrieval architecture.
+the retrieval architecture. The current private-runtime and public-portfolio
+data-use decision is recorded in `docs/DATA_USAGE_PERMISSIONS.md`.
 
 ### Configuration
 

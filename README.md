@@ -12,7 +12,7 @@ The application is designed as a research assistant. It will not execute trades,
 
 ## Target user
 
-An individual investor or junior equity analyst who wants to research one company or compare two companies without manually assembling information from multiple systems.
+The private application is built for the project owner as an individual investor/researcher who wants to research one company or compare two companies without manually assembling information from multiple systems. The public portfolio surface is the GitHub repository, documentation, tests, and selected screenshots rather than a public interactive application.
 
 ## MVP
 
@@ -127,7 +127,7 @@ Development follows one end-to-end workflow:
 3. **AI Engineering:** retrieval and tools, the multi-agent workflow, tracing, and evaluation.
 4. **Application delivery:** UI, monitoring, deployment, and reproducible demonstration.
 
-Each milestone has a tested completion gate. See [PLAN.md](PLAN.md) for progress, [DATA_CONTRACTS.md](DATA_CONTRACTS.md) for data and RAG corpus rules, [docs/AI_RESEARCH_CONTRACT.md](docs/AI_RESEARCH_CONTRACT.md) for behavioral requirements, and [docs/MODEL_STRATEGY.md](docs/MODEL_STRATEGY.md) for model allocation, limits, chunking baselines, and MLflow evaluation strategy.
+Each milestone has a tested completion gate. See [PLAN.md](PLAN.md) for progress, [DATA_CONTRACTS.md](DATA_CONTRACTS.md) for data and RAG corpus rules, [docs/AI_RESEARCH_CONTRACT.md](docs/AI_RESEARCH_CONTRACT.md) for behavioral requirements, [docs/MODEL_STRATEGY.md](docs/MODEL_STRATEGY.md) for model allocation, limits, chunking baselines, and MLflow evaluation strategy, and [docs/DATA_USAGE_PERMISSIONS.md](docs/DATA_USAGE_PERMISSIONS.md) for the private-runtime and public-portfolio data-use boundary.
 
 ## Local Alpaca access check
 
