@@ -117,9 +117,50 @@ vector-search baseline:
 
 These smoke tests establish that the live embedding/index path works and that
 the first semantic rankings are directionally sensible. They are not formal
-retrieval-quality evidence. The next evaluation step uses labelled retrieval
-cases and deterministic metrics such as hit-rate@k and MRR before chunking,
-retrieval mode, filters, or reranking are changed.
+retrieval-quality evidence.
+
+### Live retrieval sanity baseline
+
+Development verification on 2026-09-05 added a small component-level retrieval
+evaluation harness around the existing managed AI Search index. The initial
+fixture contains four human-reviewed cases:
+
+- MSFT cybersecurity and AI business/reputation risk;
+- AAPL supply-chain, manufacturing-partner, and geopolitical risk;
+- recent MSFT business developments;
+- recent AAPL business developments.
+
+The deterministic evaluation layer is credential-free and measures Hit@1,
+Hit@3, Hit@5, MRR, expected-symbol match, expected-source-type match,
+expected-section match where applicable, and duplicate-document rate. The live
+adapter uses the authenticated Databricks CLI to collect ranked results and
+feeds only retrieval metadata into the deterministic evaluator.
+
+The first live ANN sanity run returned:
+
+```text
+Hit@1                       1.000
+Hit@3                       1.000
+Hit@5                       1.000
+MRR                         1.000
+symbol match@5              1.000
+source-type match@5         0.850
+section match@5             0.800
+duplicate-document rate@5   0.400
+```
+
+These values must be interpreted conservatively. The relevance labels for this
+first four-case set were selected by reviewing candidate chunks returned by the
+same ANN baseline. The perfect Hit@k and MRR values therefore demonstrate that
+the live evaluation pipeline is reproducible and that the reviewed positive
+chunks remain highly ranked; they are not an unbiased estimate of retrieval
+quality.
+
+This four-case set is retained as a regression/sanity benchmark. Before making
+ANN-versus-HYBRID, filtering, chunking, or reranking quality claims, the project
+will add an independently labelled holdout/challenge set. Precision@k and
+recall@k are also deferred until relevance judgements are sufficiently
+exhaustive for those metrics to be meaningful.
 
 ## 4. Initial chunking strategy and model relationship
 

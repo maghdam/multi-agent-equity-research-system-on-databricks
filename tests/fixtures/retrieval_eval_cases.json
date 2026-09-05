@@ -1,0 +1,61 @@
+{
+  "version": "retrieval-eval-v1",
+  "description": "Small human-labelled retrieval evaluation set for the RAG baseline. This component-level dataset complements, and does not replace, the E1-E6 behavioral evaluation cases in docs/AI_RESEARCH_CONTRACT.md.",
+  "cases": [
+    {
+      "case_id": "R1_MSFT_AI_CYBER_RISK",
+      "query": "How could cybersecurity incidents and artificial intelligence risks affect Microsoft's business operations and reputation?",
+      "expected_symbol": "MSFT",
+      "expected_source_type": "filing",
+      "expected_section_code": "item_1a",
+      "relevant_chunk_ids": [
+        "c443f974225a8465cd66fbd708ec75cd3a7081a49ec0506c5386c2aa531378fe",
+        "b23b7544d2376ba967b733eed98eb695c9ddc5c1f665f7b6a330baf5a119a86a",
+        "1c99b0ab84757380b3d2e385d88a6ac5c93e45d95cfc17cf20f27ab4f13246d9",
+        "dcd4fca38c9071a67909ca51c10a7d46c099d98aec0ac401af7dc3e4f27e4202"
+      ],
+      "label_status": "reviewed"
+    },
+    {
+      "case_id": "R2_AAPL_SUPPLY_CHAIN_RISK",
+      "query": "How could supply chain disruptions, dependence on manufacturing partners, and geopolitical tensions affect Apple's operations and financial performance?",
+      "expected_symbol": "AAPL",
+      "expected_source_type": "filing",
+      "expected_section_code": "item_1a",
+      "relevant_chunk_ids": [
+        "77743f911d1c081a7f3eed12294c955c423983e545780243801c5c3fe42d4f8e",
+        "10d04f93bee53d57a231068a131ad0d699ec703d75f082fb1d78a1c3ccba9fd5",
+        "50fcd12aebf1504b5ae8d6f50c9ad1f9d7aaeb34d48c7dcb559e71a63219dc67",
+        "c8572dbe2525ffc0690efb7069f488868d699106152013f178b0a7c1a7da6849"
+      ],
+      "label_status": "reviewed"
+    },
+    {
+      "case_id": "R3_MSFT_RECENT_DEVELOPMENT",
+      "query": "What important recent business developments at Microsoft could matter to an equity researcher?",
+      "expected_symbol": "MSFT",
+      "expected_source_type": "news",
+      "expected_section_code": null,
+      "relevant_chunk_ids": [
+        "10cd72570b6db925a72bd02090b8e922a718a81001f99565a0510599be643705"
+      ],
+      "label_status": "reviewed"
+    },
+    {
+      "case_id": "R4_AAPL_RECENT_DEVELOPMENT",
+      "query": "What important recent business developments at Apple could matter to an equity researcher?",
+      "expected_symbol": "AAPL",
+      "expected_source_type": "news",
+      "expected_section_code": null,
+      "relevant_chunk_ids": [
+        "386d6fbeea6db2d18ef95ae2406e6cae94d844b7a1cf6f6c1b056ec8814a58a1",
+        "2bd10f5acefdb180b582a3be040a94d8526bfc92948c84ee1aa566cf94390000",
+        "5dde57331d813934910adb57bc97469f903286aadf36300cbe5221edc7ae57ec",
+        "1606a48c7ad1cb4c85693a97a455db611a7087582c75c4e9377dac18c0aefde9",
+        "1b091d315b828b841fd488abeda187ee404bfd3ae9f2011842abba94bf7b1feb",
+        "166db5cd043f49b2f4b56e4c85df7402d25388bf9c6f6fd149e63faaf8f27765"
+      ],
+      "label_status": "reviewed"
+    }
+  ]
+}
