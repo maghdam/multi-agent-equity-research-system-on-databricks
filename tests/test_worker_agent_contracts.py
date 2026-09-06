@@ -25,6 +25,10 @@ from equity_research.market_analyst import (  # noqa: E402
     validate_market_analyst_output,
 )
 from equity_research.retrieval_tools import EvidenceRecord  # noqa: E402
+from equity_research.worker_agent_runtime import (  # noqa: E402
+    run_company_researcher,
+    run_market_analyst,
+)
 from equity_research.structured_data_tools import (  # noqa: E402
     FundamentalMetricsToolResult,
     MarketMetricsToolResult,
@@ -506,6 +510,103 @@ class MarketAnalystContractTests(unittest.TestCase):
                 fundamental_results=(_fundamental_result("AAPL"),),
                 equities=EQUITIES,
             )
+
+
+class WorkerAgentRunnerTests(unittest.TestCase):
+    def test_market_runner_validates_model_output_end_to_end(self) -> None:
+        captured = {}
+
+        def fake_model_query(*, payload, profile):
+            captured["payload"] = payload
+            captured["profile"] = profile
+
+            return {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {
+                            "role": "assistant",
+                            "content": (
+                                '{"findings":['
+                                '{"finding_id":"M1","dimension":"market",'
+                                '"symbols":["AAPL"],'
+                                '"statement":"AAPL had a positive 20-session return.",'
+                                '"metric_references":[{"dataset":"market_metrics",'
+                                '"symbol":"AAPL","as_of_date":"2026-09-04",'
+                                '"fields":["return_20d"]}]},'
+                                '{"finding_id":"F1","dimension":"fundamental",'
+                                '"symbols":["AAPL"],'
+                                '"statement":"AAPL had positive TTM net income.",'
+                                '"metric_references":[{"dataset":"fundamental_metrics",'
+                                '"symbol":"AAPL","as_of_date":"2026-07-31",'
+                                '"fields":["net_income_ttm"]}]}'
+                                ']}'
+                            ),
+                        },
+                    }
+                ]
+            }
+
+        result = run_market_analyst(
+            requested_symbols=("AAPL",),
+            market_results=(_market_result("AAPL"),),
+            fundamental_results=(_fundamental_result("AAPL"),),
+            profile="free-edition-us-east-2",
+            equities=EQUITIES,
+            model_query=fake_model_query,
+        )
+
+        self.assertEqual(
+            tuple(finding.finding_id for finding in result.findings),
+            ("M1", "F1"),
+        )
+        self.assertEqual(
+            captured["payload"]["model"],
+            "databricks-gpt-oss-20b",
+        )
+        self.assertEqual(
+            captured["profile"],
+            "free-edition-us-east-2",
+        )
+
+    def test_company_runner_rejects_model_invented_evidence_id(self) -> None:
+        evidence = _evidence("a" * 64)
+
+        def fake_model_query(*, payload, profile):
+            del payload, profile
+
+            return {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {
+                            "role": "assistant",
+                            "content": (
+                                '{"findings":[{"finding_id":"D1",'
+                                '"topic":"recent_developments",'
+                                '"characterization":"development",'
+                                '"symbols":["AAPL"],'
+                                '"statement":"Unsupported claim.",'
+                                '"evidence_ids":["' + ("b" * 64) + '"]}],'
+                                '"insufficient_evidence":null}'
+                            ),
+                        },
+                    }
+                ]
+            }
+
+        with self.assertRaisesRegex(
+            AgentContractError,
+            "unavailable evidence IDs",
+        ):
+            run_company_researcher(
+                topic="recent_developments",
+                requested_symbols=("AAPL",),
+                evidence=(evidence,),
+                equities=EQUITIES,
+                model_query=fake_model_query,
+            )
+
 
 
 class CompanyResearcherContractTests(unittest.TestCase):
