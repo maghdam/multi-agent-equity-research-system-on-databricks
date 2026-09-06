@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -41,6 +42,21 @@ from equity_research.worker_agent_runtime import (
 
 DEFAULT_CATALOG = "workspace"
 DEFAULT_RETRIEVAL_RESULTS_PER_SYMBOL = 5
+
+RECENT_DEVELOPMENT_NOISE_PATTERNS = (
+    re.compile(r"\brule\s+10b5-1\b", re.IGNORECASE),
+    re.compile(r"\b13f\b", re.IGNORECASE),
+    re.compile(r"\binstitutional\s+holdings?\b", re.IGNORECASE),
+    re.compile(r"\bgolden\s+cross\b", re.IGNORECASE),
+    re.compile(r"\bmoving\s+averages?\b", re.IGNORECASE),
+    re.compile(r"\btechnical[-\s]+analysis\b", re.IGNORECASE),
+    re.compile(r"\bprice\s+targets?\b", re.IGNORECASE),
+    re.compile(r"\banalyst\s+ratings?\b", re.IGNORECASE),
+    re.compile(
+        r"\binsider\b.{0,40}\b(sale|sold|purchase|bought)\b",
+        re.IGNORECASE,
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -273,6 +289,11 @@ class DatabricksSupervisorWorkers:
                 equities=self._equities,
             )
 
+            if topic == "recent_developments":
+                symbol_evidence = _filter_recent_development_evidence(
+                    symbol_evidence
+                )
+
             ranked_evidence = tuple(
                 replace(
                     item,
@@ -302,6 +323,29 @@ class DatabricksSupervisorWorkers:
             requested_symbols=request.requested_symbols,
             results=results,
         )
+
+
+def _filter_recent_development_evidence(
+    evidence,
+):
+    filtered = []
+
+    for item in evidence:
+        searchable_text = (
+            f"{item.title}\n{item.text}"
+        )
+
+        if any(
+            pattern.search(searchable_text)
+            for pattern in RECENT_DEVELOPMENT_NOISE_PATTERNS
+        ):
+            continue
+
+        filtered.append(
+            item
+        )
+
+    return tuple(filtered)
 
 
 def _merge_company_results(
