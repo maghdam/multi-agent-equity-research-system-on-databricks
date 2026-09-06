@@ -28,6 +28,7 @@ from equity_research.mlflow_evaluation import (  # noqa: E402
     require_managed_evaluation_dataset_runtime,
     required_report_sections,
     serialize_supervisor_report_for_evaluation,
+    summarize_observability_spans,
     summarize_trace_assessments,
     synthesis_mode,
 )
@@ -211,6 +212,68 @@ class MlflowAssessmentSummaryTests(unittest.TestCase):
         self.assertEqual(
             summaries[0]["error"],
             "judge unavailable",
+        )
+
+    def test_observability_span_summary_is_whitelisted_and_privacy_safe(
+        self,
+    ) -> None:
+        attributes = {
+            "mlflow.spanType": "CHAT_MODEL",
+            "mlflow.llm.model": "system.ai.gpt-oss-20b",
+            "mlflow.chat.tokenUsage": {
+                "input_tokens": 10,
+                "output_tokens": 5,
+                "total_tokens": 15,
+            },
+            "equity_research.component": "market_analyst",
+            "equity_research.attempt": "initial",
+            "private_payload": "must-not-appear",
+        }
+        included = SimpleNamespace(
+            name="market_analyst_20b_initial",
+            get_attribute=lambda key: attributes.get(key),
+            inputs={
+                "messages": "must-not-appear",
+            },
+            outputs={
+                "raw_text": "must-not-appear",
+            },
+        )
+        ignored = SimpleNamespace(
+            name="langgraph_internal_node",
+            get_attribute=lambda key: attributes.get(key),
+        )
+
+        summaries = summarize_observability_spans(
+            [
+                included,
+                ignored,
+            ]
+        )
+
+        self.assertEqual(
+            len(summaries),
+            1,
+        )
+        self.assertEqual(
+            summaries[0]["name"],
+            "market_analyst_20b_initial",
+        )
+        self.assertEqual(
+            summaries[0]["token_usage"]["total_tokens"],
+            15,
+        )
+        self.assertEqual(
+            summaries[0]["attempt"],
+            "initial",
+        )
+        self.assertNotIn(
+            "private_payload",
+            str(summaries),
+        )
+        self.assertNotIn(
+            "must-not-appear",
+            str(summaries),
         )
 
 
