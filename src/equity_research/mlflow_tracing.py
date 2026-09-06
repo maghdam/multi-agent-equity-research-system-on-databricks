@@ -10,6 +10,7 @@ limited to project/runtime scope and do not include provider source text.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -79,11 +80,20 @@ def mlflow_tracking_uri(
 def configure_mlflow_tracing(
     config: MlflowTracingConfig,
 ) -> str:
-    """Configure Databricks MLflow and enable unified LangGraph tracing."""
+    """Configure Databricks MLflow, SDK auth, and unified LangGraph tracing."""
 
     tracking_uri = mlflow_tracking_uri(
         config
     )
+
+    # MLflow tracking honors databricks://<profile>, while Databricks-hosted
+    # GenAI judges authenticate through the Databricks SDK. Keep both paths on
+    # the same explicit profile instead of allowing a stale/default local SDK
+    # profile to be selected independently.
+    if config.profile is not None:
+        os.environ["DATABRICKS_CONFIG_PROFILE"] = (
+            config.profile.strip()
+        )
 
     mlflow.set_tracking_uri(
         tracking_uri
