@@ -353,7 +353,11 @@ def summarize_observability_spans(
 
 
 SENSITIVE_ASSESSMENT_RATIONALE_PREFIXES = (
+    "guideline_",
+    "narrative_trace_groundedness",
+    "relevance_to_query",
     "retrieval_relevance",
+    "safety",
 )
 
 
@@ -389,9 +393,34 @@ def summarize_trace_assessments(
             assessment,
             "rationale",
         )
-        if name.strip().startswith(
-            SENSITIVE_ASSESSMENT_RATIONALE_PREFIXES
-        ):
+        source = _assessment_field(
+            assessment,
+            "source",
+        )
+        source_type = _assessment_field(
+            source,
+            "source_type",
+        )
+        normalized_source_type = (
+            str(
+                getattr(
+                    source_type,
+                    "value",
+                    source_type,
+                )
+            )
+            .strip()
+            .upper()
+            if source_type is not None
+            else None
+        )
+        sensitive_rationale = (
+            normalized_source_type == "LLM_JUDGE"
+            or name.strip().startswith(
+                SENSITIVE_ASSESSMENT_RATIONALE_PREFIXES
+            )
+        )
+        if sensitive_rationale:
             rationale = None
 
         error = _assessment_field(
@@ -401,24 +430,16 @@ def summarize_trace_assessments(
 
         error_message = None
         if error is not None:
-            if isinstance(error, Mapping):
-                error_message = error.get(
-                    "error_message"
-                )
-            else:
-                error_message = getattr(
-                    error,
-                    "error_message",
-                    None,
-                )
-
-            if not isinstance(
-                error_message,
-                str,
-            ):
-                error_message = str(
-                    error
-                )
+            error_code = _assessment_field(
+                error,
+                "error_code",
+            )
+            error_message = (
+                f"assessment_error:{error_code}"
+                if isinstance(error_code, str)
+                and error_code.strip()
+                else "assessment_error"
+            )
 
         summaries.append(
             {
@@ -1436,10 +1457,15 @@ def build_narrative_trace_grounding_judge(
                 f"{feedback.value!r}."
             )
 
+        grounded = normalized == "yes"
+
         return Feedback(
             name="narrative_trace_groundedness",
-            value=normalized == "yes",
-            rationale=feedback.rationale,
+            value=grounded,
+            rationale=(
+                "Narrative trace groundedness judge result: "
+                f"{'grounded' if grounded else 'not_grounded'}."
+            ),
         )
 
     return narrative_trace_groundedness
