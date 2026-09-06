@@ -118,6 +118,97 @@ def require_managed_evaluation_dataset_runtime() -> None:
         ) from exc
 
 
+MANUAL_OBSERVABILITY_SPAN_PREFIXES = (
+    "gold_",
+    "company_researcher_retrieval_",
+    "market_analyst_20b_",
+    "company_researcher_20b_",
+    "supervisor_report_synthesis",
+    "supervisor_120b_",
+)
+
+
+def summarize_observability_spans(
+    spans: Sequence[Any],
+) -> list[dict[str, Any]]:
+    """Return a privacy-safe summary of project-owned observability spans."""
+
+    if isinstance(
+        spans,
+        (str, bytes),
+    ):
+        raise ValueError(
+            "spans must be a sequence of MLflow span objects."
+        )
+
+    summaries: list[dict[str, Any]] = []
+
+    for span in spans:
+        name = getattr(
+            span,
+            "name",
+            None,
+        )
+        if (
+            not isinstance(name, str)
+            or not name.startswith(
+                MANUAL_OBSERVABILITY_SPAN_PREFIXES
+            )
+        ):
+            continue
+
+        get_attribute = getattr(
+            span,
+            "get_attribute",
+            None,
+        )
+        if not callable(
+            get_attribute
+        ):
+            continue
+
+        summaries.append(
+            {
+                "name": name,
+                "span_type": get_attribute(
+                    "mlflow.spanType"
+                ),
+                "model": get_attribute(
+                    "mlflow.llm.model"
+                ),
+                "token_usage": get_attribute(
+                    "mlflow.chat.tokenUsage"
+                ),
+                "authority": get_attribute(
+                    "equity_research.authority"
+                ),
+                "dataset": get_attribute(
+                    "equity_research.dataset"
+                ),
+                "component": get_attribute(
+                    "equity_research.component"
+                ),
+                "attempt": get_attribute(
+                    "equity_research.attempt"
+                ),
+                "topic": get_attribute(
+                    "equity_research.topic"
+                ),
+                "repair_count": get_attribute(
+                    "equity_research.repair_count"
+                ),
+                "synthesis_mode": get_attribute(
+                    "equity_research.synthesis_mode"
+                ),
+                "report_status": get_attribute(
+                    "equity_research.report_status"
+                ),
+            }
+        )
+
+    return summaries
+
+
 def summarize_trace_assessments(
     assessments: Sequence[Any],
 ) -> list[dict[str, Any]]:
