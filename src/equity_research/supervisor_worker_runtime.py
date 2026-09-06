@@ -248,8 +248,7 @@ class DatabricksSupervisorWorkers:
                 "topic must be 'recent_developments' or 'principal_risks'."
             )
 
-        evidence: list[EvidenceRecord] = []
-        seen_ids: set[str] = set()
+        results: list[tuple[str, CompanyResearcherResult]] = []
 
         for symbol in request.requested_symbols:
             payload = build_retrieval_query_payload(
@@ -275,35 +274,112 @@ class DatabricksSupervisorWorkers:
                 equities=self._equities,
             )
 
-            for item in symbol_evidence:
-                if item.evidence_id in seen_ids:
-                    continue
-
-                seen_ids.add(
-                    item.evidence_id
+            ranked_evidence = tuple(
+                replace(
+                    item,
+                    retrieval_rank=rank,
                 )
-                evidence.append(
-                    item
+                for rank, item in enumerate(
+                    symbol_evidence,
+                    start=1,
                 )
-
-        ranked_evidence = tuple(
-            replace(
-                item,
-                retrieval_rank=rank,
             )
-            for rank, item in enumerate(
-                evidence,
-                start=1,
+            result = self._company_agent_runner(
+                topic=topic,
+                requested_symbols=(symbol,),
+                evidence=ranked_evidence,
+                profile=self._config.profile,
+                equities=self._equities,
             )
-        )
+            results.append(
+                (
+                    symbol,
+                    result,
+                )
+            )
 
-        return self._company_agent_runner(
+        return _merge_company_results(
             topic=topic,
             requested_symbols=request.requested_symbols,
-            evidence=ranked_evidence,
-            profile=self._config.profile,
-            equities=self._equities,
+            results=results,
         )
+
+
+def _merge_company_results(
+    *,
+    topic: ResearchTopic,
+    requested_symbols: tuple[str, ...],
+    results: list[tuple[str, CompanyResearcherResult]],
+) -> CompanyResearcherResult:
+    if tuple(
+        symbol
+        for symbol, _ in results
+    ) != requested_symbols:
+        raise RuntimeError(
+            "Company Researcher per-symbol results do not match request order."
+        )
+
+    findings = []
+    limitations = []
+    comparison = len(requested_symbols) > 1
+
+    for symbol, result in results:
+        if not isinstance(
+            result,
+            CompanyResearcherResult,
+        ):
+            raise TypeError(
+                "company_agent_runner must return CompanyResearcherResult."
+            )
+
+        for finding in result.findings:
+            if finding.topic != topic:
+                raise RuntimeError(
+                    "Per-symbol Company Researcher result has wrong topic."
+                )
+
+            if finding.symbols != (symbol,):
+                raise RuntimeError(
+                    "Per-symbol Company Researcher result has wrong symbol scope."
+                )
+
+            findings.append(
+                replace(
+                    finding,
+                    finding_id=(
+                        f"{symbol}:{finding.finding_id}"
+                        if comparison
+                        else finding.finding_id
+                    ),
+                )
+            )
+
+        for limitation in result.limitations:
+            limitations.append(
+                replace(
+                    limitation,
+                    symbol=(
+                        symbol
+                        if limitation.symbol is None
+                        else limitation.symbol
+                    ),
+                )
+            )
+
+    finding_ids = [
+        finding.finding_id
+        for finding in findings
+    ]
+
+    if len(set(finding_ids)) != len(finding_ids):
+        raise RuntimeError(
+            "Merged Company Researcher finding IDs must be unique."
+        )
+
+    return CompanyResearcherResult(
+        findings=tuple(findings),
+        limitations=tuple(limitations),
+    )
 
 
 def _require_request(
