@@ -9,6 +9,9 @@ from typing import Any, Literal
 
 from equity_research.company_researcher import CompanyResearcherResult
 from equity_research.market_analyst import MarketAnalystResult
+from equity_research.numeric_fidelity import (
+    unsupported_numeric_claims_from_sources,
+)
 from equity_research.supervisor_contracts import SupervisorState
 
 
@@ -705,6 +708,11 @@ def _parse_section(
             source_ids=source_ids,
             source_findings=source_findings,
         )
+        _validate_numeric_grounding(
+            text=text,
+            source_ids=source_ids,
+            source_findings=source_findings,
+        )
 
     return ReportSection(
         section=section,
@@ -905,6 +913,33 @@ def _validate_relation_grounding(
             "Report introduces an unsupported comparative relation "
             f"{term!r} that is absent from cited worker findings."
         )
+
+
+def _validate_numeric_grounding(
+    *,
+    text: str,
+    source_ids: Sequence[str],
+    source_findings: Mapping[str, ReportSourceFinding],
+) -> None:
+    unsupported = unsupported_numeric_claims_from_sources(
+        candidate_text=text,
+        source_texts=tuple(
+            source_findings[source_id].statement
+            for source_id in source_ids
+        ),
+    )
+
+    if not unsupported:
+        return
+
+    claims = ", ".join(
+        repr(claim.raw)
+        for claim in unsupported
+    )
+    raise SupervisorReportContractError(
+        "Report introduces numerical claims absent from cited worker findings: "
+        f"{claims}."
+    )
 
 
 def _section_issue_supported(
