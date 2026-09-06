@@ -136,6 +136,39 @@ def parse_args() -> argparse.Namespace:
             "been proven live."
         ),
     )
+    parser.add_argument(
+        "--llm-judge",
+        nargs="+",
+        default=None,
+        help=(
+            "Optional LLM judge names to run when --include-llm-judges is set. "
+            "If omitted, all configured LLM judges run."
+        ),
+    )
+    parser.add_argument(
+        "--eval-max-workers",
+        type=int,
+        default=2,
+        help="Maximum concurrent evaluation rows. Defaults to 2.",
+    )
+    parser.add_argument(
+        "--eval-max-scorer-workers",
+        type=int,
+        default=2,
+        help="Maximum concurrent scorers per evaluation row. Defaults to 2.",
+    )
+    parser.add_argument(
+        "--llm-judge-timeout-seconds",
+        type=int,
+        default=90,
+        help="Timeout for each MLflow LLM judge call. Defaults to 90 seconds.",
+    )
+    parser.add_argument(
+        "--eval-max-retries",
+        type=int,
+        default=1,
+        help="Maximum MLflow evaluation retries after rate limits. Defaults to 1.",
+    )
 
     return parser.parse_args()
 
@@ -147,6 +180,42 @@ def main() -> None:
         os.environ[
             "MLFLOW_GENAI_EVAL_SKIP_TRACE_VALIDATION"
         ] = "True"
+
+    for value, field in (
+        (args.eval_max_workers, "--eval-max-workers"),
+        (args.eval_max_scorer_workers, "--eval-max-scorer-workers"),
+        (args.llm_judge_timeout_seconds, "--llm-judge-timeout-seconds"),
+    ):
+        if value < 1:
+            raise ValueError(
+                f"{field} must be at least 1."
+            )
+
+    if args.eval_max_retries < 0:
+        raise ValueError(
+            "--eval-max-retries must be nonnegative."
+        )
+
+    os.environ[
+        "MLFLOW_GENAI_EVAL_MAX_WORKERS"
+    ] = str(
+        args.eval_max_workers
+    )
+    os.environ[
+        "MLFLOW_GENAI_EVAL_MAX_SCORER_WORKERS"
+    ] = str(
+        args.eval_max_scorer_workers
+    )
+    os.environ[
+        "MLFLOW_GENAI_EVAL_LLM_TIMEOUT"
+    ] = str(
+        args.llm_judge_timeout_seconds
+    )
+    os.environ[
+        "MLFLOW_GENAI_EVAL_MAX_RETRIES"
+    ] = str(
+        args.eval_max_retries
+    )
 
     experiment_name = args.mlflow_experiment.strip()
     if not experiment_name:
@@ -270,6 +339,58 @@ def main() -> None:
         judge_model=args.judge_model,
     )
 
+    if args.llm_judge is not None:
+        if not args.include_llm_judges:
+            raise ValueError(
+                "--llm-judge requires --include-llm-judges."
+            )
+
+        requested_judges = {
+            name.strip()
+            for name in args.llm_judge
+            if isinstance(name, str)
+            and name.strip()
+        }
+        if not requested_judges:
+            raise ValueError(
+                "--llm-judge requires at least one nonblank judge name."
+            )
+
+        code_names = {
+            "expected_request_mode",
+            "expected_symbol_scope",
+            "required_report_sections",
+            "report_section_grounding_contract",
+            "synthesis_mode",
+            "report_status",
+            "evidence_count",
+        }
+        available_judges = {
+            scorer.name
+            for scorer in scorers
+            if scorer.name not in code_names
+        }
+        unknown_judges = sorted(
+            requested_judges
+            - available_judges
+        )
+
+        if unknown_judges:
+            raise ValueError(
+                "Unknown LLM judge names: "
+                f"{unknown_judges}. Available: "
+                f"{sorted(available_judges)}."
+            )
+
+        scorers = [
+            scorer
+            for scorer in scorers
+            if (
+                scorer.name in code_names
+                or scorer.name in requested_judges
+            )
+        ]
+
     print(
         "MLFLOW_EVALUATION_START"
         f"; tracking_uri={tracking_uri}"
@@ -278,6 +399,10 @@ def main() -> None:
         f"; data_source={data_source}"
         f"; llm_judges={str(args.include_llm_judges).lower()}"
         f"; skip_trace_validation={str(args.skip_trace_validation).lower()}"
+        f"; eval_max_workers={args.eval_max_workers}"
+        f"; eval_max_scorer_workers={args.eval_max_scorer_workers}"
+        f"; llm_judge_timeout_seconds={args.llm_judge_timeout_seconds}"
+        f"; eval_max_retries={args.eval_max_retries}"
         f"; scorers={','.join(scorer.name for scorer in scorers)}"
     )
 
