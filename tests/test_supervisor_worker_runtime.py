@@ -6,6 +6,7 @@ import unittest
 from contextlib import nullcontext
 from datetime import date, datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from mlflow.entities import SpanType
@@ -345,6 +346,136 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
             fundamental_results=("fundamental-result",),
             profile="profile-1",
             equities=EQUITIES,
+        )
+
+    def test_market_worker_records_gold_tool_readiness_spans(
+        self,
+    ) -> None:
+        statement_executor = Mock(
+            side_effect=[
+                {"kind": "market"},
+                {"kind": "fundamental"},
+            ]
+        )
+        market_agent_runner = Mock(
+            return_value=_market_agent_result(
+                ("AAPL",)
+            )
+        )
+        workers = DatabricksSupervisorWorkers(
+            config=self.config,
+            equities=EQUITIES,
+            statement_executor=statement_executor,
+            market_agent_runner=market_agent_runner,
+            clock=lambda: datetime(
+                2026,
+                9,
+                6,
+                9,
+                0,
+                tzinfo=timezone.utc,
+            ),
+        )
+        market_span = Mock()
+        fundamental_span = Mock()
+
+        with (
+            patch(
+                "equity_research.supervisor_worker_runtime."
+                "optional_mlflow_span",
+                side_effect=[
+                    nullcontext(
+                        market_span
+                    ),
+                    nullcontext(
+                        fundamental_span
+                    ),
+                ],
+            ) as optional_span,
+            patch(
+                "equity_research.supervisor_worker_runtime."
+                "parse_market_metrics_statement_response",
+                return_value=("market-metric",),
+            ),
+            patch(
+                "equity_research.supervisor_worker_runtime."
+                "parse_fundamental_metrics_statement_response",
+                return_value=("fundamental-metric",),
+            ),
+            patch(
+                "equity_research.supervisor_worker_runtime."
+                "prepare_market_metrics_results",
+                return_value=(
+                    SimpleNamespace(
+                        symbol="AAPL",
+                        status="ready",
+                        reason_code=None,
+                        metric=SimpleNamespace(
+                            as_of_date=date(
+                                2026,
+                                9,
+                                4,
+                            )
+                        ),
+                    ),
+                ),
+            ),
+            patch(
+                "equity_research.supervisor_worker_runtime."
+                "prepare_fundamental_metrics_results",
+                return_value=(
+                    SimpleNamespace(
+                        symbol="AAPL",
+                        status="ready",
+                        reason_code=None,
+                        metric=SimpleNamespace(
+                            as_of_date=date(
+                                2026,
+                                7,
+                                31,
+                            )
+                        ),
+                    ),
+                ),
+            ),
+        ):
+            workers.market_worker(
+                request=_request("AAPL")
+            )
+
+        self.assertEqual(
+            optional_span.call_args_list[0].kwargs,
+            {
+                "name": "gold_market_metrics_access",
+                "span_type": SpanType.TOOL,
+            },
+        )
+        self.assertEqual(
+            optional_span.call_args_list[1].kwargs,
+            {
+                "name": "gold_fundamental_metrics_access",
+                "span_type": SpanType.TOOL,
+            },
+        )
+        market_span.set_outputs.assert_called_once_with(
+            {
+                "result_count": 1,
+                "ready_symbols": ["AAPL"],
+                "unavailable": [],
+                "as_of_dates": {
+                    "AAPL": "2026-09-04",
+                },
+            }
+        )
+        fundamental_span.set_outputs.assert_called_once_with(
+            {
+                "result_count": 1,
+                "ready_symbols": ["AAPL"],
+                "unavailable": [],
+                "as_of_dates": {
+                    "AAPL": "2026-07-31",
+                },
+            }
         )
 
     def test_company_comparison_retrieves_and_runs_each_symbol_separately(
