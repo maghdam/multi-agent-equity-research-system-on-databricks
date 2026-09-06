@@ -1,0 +1,57 @@
+"""Runtime for GPT OSS 120B final Supervisor report synthesis."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any, Callable
+
+from equity_research.databricks_cli_runtime import (
+    query_chat_completions_via_cli,
+)
+from equity_research.supervisor_contracts import SupervisorState
+from equity_research.supervisor_report import (
+    SupervisorReport,
+    build_supervisor_report_context,
+    validate_supervisor_report_output,
+)
+from equity_research.supervisor_report_prompts import (
+    build_supervisor_report_model_request,
+)
+from equity_research.worker_agent_runtime import (
+    parse_structured_chat_response,
+)
+
+
+def run_supervisor_report_synthesis(
+    *,
+    state: SupervisorState,
+    profile: str | None = None,
+    model_query: Callable[..., Mapping[str, Any]] = (
+        query_chat_completions_via_cli
+    ),
+) -> SupervisorReport:
+    """Run GPT OSS 120B and deterministically validate the final report."""
+
+    if not callable(model_query):
+        raise TypeError(
+            "model_query must be callable."
+        )
+
+    context = build_supervisor_report_context(
+        state
+    )
+    payload = build_supervisor_report_model_request(
+        context
+    )
+    response = model_query(
+        payload=payload,
+        profile=profile,
+    )
+    raw_output = parse_structured_chat_response(
+        response
+    )
+
+    return validate_supervisor_report_output(
+        raw_output,
+        state=state,
+    )
