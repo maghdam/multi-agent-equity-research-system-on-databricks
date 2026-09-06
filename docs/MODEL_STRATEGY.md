@@ -210,10 +210,69 @@ This result has two implications for the next retrieval iterations:
 - near-duplicate evidence and result diversification should be measured and
   addressed separately from semantic relevance.
 
-No chunking change is justified by this six-case experiment alone. The next
-implementation step is to build controlled retrieval and SQL tools with
-configured-symbol and data-readiness checks, using HYBRID as the provisional
-retrieval baseline.
+No chunking change is justified by this six-case experiment alone.
+
+### Controlled tool baseline and live verification
+
+The controlled tool layer was implemented and live-verified on 2026-09-06
+before agent construction.
+
+Structured-data access is intentionally narrower than general SQL access:
+
+- only the Gold `market_metrics` and `fundamental_metrics` tables are exposed;
+- the tool owns exact column projections and table identities;
+- requested symbols are resolved from shared equity configuration and supplied
+  to Databricks Statement Execution as named parameters rather than generated
+  SQL text;
+- current rows are parsed back into the existing Gold dataclasses and checked
+  for source semantics, configured scope, uniqueness, readiness, and
+  provenance;
+- market rows use the existing completed-market freshness rule and must share a
+  common ready `as_of_date` for comparison;
+- fundamental rows use the existing 180-day readiness rule while preserving
+  legitimately different company filing dates;
+- missing or stale data is returned explicitly instead of being replaced with
+  model knowledge.
+
+Retrieval access is similarly bounded:
+
+- HYBRID is fixed as the current query baseline;
+- result count is bounded;
+- company, source-type, and optional filing-section filters are built by the
+  tool rather than supplied as arbitrary vector-search configuration;
+- Standard Vector Search array filtering constrains `configured_symbols`
+  server-side, followed by independent client-side configured/requested-scope
+  validation;
+- returned chunks are converted into citation-ready evidence records carrying
+  stable `chunk_id` evidence IDs, document/version identity, source business
+  identity, dates, URLs, filing-section metadata where applicable, and
+  Silver/Bronze provenance;
+- retrieved source text remains untrusted evidence and is never interpreted by
+  the tool layer as instructions;
+- timezone-less `source_fetched_at` values emitted by Vector Search are
+  interpreted as UTC because the RAG publication job fixes Spark session time
+  to UTC and publishes the field as a UTC timestamp.
+
+The runtime adapter uses the authenticated Databricks CLI rather than adding a
+Databricks Python SDK dependency. Statement Execution calls poll
+`PENDING`/`RUNNING` states to completion, while Vector Search queries are
+synchronous. Physical development resource names are explicit inputs to the
+live smoke runner so bundle-generated prefixes cannot be confused with logical
+resource names.
+
+The 2026-09-06 live smoke verification passed with:
+
+- AAPL and MSFT Gold market rows both ready at
+  `as_of_date = 2026-09-04`;
+- AAPL fundamentals ready at `2026-07-31` from a 10-Q;
+- MSFT fundamentals ready at `2026-07-29` from a 10-K;
+- three controlled AAPL HYBRID news results;
+- three controlled AAPL Item 1A filing results;
+- stable evidence/document identities returned without printing provider source
+  text to the smoke-test log.
+
+The next implementation step is therefore agent construction on top of these
+verified interfaces, not further expansion of raw SQL or Vector Search access.
 
 ## 4. Initial chunking strategy and model relationship
 
