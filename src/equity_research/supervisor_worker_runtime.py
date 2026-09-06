@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Mapping
+from contextlib import nullcontext
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any
+
+import mlflow
+from mlflow.entities import SpanType
 
 from equity_research.company_researcher import (
     CompanyResearcherResult,
@@ -277,33 +281,81 @@ class DatabricksSupervisorWorkers:
                 num_results=self._config.retrieval_results_per_symbol,
                 equities=self._equities,
             )
-            response = self._vector_query(
-                index_name=self._config.index_name,
-                payload=payload,
-                profile=self._config.profile,
-            )
-            symbol_evidence = parse_retrieval_response(
-                response,
-                requested_symbols=(symbol,),
-                expected_source_type=source_type,
-                equities=self._equities,
+            active_span = mlflow.get_current_active_span()
+            span_context = (
+                mlflow.start_span(
+                    name=(
+                        "company_researcher_retrieval_"
+                        f"{topic}_{symbol.lower()}"
+                    ),
+                    span_type=SpanType.RETRIEVER,
+                )
+                if active_span is not None
+                else nullcontext(
+                    None
+                )
             )
 
-            if topic == "recent_developments":
-                symbol_evidence = _filter_recent_development_evidence(
-                    symbol_evidence
+            with span_context as retrieval_span:
+                if retrieval_span is not None:
+                    retrieval_span.set_inputs(
+                        {
+                            "query": payload["query_text"],
+                            "symbol": symbol,
+                            "topic": topic,
+                            "source_type": source_type,
+                            "section_code": section_code,
+                            "num_results": (
+                                self._config.retrieval_results_per_symbol
+                            ),
+                        }
+                    )
+
+                response = self._vector_query(
+                    index_name=self._config.index_name,
+                    payload=payload,
+                    profile=self._config.profile,
+                )
+                symbol_evidence = parse_retrieval_response(
+                    response,
+                    requested_symbols=(symbol,),
+                    expected_source_type=source_type,
+                    equities=self._equities,
                 )
 
-            ranked_evidence = tuple(
-                replace(
-                    item,
-                    retrieval_rank=rank,
+                if topic == "recent_developments":
+                    symbol_evidence = _filter_recent_development_evidence(
+                        symbol_evidence
+                    )
+
+                ranked_evidence = tuple(
+                    replace(
+                        item,
+                        retrieval_rank=rank,
+                    )
+                    for rank, item in enumerate(
+                        symbol_evidence,
+                        start=1,
+                    )
                 )
-                for rank, item in enumerate(
-                    symbol_evidence,
-                    start=1,
-                )
-            )
+
+                if retrieval_span is not None:
+                    retrieval_span.set_attributes(
+                        {
+                            "equity_research.symbol": symbol,
+                            "equity_research.topic": topic,
+                            "equity_research.source_type": source_type,
+                            "equity_research.filtered_evidence_count": len(
+                                ranked_evidence
+                            ),
+                        }
+                    )
+                    retrieval_span.set_outputs(
+                        _mlflow_retriever_documents(
+                            ranked_evidence
+                        )
+                    )
+
             result = self._company_agent_runner(
                 topic=topic,
                 requested_symbols=(symbol,),
@@ -323,6 +375,32 @@ class DatabricksSupervisorWorkers:
             requested_symbols=request.requested_symbols,
             results=results,
         )
+
+
+def _mlflow_retriever_documents(
+    evidence: Sequence,
+) -> list[dict[str, Any]]:
+    """Render validated RAG evidence using MLflow's RETRIEVER span schema."""
+
+    return [
+        {
+            "id": item.evidence_id,
+            "page_content": item.text,
+            "metadata": {
+                "doc_uri": item.source_url,
+                "chunk_id": item.chunk_id,
+                "document_id": item.document_id,
+                "document_version_id": item.document_version_id,
+                "source_type": item.source_type,
+                "configured_symbols": list(
+                    item.configured_symbols
+                ),
+                "evidence_date": item.evidence_date.isoformat(),
+                "retrieval_rank": item.retrieval_rank,
+            },
+        }
+        for item in evidence
+    ]
 
 
 def _filter_recent_development_evidence(
