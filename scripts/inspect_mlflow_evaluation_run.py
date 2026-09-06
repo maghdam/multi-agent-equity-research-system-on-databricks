@@ -156,6 +156,12 @@ def main() -> None:
                 ),
                 str,
             )
+            and getattr(
+                span,
+                "parent_id",
+                None,
+            )
+            is not None
         }
         assessments = trace.search_assessments()
 
