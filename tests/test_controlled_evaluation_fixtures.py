@@ -14,6 +14,7 @@ from equity_research.controlled_evaluation_fixtures import (  # noqa: E402
     e4_market_worker,
     e4_report_synthesizer,
 )
+from equity_research.supervisor_contracts import SupervisorRequest  # noqa: E402
 from equity_research.supervisor_research_graph import (  # noqa: E402
     run_supervisor_research_graph,
 )
@@ -151,13 +152,12 @@ class ControlledE4FixtureTests(unittest.TestCase):
             ValueError,
             "requires comparison scope",
         ):
-            run_supervisor_research_graph(
-                request_text="Research AAPL.",
-                requested_symbols=("AAPL",),
-                market_worker=e4_market_worker,
-                company_worker=e4_company_worker,
-                report_synthesizer=e4_report_synthesizer,
-                equities=EQUITIES,
+            e4_market_worker(
+                request=SupervisorRequest(
+                    request_text="Research AAPL.",
+                    requested_symbols=("AAPL",),
+                    mode="single_company",
+                )
             )
 
 
