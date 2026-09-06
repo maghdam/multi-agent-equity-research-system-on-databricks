@@ -28,50 +28,64 @@ For the credential-free CI versus credentialed live-evaluation boundary, see
 ## 1. End-to-end architecture
 
 ```text
-Alpaca prices/news + SEC company facts/filings
-                    |
-                    v
-               Bronze Delta
-      raw immutable provider history
-                    |
-                    v
-               Silver Delta
-       validated business records
-          |                 |
-          v                 v
-   Gold metrics       RAG corpus
- authoritative          research_documents
- structured values      research_chunks
-          |                 |
-          v                 v
- controlled Gold      AI Search / HYBRID
-      tools              retrieval
-          |                 |
-          v                 v
-   Market Analyst     Company Researcher
-    GPT OSS 20B         GPT OSS 20B
-          |                 |
-          +--------+--------+
-                   |
-                   v
-        deterministic LangGraph
-             Supervisor
-                   |
-                   v
-        validated SupervisorState
-                   |
-                   v
-       GPT OSS 120B terminal synthesis
-                   |
-                   v
-       deterministic report validation
-        + one bounded model repair
-        + deterministic fallback
-                   |
-                   v
-          grounded cited report
+Alpaca market/news + SEC company facts/filings
+                       |
+                       v
+                  Bronze Delta
+         raw immutable provider history
+                       |
+                       v
+                  Silver Delta
+          validated business records
+             |                    |
+             v                    v
+        Gold metrics          RAG corpus
+ authoritative structured   news + filings
+          financial facts   research chunks
+             |                    |
+             v                    v
+     controlled Gold         embeddings +
+          tools             Vector Search
+             |                    |
+             v                    v
+      Market Analyst       Company Researcher
+       GPT OSS 20B          GPT OSS 20B
+             |                    |
+             +---------+----------+
+                       |
+                       v
+             deterministic LangGraph
+                  Supervisor
+                       |
+                       v
+              GPT OSS 120B synthesis
+                       |
+                       v
+          deterministic report validation
+         numeric fidelity + provenance
+          one bounded model repair
+          deterministic fallback
+                       |
+                       v
+              grounded cited report
+                       |
+             +---------+---------+
+             |                   |
+             v                   v
+        MLflow traces       MLflow evaluation
+ TOOL / RETRIEVER /         code scorers +
+ CHAT_MODEL / AGENT         semantic judges
+             |                   |
+             +---------+---------+
+                       |
+                       v
+             regression / CI evidence
+                       |
+                       v
+            Milestone 3 private app
+      selection + charts + cited report
+             + follow-up chat
 ```
-
 The project separates **factual authority** from **language generation**:
 
 - structured numerical claims are authorized only by Gold-backed controlled tools;
@@ -887,7 +901,7 @@ The report exposes:
 - `deterministic_fallback` — both model attempts violated the report contract and
   validated worker findings were rendered deterministically.
 
-This signal is intended for later MLflow evaluation and monitoring.
+This signal is recorded in MLflow evaluation and is available for application monitoring.
 
 ---
 
