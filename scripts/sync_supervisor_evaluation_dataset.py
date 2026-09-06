@@ -26,6 +26,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from equity_research.mlflow_evaluation import (  # noqa: E402
     build_live_evaluation_data,
+    require_managed_evaluation_dataset_runtime,
 )
 
 
@@ -98,6 +99,8 @@ def main() -> None:
         experiment_name
     )
     experiment_id = experiment.experiment_id
+
+    require_managed_evaluation_dataset_runtime()
 
     records = build_live_evaluation_data(
         args.case
