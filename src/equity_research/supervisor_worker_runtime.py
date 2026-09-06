@@ -334,12 +334,23 @@ class DatabricksSupervisorWorkers:
                 query_focus=query_focus,
                 equities=self._equities,
             )
+            retrieval_candidate_limit = (
+                min(
+                    MAX_RETRIEVAL_RESULTS,
+                    self._config.retrieval_results_per_symbol * 2,
+                )
+                if (
+                    request.mode == "comparison"
+                    and topic == "recent_developments"
+                )
+                else self._config.retrieval_results_per_symbol
+            )
             payload = build_retrieval_query_payload(
                 query_text=query_text,
                 requested_symbols=(symbol,),
                 source_type=source_type,
                 section_code=section_code,
-                num_results=self._config.retrieval_results_per_symbol,
+                num_results=retrieval_candidate_limit,
                 equities=self._equities,
             )
             active_span = mlflow.get_current_active_span()
@@ -366,7 +377,8 @@ class DatabricksSupervisorWorkers:
                             "topic": topic,
                             "source_type": source_type,
                             "section_code": section_code,
-                            "num_results": (
+                            "num_results": retrieval_candidate_limit,
+                            "worker_evidence_limit": (
                                 self._config.retrieval_results_per_symbol
                             ),
                         }
@@ -388,6 +400,10 @@ class DatabricksSupervisorWorkers:
                     symbol_evidence = _filter_recent_development_evidence(
                         symbol_evidence
                     )
+
+                symbol_evidence = symbol_evidence[
+                    : self._config.retrieval_results_per_symbol
+                ]
 
                 ranked_evidence = tuple(
                     replace(
