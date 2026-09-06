@@ -9,7 +9,6 @@ from mlflow.entities import Feedback, SpanType
 from mlflow.genai.scorers import (
     Guidelines,
     RelevanceToQuery,
-    RetrievalRelevance,
     Safety,
     scorer,
 )
@@ -1611,6 +1610,164 @@ def _run_grounding_guidelines_with_parse_retry(
         )
 
 
+def build_trace_aware_retrieval_relevance_judge(
+    *,
+    model: str = "databricks:/databricks-gpt-oss-120b",
+):
+    """Build route-aware chunk relevance over filtered RETRIEVER spans."""
+
+    if not isinstance(model, str) or not model.strip():
+        raise ValueError(
+            "model must be a nonblank string."
+        )
+
+    judge_model = model.strip()
+    relevance_judge = Guidelines(
+        name="retrieval_route_relevance_inner",
+        guidelines=(
+            "Evaluate only the supplied retrieval route and one retrieved "
+            "evidence chunk. Decide whether that chunk is relevant to the exact "
+            "retrieval query, company symbol, and topic. Do not use model memory "
+            "or outside knowledge. For recent_developments, company-specific "
+            "product, operations, strategy, corporate-action, or legal/regulatory "
+            "developments are relevant; investor transactions, analyst commentary, "
+            "price targets, and technical-analysis material are not relevant. "
+            "For principal_risks, evidence is relevant only when it directly "
+            "supports a material company risk. Return yes only when the supplied "
+            "chunk itself is relevant."
+        ),
+        model=judge_model,
+    )
+
+    @scorer(
+        name="retrieval_relevance"
+    )
+    def retrieval_relevance(
+        trace: Any,
+    ) -> list[Feedback]:
+        routes = _retrieval_routes_for_sufficiency(
+            trace
+        )
+        route_results: list[
+            tuple[str, str, int, int]
+        ] = []
+
+        for route in routes:
+            symbol = route[
+                "symbol"
+            ]
+            topic = route[
+                "topic"
+            ]
+            documents = route[
+                "documents"
+            ]
+            relevant_count = 0
+
+            for document in documents:
+                feedback = _run_grounding_guidelines_with_parse_retry(
+                    relevance_judge,
+                    inputs={
+                        "retrieval_query": route[
+                            "query"
+                        ],
+                        "symbol": symbol,
+                        "topic": topic,
+                        "source_type": route[
+                            "source_type"
+                        ],
+                    },
+                    outputs={
+                        "retrieved_evidence": [
+                            document
+                        ],
+                    },
+                )
+                normalized = str(
+                    feedback.value
+                ).strip().lower()
+
+                if normalized not in {
+                    "yes",
+                    "no",
+                }:
+                    raise ValueError(
+                        "Retrieval relevance judge returned an unsupported "
+                        f"value: {feedback.value!r}."
+                    )
+
+                relevant_count += int(
+                    normalized == "yes"
+                )
+
+            route_results.append(
+                (
+                    symbol,
+                    topic,
+                    relevant_count,
+                    len(
+                        documents
+                    ),
+                )
+            )
+
+        total_relevant = sum(
+            relevant
+            for _, _, relevant, _ in route_results
+        )
+        total_documents = sum(
+            count
+            for _, _, _, count in route_results
+        )
+        overall_precision = (
+            total_relevant
+            / total_documents
+            if total_documents
+            else 0.0
+        )
+
+        feedbacks = [
+            Feedback(
+                name="retrieval_relevance",
+                value=overall_precision,
+                rationale=(
+                    "Route-aware relevance precision over filtered retrieval "
+                    f"evidence: {total_relevant}/{total_documents} chunks."
+                ),
+            )
+        ]
+
+        for (
+            symbol,
+            topic,
+            relevant_count,
+            document_count,
+        ) in route_results:
+            route_precision = (
+                relevant_count
+                / document_count
+                if document_count
+                else 0.0
+            )
+            feedbacks.append(
+                Feedback(
+                    name=(
+                        "retrieval_relevance_"
+                        f"{symbol.lower()}_{topic}"
+                    ),
+                    value=route_precision,
+                    rationale=(
+                        f"{symbol}:{topic} relevant chunks: "
+                        f"{relevant_count}/{document_count}."
+                    ),
+                )
+            )
+
+        return feedbacks
+
+    return retrieval_relevance
+
+
 def build_trace_aware_retrieval_sufficiency_judge(
     *,
     model: str = "databricks:/databricks-gpt-oss-120b",
@@ -1921,7 +2078,7 @@ def build_llm_judges(
         RelevanceToQuery(
             model=judge_model
         ),
-        RetrievalRelevance(
+        build_trace_aware_retrieval_relevance_judge(
             model=judge_model
         ),
         build_trace_aware_retrieval_sufficiency_judge(
