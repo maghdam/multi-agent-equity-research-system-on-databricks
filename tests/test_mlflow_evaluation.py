@@ -11,6 +11,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from equity_research.mlflow_evaluation import (  # noqa: E402
     EQUITY_RESEARCH_GUIDELINES,
     build_code_scorers,
+    build_live_evaluation_data,
     build_evaluation_scorers,
     build_llm_judges,
     evidence_count,
@@ -86,6 +87,55 @@ def _expectations() -> dict:
             "principal_risks",
         ],
     }
+
+
+class MlflowEvaluationCaseTests(unittest.TestCase):
+    def test_builds_frozen_e1_and_e2_rows(self) -> None:
+        rows = build_live_evaluation_data(
+            ("E1", "E2")
+        )
+
+        self.assertEqual(
+            len(rows),
+            2,
+        )
+        self.assertEqual(
+            rows[0]["inputs"]["requested_symbols"],
+            ["AAPL"],
+        )
+        self.assertEqual(
+            rows[0]["expectations"]["expected_mode"],
+            "single_company",
+        )
+        self.assertEqual(
+            rows[1]["inputs"]["requested_symbols"],
+            ["AAPL", "MSFT"],
+        )
+        self.assertEqual(
+            rows[1]["expectations"]["expected_mode"],
+            "comparison",
+        )
+        self.assertEqual(
+            rows[1]["expectations"]["required_sections"][-1],
+            "comparative_assessment",
+        )
+
+    def test_rejects_unsupported_or_duplicate_live_case_ids(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "Supported live cases are E1 and E2",
+        ):
+            build_live_evaluation_data(
+                ("E3",)
+            )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "must be unique",
+        ):
+            build_live_evaluation_data(
+                ("E1", "e1")
+            )
 
 
 class MlflowEvaluationSerializationTests(unittest.TestCase):
