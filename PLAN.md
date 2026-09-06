@@ -2,9 +2,9 @@
 
 Build a small research app that compares AAPL and MSFT using market data, company fundamentals, and cited news/filing evidence. See [README.md](README.md) for the architecture and expected output.
 
-**Current position:** Milestone 1 — Data Engineering is complete and Milestone 2 — AI Engineering is active. The deterministic RAG corpus, managed embeddings/vector index, independent retrieval holdout, controlled structured-data/retrieval tools, both GPT OSS 20B worker agents, deterministic LangGraph Supervisor routing/aggregation, and structured final-report/citation validation are implemented and live-verified. The app-facing research graph validates one- or two-company scope before tool access, runs the Market Analyst and two Company Researcher routes through the verified worker subgraph, assembles explicit ready/degraded/unavailable Supervisor state, and invokes `system.ai.gpt-oss-120b` only for terminal synthesis over validated worker findings. Final synthesis uses strict structured output, deterministic provenance/section validation, one bounded model-repair attempt, and a deterministic validated fallback if both model attempts violate the report contract. Credential-free GitHub Actions continues to run Ruff correctness lint and the offline test suite on pull requests and pushes to `main`.
+**Current position:** Milestone 1 — Data Engineering is complete and Milestone 2 — AI Engineering is active. The deterministic RAG corpus, managed embeddings/vector index, independent retrieval holdout, controlled structured-data/retrieval tools, both GPT OSS 20B worker agents, deterministic LangGraph Supervisor routing/aggregation, structured final-report/citation validation, and the first MLflow tracing/GenAI-evaluation foundation are implemented and live-verified. The app-facing research graph validates one- or two-company scope before tool access, runs the Market Analyst and two Company Researcher routes through the verified worker subgraph, assembles explicit ready/degraded/unavailable Supervisor state, and invokes `system.ai.gpt-oss-120b` only for terminal synthesis over validated worker findings. Final synthesis uses strict structured output, deterministic provenance/section/numeric validation, one bounded model-repair attempt, and a deterministic validated fallback if both model attempts violate the report contract. Managed MLflow evaluation now covers E1/E2 with deterministic scorers, semantic judges, controlled RETRIEVER spans, and trace-aware narrative-grounding checks. Credential-free GitHub Actions continues to run Ruff correctness lint and the offline test suite on pull requests and pushes to `main`.
 
-**Next:** Add MLflow tracing and GenAI evaluation over the now-live Supervisor/report path, then use those measurements to drive the next retrieval/generation refinements and CI evaluation coverage.
+**Next:** Finish explicit MLflow observability spans for Gold access, worker/Supervisor model calls, repair/fallback outcomes, latency, and safe usage metadata; then add controlled E3–E6 failure-path evaluation cases and rerun the managed regression suite before extending CI/evaluation coverage.
 
 ## Implementation roadmap
 
@@ -78,7 +78,7 @@ flowchart TB
     E2 --> F
 
     F --> G["GPT OSS 120B terminal synthesis + validated reports/citations ✅"]
-    G --> H["MLflow tracing + evaluation"]
+    G --> H["MLflow tracing + evaluation 🟡"]
     H --> I["Deployment / application integration"]
 ```
 
@@ -271,8 +271,19 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
   - Live AAPL single-company final synthesis previously returned a ready four-section report with exact Gold/narrative provenance. Live AAPL+MSFT terminal-graph verification on 2026-09-06 returned `SUPERVISOR_REPORT_SMOKE=PASSED`, `status=degraded`, and `synthesis_mode=repaired_model`: market/fundamental/risk coverage remained available, Apple recent developments retained grounded evidence, and the missing acceptable Microsoft recent-development evidence was disclosed rather than fabricated.
 
 - [ ] Add MLflow tracing and GenAI evaluation. Combine deterministic numerical/citation checks with retrieval metrics such as hit-rate@k and MRR, plus precision@k and recall@k when relevance labels are sufficiently exhaustive, plus MLflow judges for retrieval relevance/groundedness/sufficiency, response relevance, correctness, safety, and project guidelines.
+  - [x] Configure Databricks-managed MLflow tracing for the app-facing Supervisor graph with privacy-safe request-scope tags/metadata and LangGraph autotracing. Raw provider responses remain outside the trace boundary.
+  - [x] Build the live Supervisor evaluation harness for contract cases E1/E2 with repository-owned fixtures and a Unity Catalog MLflow Evaluation Dataset, deterministic code scorers, optional Databricks LLM judges, assessment inspection tooling, and bounded judge concurrency/timeouts/retries.
+  - [x] Add explicit `RETRIEVER` spans around controlled Company Researcher retrieval. Span outputs contain only validated/filtered chunks actually supplied to the worker, with stable evidence/chunk/document metadata; the raw Vector Search response is not traced.
+  - [x] Harden numerical fidelity after the first traced Supervisor run exposed scaled-money and return mismatches. Decimal-based worker/report validation now guards equivalent numeric rendering, Market Analyst contract failures receive one bounded repair, and final synthesis receives the same numeric guard before publication/fallback.
+  - [x] Correct comparison synthesis so `comparative_assessment` can use only dimensions with grounded coverage for every requested company. Live E1/E2 targeted evaluation on 2026-09-06 returned `guideline_bounded_comparison/mean = 1.0`.
+  - [x] Replace stock per-RETRIEVER groundedness aggregation—which incorrectly compared the whole mixed Gold+RAG report against one retrieval span at a time—with a trace-aware narrative-grounding scorer. The scorer deterministically maps final `recent_developments` / `principal_risks` sections to the union of cited controlled retrieval chunks, ignores Gold-authoritative market/fundamental sections, and performs one bounded retry only for judge-response parse failures. Live E1 run `89dd7fb6b3e2480597fc29081dd58dd8` and E2 run `6dd3226caf154d6e966d3b4e40fe4042` both returned `narrative_trace_groundedness/mean = 1.0` with no scorer warning. Final offline gate: 442 tests passed with Ruff clean.
+  - [ ] Add explicit spans for Gold tool access, GPT OSS 20B worker calls, GPT OSS 120B synthesis/repair/fallback, repair counts, latency, and safe usage/token metadata where the runtime exposes authoritative values.
+  - [ ] Add retrieval relevance/sufficiency evaluation using the now-correct retrieval-span semantics, and keep component-level hit-rate/MRR holdout metrics separate from end-to-end report judges.
+  - [ ] Add controlled E3–E6 execution fixtures for unsupported scope, stale/missing Gold, insufficient retrieval evidence, and prompt-injection handling instead of relying on live data to naturally produce those failures.
 
 - [ ] Correct measured weaknesses and rerun the same evaluations to check for regressions.
+  - [x] Numeric-fidelity, comparison-scope, and narrative-grounding issues exposed by tracing/evaluation were corrected and re-evaluated on E1/E2.
+  - [ ] Rerun the complete managed E1/E2 judge suite after the remaining observability instrumentation, then use the same evaluation set as the regression baseline for subsequent retrieval/generation changes.
 
 - [ ] Extend CI with deterministic tool tests and offline evaluations; run credentialed live-model evaluations separately with controlled usage.
 
