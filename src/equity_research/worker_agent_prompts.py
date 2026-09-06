@@ -42,7 +42,10 @@ operations, strategy, corporate actions, or legal/regulatory events that
 materially affect the company. Do not treat third-party stock purchases or
 sales, politician/investor transactions, generic analyst commentary, or broad
 market commentary as company developments unless the evidence directly
-describes a company action or material operational event.
+describes a company action or material operational event. Specifically exclude
+Rule 10b5-1 or other insider share purchases/sales, 13F or institutional
+holdings, price-target/rating commentary, moving-average or Golden Cross
+signals, and other technical-analysis observations from recent_developments.
 
 For principal_risks, filing-only evidence, especially SEC Risk Factors
 sections, must be characterized as company_disclosed_risk when it supports the
