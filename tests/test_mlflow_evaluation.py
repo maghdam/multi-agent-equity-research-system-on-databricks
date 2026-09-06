@@ -14,6 +14,7 @@ from equity_research.mlflow_evaluation import (  # noqa: E402
     EQUITY_RESEARCH_GUIDELINES,
     build_code_scorers,
     build_live_evaluation_data,
+    build_narrative_trace_grounding_judge,
     build_evaluation_scorers,
     build_llm_judges,
     evidence_count,
@@ -427,7 +428,7 @@ class MlflowJudgeConfigurationTests(unittest.TestCase):
             [
                 "relevance_to_query",
                 "safety",
-                "retrieval_groundedness",
+                "narrative_trace_groundedness",
                 "guideline_no_investment_recommendation",
                 "guideline_market_fundamental_separation",
                 "guideline_evidence_grounded_narrative",
@@ -444,6 +445,32 @@ class MlflowJudgeConfigurationTests(unittest.TestCase):
         self.assertGreaterEqual(
             len(EQUITY_RESEARCH_GUIDELINES),
             5,
+        )
+
+    def test_builds_trace_aware_narrative_grounding_judge(self) -> None:
+        judge = build_narrative_trace_grounding_judge(
+            model="databricks:/databricks-gpt-oss-120b"
+        )
+
+        self.assertEqual(
+            judge.name,
+            "narrative_trace_groundedness",
+        )
+        self.assertEqual(
+            judge.model,
+            "databricks:/databricks-gpt-oss-120b",
+        )
+        self.assertIn(
+            "{{ trace }}",
+            judge.instructions,
+        )
+        self.assertIn(
+            "Consider all RETRIEVER spans",
+            judge.instructions,
+        )
+        self.assertIn(
+            "Ignore market_performance",
+            judge.instructions,
         )
 
     def test_combined_scorers_can_exclude_or_include_llm_judges(self) -> None:
