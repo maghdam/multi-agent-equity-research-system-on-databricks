@@ -834,6 +834,121 @@ class SupervisorReportValidationTests(unittest.TestCase):
                 state=_state(("AAPL", "MSFT")),
             )
 
+    def test_accepts_numeric_claim_copied_from_cited_worker_finding(
+        self,
+    ) -> None:
+        market_result = MarketAnalystResult(
+            findings=(
+                StructuredFinding(
+                    finding_id="market_AAPL",
+                    dimension="market",
+                    symbols=("AAPL",),
+                    statement="AAPL market statement.",
+                    metric_references=(
+                        MetricReference(
+                            dataset="market_metrics",
+                            symbol="AAPL",
+                            as_of_date=date(2026, 9, 4),
+                            fields=("return_20d", "close"),
+                        ),
+                    ),
+                ),
+                StructuredFinding(
+                    finding_id="fundamental_AAPL",
+                    dimension="fundamental",
+                    symbols=("AAPL",),
+                    statement=(
+                        "Apple reported trailing-12-month net income of "
+                        "$128.9 billion."
+                    ),
+                    metric_references=(
+                        MetricReference(
+                            dataset="fundamental_metrics",
+                            symbol="AAPL",
+                            as_of_date=date(2026, 7, 31),
+                            fields=("net_income_ttm",),
+                        ),
+                    ),
+                ),
+            ),
+            limitations=(),
+        )
+        state = _state(
+            ("AAPL",),
+            market_result=market_result,
+        )
+        output = _single_output()
+        output["sections"][1]["text"] = (
+            "Apple reported TTM net income of $128.9 billion."
+        )
+
+        report = validate_supervisor_report_output(
+            output,
+            state=state,
+        )
+
+        self.assertEqual(
+            report.sections[1].status,
+            "available",
+        )
+
+    def test_rejects_final_report_numeric_decimal_place_shift(
+        self,
+    ) -> None:
+        market_result = MarketAnalystResult(
+            findings=(
+                StructuredFinding(
+                    finding_id="market_AAPL",
+                    dimension="market",
+                    symbols=("AAPL",),
+                    statement="AAPL market statement.",
+                    metric_references=(
+                        MetricReference(
+                            dataset="market_metrics",
+                            symbol="AAPL",
+                            as_of_date=date(2026, 9, 4),
+                            fields=("return_20d", "close"),
+                        ),
+                    ),
+                ),
+                StructuredFinding(
+                    finding_id="fundamental_AAPL",
+                    dimension="fundamental",
+                    symbols=("AAPL",),
+                    statement=(
+                        "Apple reported trailing-12-month net income of "
+                        "$128.9 billion."
+                    ),
+                    metric_references=(
+                        MetricReference(
+                            dataset="fundamental_metrics",
+                            symbol="AAPL",
+                            as_of_date=date(2026, 7, 31),
+                            fields=("net_income_ttm",),
+                        ),
+                    ),
+                ),
+            ),
+            limitations=(),
+        )
+        state = _state(
+            ("AAPL",),
+            market_result=market_result,
+        )
+        output = _single_output()
+        output["sections"][1]["text"] = (
+            "Apple reported TTM net income of $12.89 billion."
+        )
+
+        with self.assertRaisesRegex(
+            SupervisorReportContractError,
+            "numerical claims absent from cited worker findings",
+        ):
+            validate_supervisor_report_output(
+                output,
+                state=state,
+            )
+
     def test_rejects_unknown_top_level_field(self) -> None:
         output = _single_output()
         output["extra"] = "not allowed"
