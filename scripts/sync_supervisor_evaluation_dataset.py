@@ -8,11 +8,8 @@ import sys
 from pathlib import Path
 
 import mlflow
-from mlflow.exceptions import MlflowException
-from mlflow.genai.datasets import (
-    create_dataset,
-    get_dataset,
-)
+from databricks.sdk.errors.platform import NotFound
+from mlflow.genai.datasets import get_dataset
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -110,13 +107,17 @@ def main() -> None:
         dataset = get_dataset(
             name=dataset_name
         )
-        action = "updated"
-    except MlflowException:
-        dataset = create_dataset(
-            name=dataset_name,
-            experiment_id=experiment_id,
-        )
-        action = "created"
+    except NotFound as exc:
+        raise RuntimeError(
+            "Managed evaluation dataset does not exist. Create it once from "
+            "the Databricks experiment UI because this project currently runs "
+            "locally on Python 3.14, while Databricks Connect serverless "
+            "provisioning requires Python 3.12. In Databricks, open experiment "
+            f"'{experiment_name}', choose Datasets > Create dataset, select the "
+            "Unity Catalog schema from the requested dataset name, and create "
+            f"table '{dataset_name.rsplit('.', 1)[-1]}'. Then rerun this sync "
+            "command; repository-owned records remain the source of truth."
+        ) from exc
 
     dataset = dataset.merge_records(
         records
@@ -125,7 +126,7 @@ def main() -> None:
 
     print(
         "MLFLOW_EVALUATION_DATASET_SYNC=PASSED"
-        f"; action={action}"
+        "; action=synced"
         f"; name={dataset_name}"
         f"; experiment_id={experiment_id}"
         f"; merged_cases={','.join(case.upper() for case in args.case)}"
