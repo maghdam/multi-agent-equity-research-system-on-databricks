@@ -135,6 +135,7 @@ def main() -> None:
         f"; mode={report.mode}"
         f"; symbols={','.join(report.symbols)}"
         f"; status={report.status}"
+        f"; synthesis_mode={report.synthesis_mode}"
         f"; sections={len(report.sections)}"
         f"; limitations={len(report.limitations)}"
         f"; evidence={len(report.evidence)}"
