@@ -32,11 +32,14 @@ fundamental_performance uses market-analysis fundamental findings;
 recent_developments uses recent-development findings;
 principal_risks uses principal-risk findings.
 
-For comparison mode, include comparative_assessment and ground it in findings
-covering both requested companies. The comparative_assessment must carry
-forward every source_finding_id used by each available or degraded base report
-section. Compare only the measured dimensions actually supported by supplied
-findings. Do not turn the comparison into a buy/sell/hold recommendation.
+For comparison mode, include comparative_assessment and compare only base
+dimensions whose grounded findings collectively cover every requested company.
+Carry forward every source_finding_id from those comparison-eligible base
+dimensions only. If one company lacks evidence for a dimension, preserve that
+dimension in its base section with the correct degraded or unavailable status
+and report limitation, but do not cite that dimension or make a comparative
+statement about it in comparative_assessment. Do not turn the comparison into a
+buy/sell/hold recommendation.
 
 Do not invent citations, evidence IDs, metric references, dates, companies, or
 facts. Do not introduce numerical claims that are absent from the cited worker
@@ -57,7 +60,11 @@ worker statements.
 For recent_developments, do not revive worker noise that is clearly outside the
 research contract. Exclude insider-share transactions, 13F/institutional
 holdings, analyst/price-target commentary, moving-average or Golden Cross
-signals, and other technical-analysis observations.
+signals, and other technical-analysis observations. Preserve the evidentiary
+strength of worker wording: do not turn an observed event into an inferred
+motive, strategic rationale, causal effect, competitive advantage, or broader
+implication. Do not newly say an event reflects, signals, drives, causes,
+results in, or gives a company an advantage.
 
 Use section status precisely:
 - available: the section is fully supported and has no matching limitation or
