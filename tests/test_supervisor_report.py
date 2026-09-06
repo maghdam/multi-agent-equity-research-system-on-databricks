@@ -734,6 +734,21 @@ class SupervisorReportValidationTests(unittest.TestCase):
                 state=_state(("AAPL", "MSFT")),
             )
 
+    def test_rejects_unbacked_qualitative_assessment(self) -> None:
+        output = _comparison_output()
+        output["sections"][-1]["text"] = (
+            "Both companies posted strong financial results."
+        )
+
+        with self.assertRaisesRegex(
+            SupervisorReportContractError,
+            "unsupported comparative relation 'strong'",
+        ):
+            validate_supervisor_report_output(
+                output,
+                state=_state(("AAPL", "MSFT")),
+            )
+
     def test_rejects_unbacked_comparative_relation(self) -> None:
         output = _comparison_output()
         output["sections"][-1]["text"] = (
