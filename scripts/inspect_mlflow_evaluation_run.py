@@ -20,6 +20,7 @@ if str(SRC_ROOT) not in sys.path:
     )
 
 from equity_research.mlflow_evaluation import (  # noqa: E402
+    summarize_observability_spans,
     summarize_trace_assessments,
 )
 
@@ -46,6 +47,14 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Optional assessment-name prefix filter, for example 'guideline_'."
+        ),
+    )
+    parser.add_argument(
+        "--show-span-summary",
+        action="store_true",
+        help=(
+            "Print privacy-safe summaries for project-owned Gold, retrieval, "
+            "worker-model, and Supervisor spans without printing span payloads."
         ),
     )
     return parser.parse_args()
@@ -101,11 +110,13 @@ def main() -> None:
         ],
         run_id=run_id,
         return_type="list",
-        include_spans=False,
+        include_spans=args.show_span_summary,
     )
 
     printed = 0
     available_names: set[str] = set()
+
+    span_summaries = 0
 
     for trace in traces:
         assessments = trace.search_assessments()
@@ -153,12 +164,60 @@ def main() -> None:
             f"; names={','.join(sorted(available_names))}"
         )
 
+        if args.show_span_summary:
+            trace_data = getattr(
+                trace,
+                "data",
+                None,
+            )
+            raw_spans = getattr(
+                trace_data,
+                "spans",
+                (),
+            )
+
+            for span_summary in summarize_observability_spans(
+                raw_spans
+            ):
+                fields = [
+                    "SPAN",
+                    f"name={span_summary['name']}",
+                    f"type={span_summary['span_type']}",
+                ]
+                for key in (
+                    "model",
+                    "authority",
+                    "dataset",
+                    "component",
+                    "attempt",
+                    "topic",
+                    "repair_count",
+                    "synthesis_mode",
+                    "report_status",
+                    "token_usage",
+                ):
+                    value = span_summary[
+                        key
+                    ]
+                    if value is not None:
+                        fields.append(
+                            f"{key}={value}"
+                        )
+
+                print(
+                    "; ".join(
+                        fields
+                    )
+                )
+                span_summaries += 1
+
     print(
         "MLFLOW_EVALUATION_INSPECTION=PASSED"
         f"; run_id={run_id}"
         f"; experiment_id={experiment_id}"
         f"; traces={len(traces)}"
         f"; assessments={printed}"
+        f"; span_summaries={span_summaries}"
     )
 
 
