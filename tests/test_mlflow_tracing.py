@@ -118,7 +118,7 @@ class MlflowTracingConfigTests(unittest.TestCase):
 
 
 class MlflowTracingRuntimeTests(unittest.TestCase):
-    @patch("equity_research.mlflow_tracing.mlflow.langchain.autolog")
+    @patch("equity_research.mlflow_tracing.mlflow_langchain_autolog")
     @patch("equity_research.mlflow_tracing.mlflow.set_experiment")
     @patch("equity_research.mlflow_tracing.mlflow.set_tracking_uri")
     def test_configure_enables_supported_langgraph_autologging(
