@@ -139,6 +139,7 @@ def _state(
     symbols: tuple[str, ...],
     *,
     market_result: MarketAnalystResult | None = None,
+    recent_result: CompanyResearcherResult | None = None,
 ):
     plan = build_supervisor_plan(
         request_text=(
@@ -163,9 +164,13 @@ def _state(
             ),
             successful_worker_outcome(
                 route_id="recent_developments",
-                result=_company_result(
-                    topic="recent_developments",
-                    symbols=symbols,
+                result=(
+                    recent_result
+                    if recent_result is not None
+                    else _company_result(
+                        topic="recent_developments",
+                        symbols=symbols,
+                    )
                 ),
             ),
             successful_worker_outcome(
@@ -267,6 +272,10 @@ def _comparison_output():
                     "market_analysis:market_MSFT",
                     "market_analysis:fundamental_AAPL",
                     "market_analysis:fundamental_MSFT",
+                    "recent_developments:AAPL:recent_developments",
+                    "recent_developments:MSFT:recent_developments",
+                    "principal_risks:AAPL:principal_risks",
+                    "principal_risks:MSFT:principal_risks",
                 ],
             },
         ],
@@ -593,6 +602,136 @@ class SupervisorReportValidationTests(unittest.TestCase):
             validate_supervisor_report_output(
                 output,
                 state=state,
+            )
+
+    def test_allows_degraded_comparison_section_with_partial_findings(
+        self,
+    ) -> None:
+        limitation = AgentLimitation(
+            agent="company_researcher",
+            symbol="MSFT",
+            dimension="recent_developments",
+            reason_code="insufficient_evidence",
+            message="No company-specific MSFT developments were found.",
+        )
+        aapl_recent = _company_result(
+            topic="recent_developments",
+            symbols=("AAPL",),
+        )
+        recent_result = CompanyResearcherResult(
+            findings=aapl_recent.findings,
+            limitations=(limitation,),
+        )
+        state = _state(
+            ("AAPL", "MSFT"),
+            recent_result=recent_result,
+        )
+        output = _comparison_output()
+
+        recent_section = output["sections"][2]
+        recent_section["status"] = "degraded"
+        recent_section["text"] = (
+            "Apple has a grounded recent development; MSFT is unavailable."
+        )
+        recent_section["source_finding_ids"] = [
+            "recent_developments:AAPL:recent_developments",
+        ]
+
+        comparative = output["sections"][-1]
+        comparative["status"] = "degraded"
+        comparative["source_finding_ids"] = [
+            source_id
+            for source_id in comparative["source_finding_ids"]
+            if source_id != "recent_developments:MSFT:recent_developments"
+        ]
+        output["limitations"] = [
+            "MSFT recent developments are unavailable because evidence is "
+            "insufficient.",
+        ]
+
+        report = validate_supervisor_report_output(
+            output,
+            state=state,
+        )
+
+        self.assertEqual(
+            report.status,
+            "degraded",
+        )
+        self.assertEqual(
+            report.sections[2].status,
+            "degraded",
+        )
+        self.assertIn(
+            "a" * 64,
+            {
+                citation.evidence_id
+                for citation in report.evidence
+            },
+        )
+
+    def test_rejects_unavailable_section_when_grounded_findings_remain(
+        self,
+    ) -> None:
+        limitation = AgentLimitation(
+            agent="company_researcher",
+            symbol="MSFT",
+            dimension="recent_developments",
+            reason_code="insufficient_evidence",
+            message="No company-specific MSFT developments were found.",
+        )
+        aapl_recent = _company_result(
+            topic="recent_developments",
+            symbols=("AAPL",),
+        )
+        state = _state(
+            ("AAPL", "MSFT"),
+            recent_result=CompanyResearcherResult(
+                findings=aapl_recent.findings,
+                limitations=(limitation,),
+            ),
+        )
+        output = _comparison_output()
+        output["sections"][2] = {
+            "section": "recent_developments",
+            "status": "unavailable",
+            "text": "Recent developments unavailable.",
+            "source_finding_ids": [],
+        }
+        output["sections"][-1]["status"] = "degraded"
+        output["sections"][-1]["source_finding_ids"] = [
+            source_id
+            for source_id in output["sections"][-1]["source_finding_ids"]
+            if source_id != "recent_developments:MSFT:recent_developments"
+        ]
+        output["limitations"] = [
+            "MSFT recent developments are unavailable.",
+        ]
+
+        with self.assertRaisesRegex(
+            SupervisorReportContractError,
+            "cannot be unavailable while grounded worker findings remain",
+        ):
+            validate_supervisor_report_output(
+                output,
+                state=state,
+            )
+
+    def test_comparative_assessment_inherits_grounded_section_sources(
+        self,
+    ) -> None:
+        output = _comparison_output()
+        output["sections"][-1]["source_finding_ids"].remove(
+            "recent_developments:AAPL:recent_developments"
+        )
+
+        with self.assertRaisesRegex(
+            SupervisorReportContractError,
+            "must inherit source_finding_ids",
+        ):
+            validate_supervisor_report_output(
+                output,
+                state=_state(("AAPL", "MSFT")),
             )
 
     def test_rejects_unbacked_comparative_relation(self) -> None:
