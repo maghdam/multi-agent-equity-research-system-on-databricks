@@ -22,6 +22,9 @@ from equity_research.databricks_cli_runtime import (
     query_vector_index_via_cli,
 )
 from equity_research.market_analyst import MarketAnalystResult
+from equity_research.mlflow_runtime_spans import (
+    optional_mlflow_span,
+)
 from equity_research.retrieval_tools import (
     MAX_RETRIEVAL_RESULTS,
     build_retrieval_query_payload,
@@ -185,49 +188,103 @@ class DatabricksSupervisorWorkers:
         _require_request(request)
         now_utc = self._clock()
 
-        market_payload = build_market_metrics_sql_request(
-            warehouse_id=self._config.warehouse_id,
-            catalog=self._config.catalog,
-            gold_schema=self._config.gold_schema,
-            requested_symbols=request.requested_symbols,
-            equities=self._equities,
-        )
-        market_response = self._statement_executor(
-            payload=market_payload,
-            profile=self._config.profile,
-        )
-        market_metrics = parse_market_metrics_statement_response(
-            market_response
-        )
-        market_results = prepare_market_metrics_results(
-            metrics=market_metrics,
-            requested_symbols=request.requested_symbols,
-            now_utc=now_utc,
-            equities=self._equities,
-        )
+        with optional_mlflow_span(
+            name="gold_market_metrics_access",
+            span_type=SpanType.TOOL,
+        ) as market_span:
+            if market_span is not None:
+                market_span.set_inputs(
+                    {
+                        "dataset": "market_metrics",
+                        "symbols": list(
+                            request.requested_symbols
+                        ),
+                    }
+                )
+                market_span.set_attributes(
+                    {
+                        "equity_research.authority": "gold",
+                        "equity_research.dataset": "market_metrics",
+                    }
+                )
 
-        fundamental_payload = build_fundamental_metrics_sql_request(
-            warehouse_id=self._config.warehouse_id,
-            catalog=self._config.catalog,
-            gold_schema=self._config.gold_schema,
-            requested_symbols=request.requested_symbols,
-            equities=self._equities,
-        )
-        fundamental_response = self._statement_executor(
-            payload=fundamental_payload,
-            profile=self._config.profile,
-        )
-        fundamental_metrics = (
-            parse_fundamental_metrics_statement_response(
-                fundamental_response
+            market_payload = build_market_metrics_sql_request(
+                warehouse_id=self._config.warehouse_id,
+                catalog=self._config.catalog,
+                gold_schema=self._config.gold_schema,
+                requested_symbols=request.requested_symbols,
+                equities=self._equities,
             )
-        )
-        fundamental_results = prepare_fundamental_metrics_results(
-            metrics=fundamental_metrics,
-            requested_symbols=request.requested_symbols,
-            now_utc=now_utc,
-            equities=self._equities,
-        )
+            market_response = self._statement_executor(
+                payload=market_payload,
+                profile=self._config.profile,
+            )
+            market_metrics = parse_market_metrics_statement_response(
+                market_response
+            )
+            market_results = prepare_market_metrics_results(
+                metrics=market_metrics,
+                requested_symbols=request.requested_symbols,
+                now_utc=now_utc,
+                equities=self._equities,
+            )
+
+            if market_span is not None:
+                market_span.set_outputs(
+                    _gold_tool_result_summary(
+                        market_results
+                    )
+                )
+
+        with optional_mlflow_span(
+            name="gold_fundamental_metrics_access",
+            span_type=SpanType.TOOL,
+        ) as fundamental_span:
+            if fundamental_span is not None:
+                fundamental_span.set_inputs(
+                    {
+                        "dataset": "fundamental_metrics",
+                        "symbols": list(
+                            request.requested_symbols
+                        ),
+                    }
+                )
+                fundamental_span.set_attributes(
+                    {
+                        "equity_research.authority": "gold",
+                        "equity_research.dataset": "fundamental_metrics",
+                    }
+                )
+
+            fundamental_payload = build_fundamental_metrics_sql_request(
+                warehouse_id=self._config.warehouse_id,
+                catalog=self._config.catalog,
+                gold_schema=self._config.gold_schema,
+                requested_symbols=request.requested_symbols,
+                equities=self._equities,
+            )
+            fundamental_response = self._statement_executor(
+                payload=fundamental_payload,
+                profile=self._config.profile,
+            )
+            fundamental_metrics = (
+                parse_fundamental_metrics_statement_response(
+                    fundamental_response
+                )
+            )
+            fundamental_results = prepare_fundamental_metrics_results(
+                metrics=fundamental_metrics,
+                requested_symbols=request.requested_symbols,
+                now_utc=now_utc,
+                equities=self._equities,
+            )
+
+            if fundamental_span is not None:
+                fundamental_span.set_outputs(
+                    _gold_tool_result_summary(
+                        fundamental_results
+                    )
+                )
 
         return self._market_agent_runner(
             requested_symbols=request.requested_symbols,
@@ -375,6 +432,39 @@ class DatabricksSupervisorWorkers:
             requested_symbols=request.requested_symbols,
             results=results,
         )
+
+
+def _gold_tool_result_summary(
+    results: Sequence,
+) -> dict[str, Any]:
+    """Return Gold readiness/provenance summary without duplicating metric values."""
+
+    return {
+        "result_count": len(
+            results
+        ),
+        "ready_symbols": [
+            result.symbol
+            for result in results
+            if result.status == "ready"
+        ],
+        "unavailable": [
+            {
+                "symbol": result.symbol,
+                "reason_code": result.reason_code,
+            }
+            for result in results
+            if result.status != "ready"
+        ],
+        "as_of_dates": {
+            result.symbol: (
+                result.metric.as_of_date.isoformat()
+                if result.metric is not None
+                else None
+            )
+            for result in results
+        },
+    }
 
 
 def _mlflow_retriever_documents(
