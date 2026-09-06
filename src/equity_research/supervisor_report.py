@@ -8,10 +8,7 @@ from typing import Any, Literal
 
 from equity_research.company_researcher import CompanyResearcherResult
 from equity_research.market_analyst import MarketAnalystResult
-from equity_research.supervisor_contracts import (
-    SupervisorState,
-    SupervisorWorkerFailure,
-)
+from equity_research.supervisor_contracts import SupervisorState
 
 
 ReportSectionStatus = Literal["available", "unavailable"]
