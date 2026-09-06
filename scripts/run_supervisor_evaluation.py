@@ -1,4 +1,4 @@
-"""Run live MLflow GenAI evaluation for contract cases E1 and E2."""
+"""Run live MLflow GenAI evaluation for contract cases E1-E3."""
 
 from __future__ import annotations
 
@@ -23,7 +23,9 @@ from equity_research.config import load_equities  # noqa: E402
 from equity_research.mlflow_evaluation import (  # noqa: E402
     build_evaluation_scorers,
     build_live_evaluation_data,
+    build_scope_rejection_scorers,
     require_managed_evaluation_dataset_runtime,
+    serialize_scope_rejection_for_evaluation,
     serialize_supervisor_report_for_evaluation,
 )
 from equity_research.mlflow_tracing import (  # noqa: E402
@@ -40,6 +42,7 @@ from equity_research.supervisor_worker_runtime import (  # noqa: E402
     DatabricksSupervisorWorkers,
     SupervisorWorkerRuntimeConfig,
 )
+from equity_research.tool_scope import ControlledToolRequestError  # noqa: E402
 
 
 DEFAULT_CATALOG = "workspace"
@@ -55,8 +58,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--warehouse-id",
-        required=True,
-        help="Databricks SQL warehouse ID.",
+        default=None,
+        help=(
+            "Databricks SQL warehouse ID. Required for report cases E1/E2 "
+            "and managed report datasets; intentionally not required for E3."
+        ),
     )
     parser.add_argument(
         "--profile",
@@ -70,13 +76,19 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--gold-schema",
-        required=True,
-        help="Physical Gold schema name in the target workspace.",
+        default=None,
+        help=(
+            "Physical Gold schema name. Required for report cases E1/E2 "
+            "and managed report datasets; intentionally not required for E3."
+        ),
     )
     parser.add_argument(
         "--index-name",
-        required=True,
-        help="Fully qualified physical Vector Search index name.",
+        default=None,
+        help=(
+            "Fully qualified physical Vector Search index name. Required for "
+            "report cases E1/E2 and managed report datasets; not required for E3."
+        ),
     )
     parser.add_argument(
         "--case",
@@ -173,6 +185,18 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _required_report_resource(
+    value: str | None,
+    flag: str,
+) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(
+            f"{flag} is required for report evaluation cases."
+        )
+
+    return value.strip()
+
+
 def main() -> None:
     args = parse_args()
 
@@ -223,19 +247,88 @@ def main() -> None:
             "--mlflow-experiment must be nonblank."
         )
 
+    dataset_name = (
+        args.dataset_name.strip()
+        if isinstance(args.dataset_name, str)
+        and args.dataset_name.strip()
+        else None
+    )
+
+    if dataset_name is not None:
+        evaluation_kind = "report"
+        require_managed_evaluation_dataset_runtime()
+        data = get_dataset(
+            name=dataset_name
+        )
+        data_source = (
+            f"managed_dataset:{dataset_name}"
+        )
+        case_label = "managed"
+    else:
+        case_ids = (
+            args.case
+            if args.case is not None
+            else ["E1"]
+        )
+        normalized_case_ids = tuple(
+            str(case).strip().upper()
+            for case in case_ids
+        )
+
+        if "E3" in normalized_case_ids and normalized_case_ids != ("E3",):
+            raise ValueError(
+                "E3 must be evaluated separately because it uses the "
+                "pre-tool scope-rejection scorer contract."
+            )
+
+        evaluation_kind = (
+            "scope_rejection"
+            if normalized_case_ids == ("E3",)
+            else "report"
+        )
+
+        if (
+            evaluation_kind == "scope_rejection"
+            and args.include_llm_judges
+        ):
+            raise ValueError(
+                "E3 is a deterministic pre-tool rejection case and must not "
+                "run LLM judges."
+            )
+
+        data = build_live_evaluation_data(
+            case_ids
+        )
+        data_source = "repository_cases"
+        case_label = ",".join(
+            normalized_case_ids
+        )
+
     equities = load_equities()
-    runtime_config = SupervisorWorkerRuntimeConfig(
-        warehouse_id=args.warehouse_id,
-        gold_schema=args.gold_schema,
-        index_name=args.index_name,
-        profile=args.profile,
-        catalog=args.catalog,
-        retrieval_results_per_symbol=args.retrieval_results_per_symbol,
-    )
-    workers = DatabricksSupervisorWorkers(
-        config=runtime_config,
-        equities=equities,
-    )
+    workers = None
+
+    if evaluation_kind == "report":
+        runtime_config = SupervisorWorkerRuntimeConfig(
+            warehouse_id=_required_report_resource(
+                args.warehouse_id,
+                "--warehouse-id",
+            ),
+            gold_schema=_required_report_resource(
+                args.gold_schema,
+                "--gold-schema",
+            ),
+            index_name=_required_report_resource(
+                args.index_name,
+                "--index-name",
+            ),
+            profile=args.profile,
+            catalog=args.catalog,
+            retrieval_results_per_symbol=args.retrieval_results_per_symbol,
+        )
+        workers = DatabricksSupervisorWorkers(
+            config=runtime_config,
+            equities=equities,
+        )
 
     tracing_config = MlflowTracingConfig(
         experiment_name=experiment_name,
@@ -245,12 +338,6 @@ def main() -> None:
     tracking_uri = configure_mlflow_tracing(
         tracing_config
     )
-
-    def report_synthesizer(*, state):
-        return run_supervisor_report_synthesis(
-            state=state,
-            profile=args.profile,
-        )
 
     predict_calls = itertools.count(
         1
@@ -267,6 +354,11 @@ def main() -> None:
         symbol_label = ",".join(
             requested_symbols
         )
+        downstream_calls = {
+            "market_worker": 0,
+            "company_worker": 0,
+            "report_synthesizer": 0,
+        }
 
         print(
             "SUPERVISOR_EVAL_PREDICT_START"
@@ -275,16 +367,75 @@ def main() -> None:
             flush=True,
         )
 
+        def counted_market_worker(*, request):
+            downstream_calls[
+                "market_worker"
+            ] += 1
+            if workers is None:
+                raise RuntimeError(
+                    "E3 scope rejection reached the Market Analyst boundary."
+                )
+            return workers.market_worker(
+                request=request
+            )
+
+        def counted_company_worker(*, request, topic):
+            downstream_calls[
+                "company_worker"
+            ] += 1
+            if workers is None:
+                raise RuntimeError(
+                    "E3 scope rejection reached the Company Researcher boundary."
+                )
+            return workers.company_worker(
+                request=request,
+                topic=topic,
+            )
+
+        def counted_report_synthesizer(*, state):
+            downstream_calls[
+                "report_synthesizer"
+            ] += 1
+            if evaluation_kind == "scope_rejection":
+                raise RuntimeError(
+                    "E3 scope rejection reached final report synthesis."
+                )
+            return run_supervisor_report_synthesis(
+                state=state,
+                profile=args.profile,
+            )
+
         try:
             result = run_supervisor_research_graph(
                 request_text=request_text,
                 requested_symbols=tuple(
                     requested_symbols
                 ),
-                market_worker=workers.market_worker,
-                company_worker=workers.company_worker,
-                report_synthesizer=report_synthesizer,
+                market_worker=counted_market_worker,
+                company_worker=counted_company_worker,
+                report_synthesizer=counted_report_synthesizer,
                 equities=equities,
+            )
+        except ControlledToolRequestError as exc:
+            if evaluation_kind != "scope_rejection":
+                raise
+
+            return serialize_scope_rejection_for_evaluation(
+                requested_symbols=requested_symbols,
+                supported_symbols=tuple(
+                    equities
+                ),
+                error=exc,
+                downstream_calls=downstream_calls,
+            )
+        else:
+            if evaluation_kind == "scope_rejection":
+                raise RuntimeError(
+                    "E3 unexpectedly completed the research graph."
+                )
+
+            return serialize_supervisor_report_for_evaluation(
+                result.report
             )
         finally:
             elapsed = (
@@ -299,47 +450,20 @@ def main() -> None:
                 flush=True,
             )
 
-        return serialize_supervisor_report_for_evaluation(
-            result.report
-        )
-
-    dataset_name = (
-        args.dataset_name.strip()
-        if isinstance(args.dataset_name, str)
-        and args.dataset_name.strip()
-        else None
-    )
-
-    if dataset_name is not None:
-        require_managed_evaluation_dataset_runtime()
-        data = get_dataset(
-            name=dataset_name
-        )
-        data_source = (
-            f"managed_dataset:{dataset_name}"
-        )
-        case_label = "managed"
+    if evaluation_kind == "scope_rejection":
+        scorers = build_scope_rejection_scorers()
     else:
-        case_ids = (
-            args.case
-            if args.case is not None
-            else ["E1"]
+        scorers = build_evaluation_scorers(
+            include_llm_judges=args.include_llm_judges,
+            judge_model=args.judge_model,
         )
-        data = build_live_evaluation_data(
-            case_ids
-        )
-        data_source = "repository_cases"
-        case_label = ",".join(
-            case.upper()
-            for case in case_ids
-        )
-
-    scorers = build_evaluation_scorers(
-        include_llm_judges=args.include_llm_judges,
-        judge_model=args.judge_model,
-    )
 
     if args.llm_judge is not None:
+        if evaluation_kind == "scope_rejection":
+            raise ValueError(
+                "--llm-judge is not applicable to deterministic E3."
+            )
+
         if not args.include_llm_judges:
             raise ValueError(
                 "--llm-judge requires --include-llm-judges."
@@ -397,6 +521,7 @@ def main() -> None:
         f"; experiment={experiment_name}"
         f"; cases={case_label}"
         f"; data_source={data_source}"
+        f"; evaluation_kind={evaluation_kind}"
         f"; llm_judges={str(args.include_llm_judges).lower()}"
         f"; skip_trace_validation={str(args.skip_trace_validation).lower()}"
         f"; eval_max_workers={args.eval_max_workers}"
@@ -406,9 +531,6 @@ def main() -> None:
         f"; scorers={','.join(scorer.name for scorer in scorers)}"
     )
 
-    # MLflow 3.16 uses the active experiment selected above by
-    # configure_mlflow_tracing(); mlflow.genai.evaluate() does not accept an
-    # experiment_name keyword in this pinned API.
     result = mlflow.genai.evaluate(
         data=data,
         predict_fn=predict_fn,
