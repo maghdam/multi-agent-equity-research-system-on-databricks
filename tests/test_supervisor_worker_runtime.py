@@ -641,6 +641,127 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
                 query_text,
             )
 
+    def test_comparison_recent_developments_overretrieves_then_caps_evidence(
+        self,
+    ) -> None:
+        vector_query = Mock(
+            side_effect=[
+                {"symbol": "AAPL"},
+                {"symbol": "MSFT"},
+            ]
+        )
+        company_agent_runner = Mock(
+            side_effect=[
+                _company_agent_result(
+                    "recent_developments",
+                    ("AAPL",),
+                ),
+                _company_agent_result(
+                    "recent_developments",
+                    ("MSFT",),
+                ),
+            ]
+        )
+        workers = DatabricksSupervisorWorkers(
+            config=self.config,
+            equities=EQUITIES,
+            vector_query=vector_query,
+            company_agent_runner=company_agent_runner,
+        )
+
+        with patch(
+            "equity_research.supervisor_worker_runtime."
+            "parse_retrieval_response",
+            side_effect=[
+                (
+                    _evidence(
+                        "1" * 64,
+                        symbol="AAPL",
+                        source_type="news",
+                        title="Apple analyst price target update",
+                    ),
+                    _evidence(
+                        "2" * 64,
+                        symbol="AAPL",
+                        source_type="news",
+                        title="Apple Golden Cross technical analysis",
+                    ),
+                    _evidence(
+                        "3" * 64,
+                        symbol="AAPL",
+                        source_type="news",
+                        title="Apple launches enterprise privacy service",
+                    ),
+                    _evidence(
+                        "4" * 64,
+                        symbol="AAPL",
+                        source_type="news",
+                        title="Apple expands manufacturing operations",
+                    ),
+                ),
+                (
+                    _evidence(
+                        "5" * 64,
+                        symbol="MSFT",
+                        source_type="news",
+                        title="Microsoft 13F institutional holding update",
+                    ),
+                    _evidence(
+                        "6" * 64,
+                        symbol="MSFT",
+                        source_type="news",
+                        title="Microsoft analyst ratings update",
+                    ),
+                    _evidence(
+                        "7" * 64,
+                        symbol="MSFT",
+                        source_type="news",
+                        title="Microsoft launches enterprise AI service",
+                    ),
+                    _evidence(
+                        "8" * 64,
+                        symbol="MSFT",
+                        source_type="news",
+                        title="Microsoft expands cloud operations",
+                    ),
+                ),
+            ],
+        ):
+            workers.company_worker(
+                request=_request("AAPL", "MSFT"),
+                topic="recent_developments",
+            )
+
+        self.assertEqual(
+            [
+                call.kwargs["payload"]["num_results"]
+                for call in vector_query.call_args_list
+            ],
+            [
+                4,
+                4,
+            ],
+        )
+        self.assertEqual(
+            [
+                tuple(
+                    item.evidence_id
+                    for item in call.kwargs["evidence"]
+                )
+                for call in company_agent_runner.call_args_list
+            ],
+            [
+                (
+                    "3" * 64,
+                    "4" * 64,
+                ),
+                (
+                    "7" * 64,
+                    "8" * 64,
+                ),
+            ],
+        )
+
     def test_company_single_company_retrieval_preserves_request_text(
         self,
     ) -> None:
