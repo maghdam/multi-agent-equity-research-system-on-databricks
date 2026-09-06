@@ -9,7 +9,7 @@ from typing import Any
 from equity_research.agent_contracts import AgentContractError
 
 
-WORKER_MODEL = "databricks-gpt-oss-20b"
+WORKER_MODEL = "system.ai.gpt-oss-20b"
 WORKER_REASONING_EFFORT = "low"
 WORKER_MAX_TOKENS = 4096
 
