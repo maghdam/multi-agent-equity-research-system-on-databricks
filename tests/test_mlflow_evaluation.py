@@ -1337,6 +1337,8 @@ class MlflowJudgeConfigurationTests(unittest.TestCase):
                         "page_content": "Apple announced a product update.",
                         "metadata": {
                             "source_type": "news",
+                            "doc_uri": "https://provider.example/private",
+                            "retrieval_rank": 1,
                         },
                     }
                 ],
@@ -1377,6 +1379,10 @@ class MlflowJudgeConfigurationTests(unittest.TestCase):
                     0,
                 ),
             ],
+        )
+        self.assertNotIn(
+            "doc_uri",
+            routes[0]["documents"][0]["metadata"],
         )
         trace.search_spans.assert_called_once_with(
             span_type=SpanType.RETRIEVER
