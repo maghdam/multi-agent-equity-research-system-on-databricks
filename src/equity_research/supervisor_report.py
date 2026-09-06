@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -67,6 +68,17 @@ class SupervisorReport:
     limitations: tuple[str, ...]
     evidence: tuple[EvidenceCitation, ...]
 
+
+RELATION_TERMS = (
+    "above",
+    "below",
+    "higher",
+    "lower",
+    "larger",
+    "smaller",
+    "stronger",
+    "weaker",
+)
 
 REQUIRED_BASE_SECTIONS: tuple[ReportSectionName, ...] = (
     "market_performance",
@@ -438,6 +450,11 @@ def _parse_section(
             source_findings=source_findings,
             mode=state.request.mode,
         )
+        _validate_relation_grounding(
+            text=text,
+            source_ids=source_ids,
+            source_findings=source_findings,
+        )
 
     return ReportSection(
         section=section,
@@ -517,6 +534,37 @@ def _validate_section_sources(
             raise SupervisorReportContractError(
                 "comparative_assessment must cite findings covering both companies."
             )
+
+
+def _validate_relation_grounding(
+    *,
+    text: str,
+    source_ids: Sequence[str],
+    source_findings: Mapping[str, ReportSourceFinding],
+) -> None:
+    normalized_text = text.lower()
+    source_text = " ".join(
+        source_findings[source_id].statement.lower()
+        for source_id in source_ids
+    )
+
+    for term in RELATION_TERMS:
+        if not re.search(
+            rf"\b{re.escape(term)}\b",
+            normalized_text,
+        ):
+            continue
+
+        if re.search(
+            rf"\b{re.escape(term)}\b",
+            source_text,
+        ):
+            continue
+
+        raise SupervisorReportContractError(
+            "Report introduces an unsupported comparative relation "
+            f"{term!r} that is absent from cited worker findings."
+        )
 
 
 def _section_unavailability_supported(
