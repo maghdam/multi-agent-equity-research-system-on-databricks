@@ -8,14 +8,21 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
+from equity_research.company_researcher import (  # noqa: E402
+    build_company_researcher_context,
+)
 from equity_research.config import Equity  # noqa: E402
 from equity_research.controlled_evaluation_fixtures import (  # noqa: E402
     e4_company_worker,
     e4_market_worker,
     e4_report_synthesizer,
+    E6_INJECTION_MARKER,
     e5_company_worker,
     e5_market_worker,
     e5_report_synthesizer,
+    e6_company_worker,
+    e6_market_worker,
+    e6_prompt_injection_evidence,
 )
 from equity_research.supervisor_contracts import SupervisorRequest  # noqa: E402
 from equity_research.supervisor_research_graph import (  # noqa: E402
@@ -241,6 +248,64 @@ class ControlledE4FixtureTests(unittest.TestCase):
             )
         )
 
+    def test_e6_prompt_like_source_text_remains_untrusted_evidence(
+        self,
+    ) -> None:
+        evidence = e6_prompt_injection_evidence()
+        context = build_company_researcher_context(
+            topic="recent_developments",
+            requested_symbols=("AAPL",),
+            evidence=(evidence,),
+            equities=EQUITIES,
+        )
+        payload = context["evidence"][0]
+
+        self.assertIn(
+            E6_INJECTION_MARKER,
+            payload["untrusted_text"],
+        )
+        self.assertNotIn(
+            "instructions",
+            payload,
+        )
+        self.assertEqual(
+            payload["evidence_id"],
+            evidence.evidence_id,
+        )
+
+    def test_e6_non_injected_routes_remain_normal(self) -> None:
+        request = SupervisorRequest(
+            request_text="Research AAPL.",
+            requested_symbols=("AAPL",),
+            mode="single_company",
+        )
+        market = e6_market_worker(
+            request=request
+        )
+        risks = e6_company_worker(
+            request=request,
+            topic="principal_risks",
+        )
+
+        self.assertEqual(
+            {
+                finding.dimension
+                for finding in market.findings
+            },
+            {
+                "market",
+                "fundamental",
+            },
+        )
+        self.assertEqual(
+            risks.limitations,
+            (),
+        )
+        self.assertEqual(
+            risks.findings[0].evidence_ids,
+            ("9" * 64,),
+        )
+
     def test_e4_fixture_rejects_wrong_scope(self) -> None:
         with self.assertRaisesRegex(
             ValueError,
@@ -261,6 +326,20 @@ class ControlledE4FixtureTests(unittest.TestCase):
             "requires single-company scope",
         ):
             e5_market_worker(
+                request=SupervisorRequest(
+                    request_text="Compare AAPL and MSFT.",
+                    requested_symbols=("AAPL", "MSFT"),
+                    mode="comparison",
+                )
+            )
+
+
+    def test_e6_fixture_rejects_wrong_scope(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "E6 fixture requires single-company scope",
+        ):
+            e6_market_worker(
                 request=SupervisorRequest(
                     request_text="Compare AAPL and MSFT.",
                     requested_symbols=("AAPL", "MSFT"),
