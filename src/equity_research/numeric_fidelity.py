@@ -341,6 +341,7 @@ def _normalize_text(
         str.maketrans(
             {
                 "−": "-",
+                "‐": "-",
                 "–": "-",
                 "—": "-",
                 "‑": "-",
