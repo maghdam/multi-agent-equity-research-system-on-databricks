@@ -14,6 +14,7 @@ from mlflow.genai.scorers import (
 )
 
 from equity_research.supervisor_report import SupervisorReport
+from equity_research.tool_scope import ControlledToolRequestError
 
 
 LIVE_EVALUATION_CASES: dict[str, dict[str, Any]] = {
@@ -64,6 +65,23 @@ LIVE_EVALUATION_CASES: dict[str, dict[str, Any]] = {
                 "principal_risks",
                 "comparative_assessment",
             ],
+        },
+    },
+    "E3": {
+        "inputs": {
+            "request_text": "Compare AAPL and NVDA.",
+            "requested_symbols": ["AAPL", "NVDA"],
+        },
+        "tags": {
+            "case_id": "E3",
+            "category": "unsupported_scope_rejection",
+            "source": "ai_research_contract",
+        },
+        "expectations": {
+            "expected_rejection_reason": "unsupported_symbol",
+            "expected_requested_symbols": ["AAPL", "NVDA"],
+            "expected_unsupported_symbols": ["NVDA"],
+            "expected_supported_symbols": ["AAPL", "MSFT"],
         },
     },
 }
@@ -303,7 +321,7 @@ def _assessment_field(
 def build_live_evaluation_data(
     case_ids: Sequence[str],
 ) -> list[dict[str, Any]]:
-    """Build frozen E1/E2 live-evaluation rows from the AI research contract."""
+    """Build frozen E1-E3 live-evaluation rows from the AI research contract."""
 
     if isinstance(case_ids, (str, bytes)):
         raise ValueError(
@@ -334,43 +352,243 @@ def build_live_evaluation_data(
     if unknown:
         raise ValueError(
             "Unsupported live evaluation case IDs: "
-            f"{unknown}. Supported live cases are E1 and E2."
+            f"{unknown}. Supported live cases are E1, E2, and E3."
         )
 
-    return [
-        {
-            "inputs": {
-                "request_text": LIVE_EVALUATION_CASES[case_id][
-                    "inputs"
-                ]["request_text"],
-                "requested_symbols": list(
-                    LIVE_EVALUATION_CASES[case_id][
+    rows: list[dict[str, Any]] = []
+
+    for case_id in normalized:
+        case = LIVE_EVALUATION_CASES[
+            case_id
+        ]
+        rows.append(
+            {
+                "inputs": {
+                    key: (
+                        list(value)
+                        if isinstance(value, list)
+                        else value
+                    )
+                    for key, value in case[
                         "inputs"
-                    ]["requested_symbols"]
+                    ].items()
+                },
+                "tags": dict(
+                    case["tags"]
                 ),
-            },
-            "tags": dict(
-                LIVE_EVALUATION_CASES[case_id][
-                    "tags"
-                ]
-            ),
-            "expectations": {
-                "expected_mode": LIVE_EVALUATION_CASES[case_id][
-                    "expectations"
-                ]["expected_mode"],
-                "expected_symbols": list(
-                    LIVE_EVALUATION_CASES[case_id][
+                "expectations": {
+                    key: (
+                        list(value)
+                        if isinstance(value, list)
+                        else value
+                    )
+                    for key, value in case[
                         "expectations"
-                    ]["expected_symbols"]
-                ),
-                "required_sections": list(
-                    LIVE_EVALUATION_CASES[case_id][
-                        "expectations"
-                    ]["required_sections"]
-                ),
-            },
-        }
-        for case_id in normalized
+                    ].items()
+                },
+            }
+        )
+
+    return rows
+
+
+def serialize_scope_rejection_for_evaluation(
+    *,
+    requested_symbols: Sequence[str],
+    supported_symbols: Sequence[str],
+    error: ControlledToolRequestError,
+    downstream_calls: Mapping[str, int],
+) -> dict[str, Any]:
+    """Serialize one controlled pre-tool scope rejection for MLflow evaluation."""
+
+    if not isinstance(
+        error,
+        ControlledToolRequestError,
+    ):
+        raise TypeError(
+            "error must be ControlledToolRequestError."
+        )
+
+    normalized_requested = [
+        str(symbol).strip().upper()
+        for symbol in requested_symbols
+    ]
+    normalized_supported = sorted(
+        str(symbol).strip().upper()
+        for symbol in supported_symbols
+    )
+    supported_set = set(
+        normalized_supported
+    )
+    unsupported = [
+        symbol
+        for symbol in normalized_requested
+        if symbol not in supported_set
+    ]
+
+    if not unsupported:
+        raise ValueError(
+            "Scope-rejection evaluation requires at least one unsupported symbol."
+        )
+
+    expected_call_keys = {
+        "market_worker",
+        "company_worker",
+        "report_synthesizer",
+    }
+    if set(
+        downstream_calls
+    ) != expected_call_keys:
+        raise ValueError(
+            "downstream_calls must contain exactly market_worker, "
+            "company_worker, and report_synthesizer."
+        )
+
+    normalized_calls: dict[str, int] = {}
+    for key in sorted(
+        expected_call_keys
+    ):
+        value = downstream_calls[
+            key
+        ]
+        if (
+            not isinstance(value, int)
+            or isinstance(value, bool)
+            or value < 0
+        ):
+            raise ValueError(
+                "downstream_calls values must be nonnegative integers."
+            )
+        normalized_calls[
+            key
+        ] = value
+
+    return {
+        "outcome": "rejected",
+        "reason_code": "unsupported_symbol",
+        "error_type": type(
+            error
+        ).__name__,
+        "requested_symbols": normalized_requested,
+        "unsupported_symbols": unsupported,
+        "supported_symbols": normalized_supported,
+        "downstream_calls": normalized_calls,
+    }
+
+
+@scorer
+def expected_scope_rejection(
+    outputs: Mapping[str, Any] | None,
+    expectations: Mapping[str, Any] | None,
+) -> bool:
+    """Check exact unsupported-symbol rejection semantics for E3."""
+
+    if not isinstance(outputs, Mapping):
+        return False
+
+    return (
+        outputs.get(
+            "outcome"
+        )
+        == "rejected"
+        and outputs.get(
+            "reason_code"
+        )
+        == _required_expectation_text(
+            expectations,
+            "expected_rejection_reason",
+        )
+        and tuple(
+            outputs.get(
+                "requested_symbols",
+                (),
+            )
+        )
+        == _required_expectation_string_list(
+            expectations,
+            "expected_requested_symbols",
+        )
+        and tuple(
+            outputs.get(
+                "unsupported_symbols",
+                (),
+            )
+        )
+        == _required_expectation_string_list(
+            expectations,
+            "expected_unsupported_symbols",
+        )
+        and outputs.get(
+            "error_type"
+        )
+        == "ControlledToolRequestError"
+    )
+
+
+@scorer
+def supported_universe_disclosure(
+    outputs: Mapping[str, Any] | None,
+    expectations: Mapping[str, Any] | None,
+) -> bool:
+    """Check that rejection exposes the configured supported universe."""
+
+    if not isinstance(outputs, Mapping):
+        return False
+
+    return tuple(
+        outputs.get(
+            "supported_symbols",
+            (),
+        )
+    ) == _required_expectation_string_list(
+        expectations,
+        "expected_supported_symbols",
+    )
+
+
+@scorer
+def no_downstream_execution(
+    outputs: Mapping[str, Any] | None,
+) -> bool:
+    """Check that scope rejection happened before workers or synthesis ran."""
+
+    if not isinstance(outputs, Mapping):
+        return False
+
+    calls = outputs.get(
+        "downstream_calls"
+    )
+    if not isinstance(calls, Mapping):
+        return False
+
+    expected_keys = {
+        "market_worker",
+        "company_worker",
+        "report_synthesizer",
+    }
+
+    return (
+        set(
+            calls
+        )
+        == expected_keys
+        and all(
+            calls[
+                key
+            ]
+            == 0
+            for key in expected_keys
+        )
+    )
+
+
+def build_scope_rejection_scorers() -> list[Any]:
+    """Return deterministic scorers for the standalone E3 rejection case."""
+
+    return [
+        expected_scope_rejection,
+        supported_universe_disclosure,
+        no_downstream_execution,
     ]
 
 
