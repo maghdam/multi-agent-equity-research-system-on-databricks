@@ -125,6 +125,48 @@ SUPERVISOR_REPORT_RESPONSE_FORMAT = {
 }
 
 
+def build_supervisor_report_repair_request(
+    context: Mapping[str, Any],
+    *,
+    validation_error: str,
+) -> dict[str, Any]:
+    """Build one controlled repair request after deterministic validation."""
+
+    if not isinstance(context, Mapping):
+        raise SupervisorReportContractError(
+            "Supervisor report context must be an object."
+        )
+
+    if (
+        not isinstance(validation_error, str)
+        or not validation_error.strip()
+    ):
+        raise SupervisorReportContractError(
+            "validation_error must be a nonblank string."
+        )
+
+    payload = build_supervisor_report_model_request(
+        context
+    )
+    payload["messages"] = [
+        *payload["messages"],
+        {
+            "role": "user",
+            "content": (
+                "The previous synthesis attempt failed deterministic "
+                "application validation. Regenerate the entire report from "
+                "the same controlled context and correct this exact issue:\n"
+                f"{validation_error.strip()}\n"
+                "Do not weaken, bypass, reinterpret, or argue with the "
+                "validator. Return only a corrected report matching the "
+                "response schema."
+            ),
+        },
+    ]
+
+    return payload
+
+
 def build_supervisor_report_model_request(
     context: Mapping[str, Any],
 ) -> dict[str, Any]:
