@@ -191,6 +191,8 @@ def main() -> None:
                     "request_mode",
                     "rejection_reason",
                     "unsupported_symbol_count",
+                    "evaluation_case",
+                    "fixture_type",
                     "token_usage",
                 ):
                     value = span_summary[
