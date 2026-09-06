@@ -1,5 +1,6 @@
 """Offline tests for MLflow Supervisor-report evaluation helpers."""
 
+import builtins
 import sys
 import unittest
 from types import SimpleNamespace
@@ -20,6 +21,7 @@ from equity_research.mlflow_evaluation import (  # noqa: E402
     expected_symbol_scope,
     report_section_grounding_contract,
     report_status,
+    require_managed_evaluation_dataset_runtime,
     required_report_sections,
     serialize_supervisor_report_for_evaluation,
     summarize_trace_assessments,
@@ -89,6 +91,34 @@ def _expectations() -> dict:
             "principal_risks",
         ],
     }
+
+
+class ManagedEvaluationDatasetRuntimeTests(unittest.TestCase):
+    def test_missing_optional_runtime_has_actionable_error(self) -> None:
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "databricks.agents.datasets":
+                raise ImportError(
+                    "synthetic missing databricks-agents"
+                )
+            return real_import(
+                name,
+                *args,
+                **kwargs,
+            )
+
+        from unittest.mock import patch
+
+        with patch(
+            "builtins.__import__",
+            side_effect=fake_import,
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "requirements-evaluation-dataset.txt",
+            ):
+                require_managed_evaluation_dataset_runtime()
 
 
 class MlflowAssessmentSummaryTests(unittest.TestCase):
