@@ -301,6 +301,29 @@ class SupervisorReportPromptTests(unittest.TestCase):
             user_content,
         )
 
+    def test_supervisor_prompt_forbids_unbacked_comparative_inference(
+        self,
+    ) -> None:
+        payload = build_supervisor_report_model_request(
+            build_supervisor_report_context(
+                _state(("AAPL", "MSFT"))
+            )
+        )
+        system_message = payload["messages"][0]["content"]
+
+        for phrase in (
+            "above/below",
+            "higher/lower",
+            "larger/smaller",
+            "present the values side by side",
+            "Golden Cross",
+            "13F",
+        ):
+            self.assertIn(
+                phrase,
+                system_message,
+            )
+
     def test_prompt_builder_rejects_non_mapping_context(self) -> None:
         with self.assertRaisesRegex(
             SupervisorReportContractError,
