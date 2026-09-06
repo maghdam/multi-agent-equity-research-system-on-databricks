@@ -158,12 +158,6 @@ def main() -> None:
 
             printed += 1
 
-    if printed == 0 and available_names:
-        print(
-            "AVAILABLE_ASSESSMENTS"
-            f"; names={','.join(sorted(available_names))}"
-        )
-
         if args.show_span_summary:
             trace_data = getattr(
                 trace,
@@ -210,6 +204,12 @@ def main() -> None:
                     )
                 )
                 span_summaries += 1
+
+    if printed == 0 and available_names:
+        print(
+            "AVAILABLE_ASSESSMENTS"
+            f"; names={','.join(sorted(available_names))}"
+        )
 
     print(
         "MLFLOW_EVALUATION_INSPECTION=PASSED"
