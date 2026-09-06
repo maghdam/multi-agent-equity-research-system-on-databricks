@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from equity_research.config import Equity
+from equity_research.config import Equity, load_equities
 from equity_research.gold_fundamental_metrics import GoldFundamentalMetric
 from equity_research.gold_market_metrics import GoldMarketMetric
 from equity_research.tool_scope import resolve_requested_equities
@@ -60,21 +60,19 @@ def prepare_market_metrics_results(
 ) -> tuple[MarketMetricsToolResult, ...]:
     """Select and readiness-check current Gold market metrics."""
 
+    configured = (
+        dict(load_equities())
+        if equities is None
+        else dict(equities)
+    )
     requested = resolve_requested_equities(
         requested_symbols,
-        equities=equities,
+        equities=configured,
     )
     now = _require_aware_utc(now_utc)
     by_symbol = _index_market_metrics(
         metrics,
-        configured_symbols={
-            equity.symbol
-            for equity in (
-                equities.values()
-                if equities is not None
-                else requested
-            )
-        },
+        configured_symbols=set(configured),
     )
 
     results: list[MarketMetricsToolResult] = []
@@ -176,21 +174,19 @@ def prepare_fundamental_metrics_results(
 ) -> tuple[FundamentalMetricsToolResult, ...]:
     """Select and readiness-check current Gold fundamental metrics."""
 
+    configured = (
+        dict(load_equities())
+        if equities is None
+        else dict(equities)
+    )
     requested = resolve_requested_equities(
         requested_symbols,
-        equities=equities,
+        equities=configured,
     )
     now = _require_aware_utc(now_utc)
     by_symbol = _index_fundamental_metrics(
         metrics,
-        configured_symbols={
-            equity.symbol
-            for equity in (
-                equities.values()
-                if equities is not None
-                else requested
-            )
-        },
+        configured_symbols=set(configured),
     )
 
     results: list[FundamentalMetricsToolResult] = []
