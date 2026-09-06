@@ -20,16 +20,21 @@ from equity_research.mlflow_evaluation import (  # noqa: E402
     build_narrative_trace_grounding_judge,
     build_evaluation_scorers,
     build_llm_judges,
+    build_scope_rejection_scorers,
     evidence_count,
     expected_request_mode,
+    expected_scope_rejection,
     expected_symbol_scope,
+    no_downstream_execution,
     report_section_grounding_contract,
     report_status,
     require_managed_evaluation_dataset_runtime,
     required_report_sections,
+    serialize_scope_rejection_for_evaluation,
     serialize_supervisor_report_for_evaluation,
     summarize_observability_spans,
     summarize_trace_assessments,
+    supported_universe_disclosure,
     synthesis_mode,
 )
 from equity_research.supervisor_report import (  # noqa: E402
@@ -37,6 +42,7 @@ from equity_research.supervisor_report import (  # noqa: E402
     ReportSection,
     SupervisorReport,
 )
+from equity_research.tool_scope import ControlledToolRequestError  # noqa: E402
 
 
 def _report() -> SupervisorReport:
@@ -278,14 +284,14 @@ class MlflowAssessmentSummaryTests(unittest.TestCase):
 
 
 class MlflowEvaluationCaseTests(unittest.TestCase):
-    def test_builds_frozen_e1_and_e2_rows(self) -> None:
+    def test_builds_frozen_e1_e2_and_e3_rows(self) -> None:
         rows = build_live_evaluation_data(
-            ("E1", "E2")
+            ("E1", "E2", "E3")
         )
 
         self.assertEqual(
             len(rows),
-            2,
+            3,
         )
         self.assertEqual(
             rows[0]["inputs"]["requested_symbols"],
@@ -315,14 +321,31 @@ class MlflowEvaluationCaseTests(unittest.TestCase):
             rows[1]["expectations"]["required_sections"][-1],
             "comparative_assessment",
         )
+        self.assertEqual(
+            rows[2]["inputs"]["requested_symbols"],
+            ["AAPL", "NVDA"],
+        )
+        self.assertEqual(
+            rows[2]["tags"]["category"],
+            "unsupported_scope_rejection",
+        )
+        self.assertEqual(
+            rows[2]["expectations"],
+            {
+                "expected_rejection_reason": "unsupported_symbol",
+                "expected_requested_symbols": ["AAPL", "NVDA"],
+                "expected_unsupported_symbols": ["NVDA"],
+                "expected_supported_symbols": ["AAPL", "MSFT"],
+            },
+        )
 
     def test_rejects_unsupported_or_duplicate_live_case_ids(self) -> None:
         with self.assertRaisesRegex(
             ValueError,
-            "Supported live cases are E1 and E2",
+            "Supported live cases are E1, E2, and E3",
         ):
             build_live_evaluation_data(
-                ("E3",)
+                ("E4",)
             )
 
         with self.assertRaisesRegex(
@@ -332,6 +355,112 @@ class MlflowEvaluationCaseTests(unittest.TestCase):
             build_live_evaluation_data(
                 ("E1", "e1")
             )
+
+
+class MlflowScopeRejectionTests(unittest.TestCase):
+    def test_serializes_e3_without_copying_exception_message(self) -> None:
+        secret = "provider text that must not be copied"
+        output = serialize_scope_rejection_for_evaluation(
+            requested_symbols=("AAPL", "NVDA"),
+            supported_symbols=("MSFT", "AAPL"),
+            error=ControlledToolRequestError(
+                secret
+            ),
+            downstream_calls={
+                "market_worker": 0,
+                "company_worker": 0,
+                "report_synthesizer": 0,
+            },
+        )
+
+        self.assertEqual(
+            output,
+            {
+                "outcome": "rejected",
+                "reason_code": "unsupported_symbol",
+                "error_type": "ControlledToolRequestError",
+                "requested_symbols": ["AAPL", "NVDA"],
+                "unsupported_symbols": ["NVDA"],
+                "supported_symbols": ["AAPL", "MSFT"],
+                "downstream_calls": {
+                    "company_worker": 0,
+                    "market_worker": 0,
+                    "report_synthesizer": 0,
+                },
+            },
+        )
+        self.assertNotIn(
+            secret,
+            str(output),
+        )
+
+    def test_e3_scope_rejection_scorers_pass_exact_contract(self) -> None:
+        output = serialize_scope_rejection_for_evaluation(
+            requested_symbols=("AAPL", "NVDA"),
+            supported_symbols=("AAPL", "MSFT"),
+            error=ControlledToolRequestError(
+                "Unsupported symbol."
+            ),
+            downstream_calls={
+                "market_worker": 0,
+                "company_worker": 0,
+                "report_synthesizer": 0,
+            },
+        )
+        expectations = build_live_evaluation_data(
+            ("E3",)
+        )[0]["expectations"]
+
+        self.assertTrue(
+            expected_scope_rejection(
+                outputs=output,
+                expectations=expectations,
+            )
+        )
+        self.assertTrue(
+            supported_universe_disclosure(
+                outputs=output,
+                expectations=expectations,
+            )
+        )
+        self.assertTrue(
+            no_downstream_execution(
+                outputs=output
+            )
+        )
+        self.assertEqual(
+            [
+                scorer.name
+                for scorer in build_scope_rejection_scorers()
+            ],
+            [
+                "expected_scope_rejection",
+                "supported_universe_disclosure",
+                "no_downstream_execution",
+            ],
+        )
+
+    def test_e3_no_downstream_execution_fails_on_any_boundary_call(
+        self,
+    ) -> None:
+        output = serialize_scope_rejection_for_evaluation(
+            requested_symbols=("AAPL", "NVDA"),
+            supported_symbols=("AAPL", "MSFT"),
+            error=ControlledToolRequestError(
+                "Unsupported symbol."
+            ),
+            downstream_calls={
+                "market_worker": 1,
+                "company_worker": 0,
+                "report_synthesizer": 0,
+            },
+        )
+
+        self.assertFalse(
+            no_downstream_execution(
+                outputs=output
+            )
+        )
 
 
 class MlflowEvaluationSerializationTests(unittest.TestCase):
