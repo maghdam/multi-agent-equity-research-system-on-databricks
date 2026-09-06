@@ -201,19 +201,19 @@ class MlflowCodeScorerTests(unittest.TestCase):
             expected_request_mode(
                 outputs=output,
                 expectations=expectations,
-            ).value
+            )
         )
         self.assertTrue(
             expected_symbol_scope(
                 outputs=output,
                 expectations=expectations,
-            ).value
+            )
         )
         self.assertTrue(
             required_report_sections(
                 outputs=output,
                 expectations=expectations,
-            ).value
+            )
         )
 
     def test_scope_scorer_rejects_wrong_symbol(self) -> None:
@@ -227,7 +227,7 @@ class MlflowCodeScorerTests(unittest.TestCase):
             expected_symbol_scope(
                 outputs=output,
                 expectations=expectations,
-            ).value
+            )
         )
 
     def test_section_grounding_scorer_rejects_available_without_sources(
@@ -241,7 +241,7 @@ class MlflowCodeScorerTests(unittest.TestCase):
         self.assertFalse(
             report_section_grounding_contract(
                 outputs=output
-            ).value
+            )
         )
 
     def test_status_mode_and_evidence_scorers_expose_observability_values(
@@ -254,19 +254,19 @@ class MlflowCodeScorerTests(unittest.TestCase):
         self.assertEqual(
             synthesis_mode(
                 outputs=output
-            ).value,
+            ),
             "model",
         )
         self.assertEqual(
             report_status(
                 outputs=output
-            ).value,
+            ),
             "ready",
         )
         self.assertEqual(
             evidence_count(
                 outputs=output
-            ).value,
+            ),
             2,
         )
 
