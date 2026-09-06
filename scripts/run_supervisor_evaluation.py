@@ -79,7 +79,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Databricks SQL warehouse ID. Required for report cases E1/E2 "
-            "and managed report datasets; not required for controlled E3-E5."
+            "and managed report datasets; not required for controlled E3-E6."
         ),
     )
     parser.add_argument(
@@ -97,7 +97,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Physical Gold schema name. Required for report cases E1/E2 "
-            "and managed report datasets; not required for controlled E3-E5."
+            "and managed report datasets; not required for controlled E3-E6."
         ),
     )
     parser.add_argument(
@@ -105,7 +105,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Fully qualified physical Vector Search index name. Required for "
-            "report cases E1/E2 and managed report datasets; not required for controlled E3-E5."
+            "report cases E1/E2 and managed report datasets; not required for controlled E3-E6."
         ),
     )
     parser.add_argument(
