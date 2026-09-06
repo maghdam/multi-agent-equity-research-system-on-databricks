@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from mlflow.genai.judges import make_judge
+from mlflow.entities import Feedback, SpanType
 from mlflow.genai.scorers import (
     Guidelines,
     RelevanceToQuery,
@@ -490,37 +490,228 @@ def build_narrative_trace_grounding_judge(
     *,
     model: str = "databricks:/databricks-gpt-oss-120b",
 ):
-    """Judge only RAG-backed narrative sections against all retriever spans."""
+    """Build a trace-aware narrative grounding scorer with bounded parse retry."""
 
     if not isinstance(model, str) or not model.strip():
         raise ValueError(
             "model must be a nonblank string."
         )
 
-    return make_judge(
-        name="narrative_trace_groundedness",
-        instructions=(
-            "Analyze the complete execution {{ trace }} for an equity-research "
-            "response. Evaluate only the final report's recent_developments and "
-            "principal_risks sections for factual grounding in the RETRIEVER "
-            "spans. Consider all RETRIEVER spans in the trace together, across "
-            "all requested symbols and topics. Do not require any one retriever "
-            "span by itself to support the entire report. Ignore "
-            "market_performance, fundamental_performance, and numerical claims "
-            "whose authority is structured Gold data rather than RAG. A "
-            "narrative statement is grounded when its factual content is "
-            "explicitly stated or directly implied by at least one retrieved "
-            "chunk actually supplied to the Company Researcher. Do not penalize "
-            "the report merely because one symbol/topic has no retrieved "
-            "evidence if the report explicitly discloses that limitation. "
-            "Return true only when every factual claim in the two narrative "
-            "sections is supported by the union of relevant retrieved chunks; "
-            "otherwise return false and identify the unsupported claim and the "
-            "closest retrieved evidence."
+    judge_model = model.strip()
+    grounding_judge = Guidelines(
+        name="narrative_trace_grounding_inner",
+        guidelines=(
+            "Evaluate only the supplied narrative_sections against the supplied "
+            "retrieved_evidence. Every factual claim in recent_developments and "
+            "principal_risks must be explicitly stated or directly supported by "
+            "at least one retrieved evidence chunk. Source-attributed causal or "
+            "interpretive statements are acceptable only when that relationship "
+            "is supported by the retrieved evidence. Do not require market or "
+            "fundamental metrics to appear in retrieved evidence. Missing evidence "
+            "for a company or topic is acceptable only when the narrative or "
+            "limitations explicitly disclose that coverage gap."
         ),
-        feedback_value_type=bool,
-        model=model.strip(),
+        model=judge_model,
     )
+
+    @scorer(
+        name="narrative_trace_groundedness"
+    )
+    def narrative_trace_groundedness(
+        outputs: Mapping[str, Any] | None,
+        trace: Any,
+    ) -> Feedback:
+        judge_inputs, judge_outputs = _narrative_grounding_payload(
+            outputs=outputs,
+            trace=trace,
+        )
+        feedback = _run_grounding_guidelines_with_parse_retry(
+            grounding_judge,
+            inputs=judge_inputs,
+            outputs=judge_outputs,
+        )
+        normalized = str(
+            feedback.value
+        ).strip().lower()
+
+        if normalized not in {"yes", "no"}:
+            raise ValueError(
+                "Narrative grounding judge returned an unsupported value: "
+                f"{feedback.value!r}."
+            )
+
+        return Feedback(
+            name="narrative_trace_groundedness",
+            value=normalized == "yes",
+            rationale=feedback.rationale,
+        )
+
+    return narrative_trace_groundedness
+
+
+def _narrative_grounding_payload(
+    *,
+    outputs: Mapping[str, Any] | None,
+    trace: Any,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Map one mixed Gold+RAG trace to the exact narrative grounding surface."""
+
+    sections = _required_sections(
+        outputs
+    )
+    narrative_sections = [
+        {
+            "section": section["section"],
+            "status": section["status"],
+            "text": section["text"],
+        }
+        for section in sections
+        if section["section"] in {
+            "recent_developments",
+            "principal_risks",
+        }
+    ]
+
+    if not narrative_sections:
+        raise ValueError(
+            "Narrative grounding requires recent_developments or principal_risks."
+        )
+
+    if not isinstance(outputs, Mapping):
+        raise ValueError(
+            "outputs must be an object."
+        )
+
+    raw_evidence_ids = outputs.get(
+        "evidence_ids"
+    )
+    if not isinstance(raw_evidence_ids, list) or any(
+        not isinstance(value, str)
+        or not value.strip()
+        for value in raw_evidence_ids
+    ):
+        raise ValueError(
+            "outputs.evidence_ids must be a list of nonblank strings."
+        )
+
+    cited_evidence_ids = {
+        value.strip()
+        for value in raw_evidence_ids
+    }
+
+    if trace is None or not hasattr(
+        trace,
+        "search_spans",
+    ):
+        raise ValueError(
+            "Narrative grounding requires an MLflow trace with retriever spans."
+        )
+
+    retriever_spans = trace.search_spans(
+        span_type=SpanType.RETRIEVER
+    )
+    retrieved_evidence: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+
+    for span in retriever_spans:
+        documents = getattr(
+            span,
+            "outputs",
+            None,
+        )
+
+        if not isinstance(documents, list):
+            continue
+
+        for document in documents:
+            if not isinstance(document, Mapping):
+                continue
+
+            evidence_id = document.get(
+                "id"
+            )
+            page_content = document.get(
+                "page_content"
+            )
+
+            if (
+                not isinstance(evidence_id, str)
+                or not evidence_id.strip()
+                or evidence_id.strip() not in cited_evidence_ids
+                or evidence_id.strip() in seen_ids
+                or not isinstance(page_content, str)
+                or not page_content.strip()
+            ):
+                continue
+
+            metadata = document.get(
+                "metadata"
+            )
+            metadata = (
+                dict(metadata)
+                if isinstance(metadata, Mapping)
+                else {}
+            )
+            normalized_id = evidence_id.strip()
+            retrieved_evidence.append(
+                {
+                    "evidence_id": normalized_id,
+                    "page_content": page_content.strip(),
+                    "source_type": metadata.get(
+                        "source_type"
+                    ),
+                    "configured_symbols": metadata.get(
+                        "configured_symbols"
+                    ),
+                    "evidence_date": metadata.get(
+                        "evidence_date"
+                    ),
+                }
+            )
+            seen_ids.add(
+                normalized_id
+            )
+
+    limitations = outputs.get(
+        "limitations"
+    )
+    if not isinstance(limitations, list):
+        raise ValueError(
+            "outputs.limitations must be a list."
+        )
+
+    return (
+        {
+            "retrieved_evidence": retrieved_evidence,
+        },
+        {
+            "narrative_sections": narrative_sections,
+            "limitations": limitations,
+        },
+    )
+
+
+def _run_grounding_guidelines_with_parse_retry(
+    judge: Guidelines,
+    *,
+    inputs: dict[str, Any],
+    outputs: dict[str, Any],
+) -> Feedback:
+    """Retry exactly once when a judge response cannot be parsed."""
+
+    try:
+        return judge(
+            inputs=inputs,
+            outputs=outputs,
+        )
+    except Exception as exc:
+        if "Failed to parse response from judge model" not in str(exc):
+            raise
+
+        return judge(
+            inputs=inputs,
+            outputs=outputs,
+        )
 
 
 def build_llm_judges(
