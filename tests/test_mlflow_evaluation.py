@@ -1,5 +1,6 @@
 """Offline tests for MLflow Supervisor-report evaluation helpers."""
 
+import builtins
 import sys
 import unittest
 from pathlib import Path
@@ -14,6 +15,7 @@ from equity_research.mlflow_evaluation import (  # noqa: E402
     build_live_evaluation_data,
     build_evaluation_scorers,
     build_llm_judges,
+    ensure_llm_judge_runtime,
     evidence_count,
     expected_request_mode,
     expected_symbol_scope,
@@ -285,6 +287,41 @@ class MlflowCodeScorerTests(unittest.TestCase):
                 "evidence_count",
             ],
         )
+
+
+class MlflowJudgeRuntimeTests(unittest.TestCase):
+    def test_non_databricks_judge_model_needs_no_managed_runtime(self) -> None:
+        ensure_llm_judge_runtime(
+            model="openai:/gpt-4.1-mini"
+        )
+
+    def test_databricks_judge_runtime_missing_fails_fast(self) -> None:
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "databricks.agents.evals.judges":
+                raise ImportError(
+                    "synthetic missing databricks-agents"
+                )
+            return real_import(
+                name,
+                *args,
+                **kwargs,
+            )
+
+        from unittest.mock import patch
+
+        with patch(
+            "builtins.__import__",
+            side_effect=fake_import,
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "mlflow\[databricks\]==3.16.0",
+            ):
+                ensure_llm_judge_runtime(
+                    model="databricks"
+                )
 
 
 class MlflowJudgeConfigurationTests(unittest.TestCase):
