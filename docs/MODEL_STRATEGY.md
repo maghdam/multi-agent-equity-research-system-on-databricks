@@ -767,10 +767,11 @@ criteria or calibrate judges.
 Milestone 3 adds the interactive research application.
 
 The app does **not** initially introduce a separate fourth LLM between the user
-and the agent graph. The LangGraph Supervisor is the user-facing chat/research
-model.
+and the agent graph. The app-facing research path is a deterministic LangGraph
+Supervisor around the verified workers, followed by GPT OSS 120B terminal
+synthesis.
 
-The initial application path is:
+The implemented application path is:
 
 ```text
 User
@@ -779,8 +780,8 @@ User
 Chat application
   |
   v
-LangGraph Supervisor
-GPT OSS 120B
+Deterministic LangGraph Supervisor
+(scope validation + fixed worker routing)
   |
   +-----------------------+
   |                       |
@@ -789,9 +790,21 @@ Market Analyst       Company Researcher
 GPT OSS 20B          GPT OSS 20B
   |                       |
 Gold tools              RAG
+  |                       |
+  +-----------+-----------+
+              |
+              v
+      validated SupervisorState
+              |
+              v
+      GPT OSS 120B terminal synthesis
+              |
+              v
+deterministic report/citation validation
+(one bounded repair, then deterministic fallback)
 ```
 
-Therefore the initial Milestone 3 app-facing model is:
+Therefore the initial Milestone 3 app-facing synthesis model is:
 
 ```text
 system.ai.gpt-oss-120b
@@ -799,16 +812,18 @@ system.ai.gpt-oss-120b
 
 The choice remains an evaluation baseline rather than a permanent requirement.
 
-The first meaningful model-routing experiment should compare:
+The first meaningful final-synthesis model experiment should compare:
 
 ```text
 Configuration A
-Supervisor     = GPT OSS 120B
-Worker agents  = GPT OSS 20B
+Terminal synthesis = GPT OSS 120B
+Worker agents      = GPT OSS 20B
+Deterministic routing/aggregation unchanged
 
 Configuration B
-Supervisor     = GPT OSS 20B
-Worker agents  = GPT OSS 20B
+Terminal synthesis = GPT OSS 20B
+Worker agents      = GPT OSS 20B
+Deterministic routing/aggregation unchanged
 ```
 
 Compare at least:
@@ -817,13 +832,15 @@ Compare at least:
 - correctness;
 - citation support;
 - conflict handling;
-- routing/tool-call success;
+- report-contract first-pass/repair/fallback rates;
 - latency;
 - input/output token usage;
 - serving cost when cost data are available.
 
-The larger Supervisor is retained only if its quality gain justifies the
-additional latency/cost.
+GPT OSS 120B is retained for terminal synthesis only if its quality gain
+justifies the additional latency/cost. Worker routing and state aggregation are
+not part of this model comparison because they remain deterministic LangGraph
+logic in both configurations.
 
 ### 11.1 Multi-turn application evaluation
 
@@ -911,7 +928,7 @@ The project should distinguish three kinds of evaluation:
 
 ## 13. Current status
 
-As of the worker-agent live verification on 2026-09-06:
+As of the terminal Supervisor/report live verification on 2026-09-06:
 
 ```text
 research_documents                    implemented + offline tested + live persisted
@@ -924,16 +941,29 @@ controlled HYBRID retrieval tool      implemented + offline tested + live verifi
 GPT OSS 20B model service             system.ai.gpt-oss-20b + live worker calls verified
 Market Analyst                        implemented + offline tested + live verified
 Company Researcher                    implemented + offline tested + live verified
-GPT OSS 120B Supervisor service       selected baseline; live Supervisor invocation pending
-LangGraph Supervisor                  not yet implemented
-structured report/citation validation pending
+deterministic LangGraph Supervisor    implemented + offline tested + live verified
+GPT OSS 120B terminal synthesis       implemented + live single/comparison calls verified
+structured report/citation validation implemented + offline tested + live verified
+bounded model repair                  implemented + observed live
+deterministic report fallback         implemented + offline tested
+offline repository gate               392 tests passing + Ruff clean before docs closure
 MLflow agent/RAG evaluation           designed; implementation pending
-Milestone 3 app-facing chat model      GPT OSS 120B baseline selected for later evaluation
-multi-turn app evaluation              designed; implementation pending
+Milestone 3 app-facing synthesis      GPT OSS 120B baseline live-verified
+multi-turn app evaluation             designed; implementation pending
 ```
 
-The next implementation slice is the LangGraph Supervisor over the verified
-worker-agent interfaces.
+The live comparison terminal-graph gate returned a deliberately degraded report
+because acceptable recent-development evidence was unavailable for MSFT. The
+system preserved grounded AAPL developments, Gold-backed market/fundamental
+findings, and SEC-backed risk evidence; propagated the evidence gap explicitly;
+and completed with `synthesis_mode=repaired_model`. Earlier live failures in
+comparative language and provenance were rejected by deterministic validation
+rather than silently accepted. The final runtime now permits one model repair
+and otherwise falls back to deterministic rendering from already-validated
+worker findings, followed by the same report validator.
+
+The next implementation slice is MLflow tracing and GenAI evaluation over this
+live Supervisor/report path.
 
 ## References
 

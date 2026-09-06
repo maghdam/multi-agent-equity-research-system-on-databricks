@@ -2,9 +2,9 @@
 
 Build a small research app that compares AAPL and MSFT using market data, company fundamentals, and cited news/filing evidence. See [README.md](README.md) for the architecture and expected output.
 
-**Current position:** Milestone 1 — Data Engineering is complete and Milestone 2 — AI Engineering is active. The deterministic RAG corpus, managed embeddings/vector index, independent retrieval holdout, controlled structured-data/retrieval tools, and both worker agents are implemented and live-verified in Databricks. The Market Analyst consumes only controlled ready Gold metrics and returns findings whose symbols, dimensions, metric fields, and exact as-of dates are validated deterministically. The Company Researcher consumes only controlled retrieval evidence, treats retrieved text as untrusted, preserves supplied evidence IDs, distinguishes company developments from irrelevant market/personnel activity, and distinguishes SEC-disclosed risks from news-based risk context. Both workers use the Unity Catalog model service `system.ai.gpt-oss-20b` through structured JSON output, followed by application-side validation. Credential-free GitHub Actions continues to run Ruff correctness lint and the offline test suite on pull requests and pushes to `main`.
+**Current position:** Milestone 1 — Data Engineering is complete and Milestone 2 — AI Engineering is active. The deterministic RAG corpus, managed embeddings/vector index, independent retrieval holdout, controlled structured-data/retrieval tools, both GPT OSS 20B worker agents, deterministic LangGraph Supervisor routing/aggregation, and structured final-report/citation validation are implemented and live-verified. The app-facing research graph validates one- or two-company scope before tool access, runs the Market Analyst and two Company Researcher routes through the verified worker subgraph, assembles explicit ready/degraded/unavailable Supervisor state, and invokes `system.ai.gpt-oss-120b` only for terminal synthesis over validated worker findings. Final synthesis uses strict structured output, deterministic provenance/section validation, one bounded model-repair attempt, and a deterministic validated fallback if both model attempts violate the report contract. Credential-free GitHub Actions continues to run Ruff correctness lint and the offline test suite on pull requests and pushes to `main`.
 
-**Next:** Implement and independently test the LangGraph Supervisor over the verified worker-agent interfaces, then add structured report/citation validation and MLflow tracing/evaluation.
+**Next:** Add MLflow tracing and GenAI evaluation over the now-live Supervisor/report path, then use those measurements to drive the next retrieval/generation refinements and CI evaluation coverage.
 
 ## Implementation roadmap
 
@@ -74,10 +74,10 @@ flowchart TB
     D --> E1["Market Analyst ✅"]
     D --> E2["Company Researcher ✅"]
 
-    E1 --> F["LangGraph Supervisor"]
+    E1 --> F["Deterministic LangGraph Supervisor ✅"]
     E2 --> F
 
-    F --> G["Structured reports + citations"]
+    F --> G["GPT OSS 120B terminal synthesis + validated reports/citations ✅"]
     G --> H["MLflow tracing + evaluation"]
     H --> I["Deployment / application integration"]
 ```
@@ -261,7 +261,14 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
   - Live verification on 2026-09-06 passed for AAPL over the existing development Gold schema and managed Vector Search index. The Market Analyst returned two validated findings with exact Gold references and no limitations. The recent-developments worker returned one company-specific product finding and excluded an irrelevant politician stock-purchase item after prompt refinement. The principal-risks worker returned three validated SEC Item 1A findings, all correctly characterized as company-disclosed risks with existing evidence IDs. The live smoke log excludes provider source text.
   - Final offline gate after refinement: 21 focused worker-contract tests and 309 repository tests passed; Ruff was clean.
 
-- [ ] Implement and independently test the LangGraph Supervisor over the verified worker outputs, including request-mode validation, worker routing, degraded-state propagation, and explicit failure behavior.
+- [x] Implement, independently test, and live-verify the LangGraph Supervisor and terminal report synthesis over the verified worker outputs.
+  - Deterministic request-mode validation accepts only configured one-company or two-company scope and rejects unsupported symbols before workers/tools run.
+  - The worker subgraph fans out to Market Analyst, recent developments, and principal risks, then deterministically aggregates validated worker outcomes into explicit `ready`, `degraded`, or `unavailable` Supervisor state. Worker exceptions are captured without copying provider/source text into failure messages; invalid successful worker results still fail deterministic validation.
+  - Comparison Company Researcher execution runs per symbol/topic before deterministic merge so one company cannot be silently omitted. Recent-development evidence is filtered for known finance/technical noise such as 13F holdings, insider-sale/Rule 10b5-1 items, analyst/price-target commentary, moving-average/Golden-Cross material, and similar non-company developments.
+  - Final report synthesis uses `system.ai.gpt-oss-120b` at medium reasoning effort only after worker aggregation. The model sees validated worker findings and provenance rather than raw provider text. Every available/degraded section must cite route-qualified worker finding IDs; narrative evidence IDs are inherited deterministically, while market/fundamental findings retain exact Gold metric references.
+  - Report validation enforces exact required sections, correct source class, comparison provenance inheritance, explicit degraded/unavailable behavior, and guarded comparative/qualitative language. A first contract violation receives one bounded repair request; if the repaired model output still violates the contract, a deterministic renderer builds a report only from validated worker findings and passes it through the same report validator.
+  - The app-facing `supervisor_research_graph` composes the verified worker subgraph with terminal report synthesis as the final LangGraph node. Offline verification reached 392 passing repository tests with Ruff clean before documentation closure.
+  - Live AAPL single-company final synthesis previously returned a ready four-section report with exact Gold/narrative provenance. Live AAPL+MSFT terminal-graph verification on 2026-09-06 returned `SUPERVISOR_REPORT_SMOKE=PASSED`, `status=degraded`, and `synthesis_mode=repaired_model`: market/fundamental/risk coverage remained available, Apple recent developments retained grounded evidence, and the missing acceptable Microsoft recent-development evidence was disclosed rather than fabricated.
 
 - [ ] Add MLflow tracing and GenAI evaluation. Combine deterministic numerical/citation checks with retrieval metrics such as hit-rate@k and MRR, plus precision@k and recall@k when relevance labels are sufficiently exhaustive, plus MLflow judges for retrieval relevance/groundedness/sufficiency, response relevance, correctness, safety, and project guidelines.
 

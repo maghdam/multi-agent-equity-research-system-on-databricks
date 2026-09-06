@@ -1,0 +1,236 @@
+"""Prompt and structured-output schema for final Supervisor synthesis."""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Mapping
+from typing import Any
+
+from equity_research.supervisor_report import (
+    RELATION_TERMS,
+    SupervisorReportContractError,
+)
+
+
+SUPERVISOR_MODEL = "system.ai.gpt-oss-120b"
+SUPERVISOR_REASONING_EFFORT = "medium"
+SUPERVISOR_MAX_TOKENS = 8192
+
+SUPERVISOR_REPORT_SYSTEM_PROMPT = """You are the final Supervisor in a
+controlled equity-research system.
+
+Use only the application-controlled JSON context supplied in this request.
+The source_findings are already validated outputs from specialized worker
+agents. Never use model memory, web knowledge, hidden assumptions, forecasts,
+trading recommendations, or unsupported causal claims.
+
+Every available or degraded report section must cite only
+source_finding_ids that appear in the supplied source_findings. Use the correct
+source class for each section:
+market_performance uses market-analysis market findings;
+fundamental_performance uses market-analysis fundamental findings;
+recent_developments uses recent-development findings;
+principal_risks uses principal-risk findings.
+
+For comparison mode, include comparative_assessment and ground it in findings
+covering both requested companies. The comparative_assessment must carry
+forward every source_finding_id used by each available or degraded base report
+section. Compare only the measured dimensions actually supported by supplied
+findings. Do not turn the comparison into a buy/sell/hold recommendation.
+
+Do not invent citations, evidence IDs, metric references, dates, companies, or
+facts. Do not introduce numerical claims that are absent from the cited worker
+statements. Preserve material dates and caveats from the supplied findings.
+
+For numerical synthesis, do not derive a new directional or comparative
+relationship from raw numbers unless that exact relationship is already stated
+in a cited worker finding. In particular, do not newly infer above/below,
+higher/lower, larger/smaller, stronger/weaker, or similar relationships. When
+the cited worker findings provide values but do not explicitly state the
+relationship, present the values side by side without adding a directional
+conclusion. Never state a relationship that contradicts the cited values or
+worker statements.
+
+For recent_developments, do not revive worker noise that is clearly outside the
+research contract. Exclude insider-share transactions, 13F/institutional
+holdings, analyst/price-target commentary, moving-average or Golden Cross
+signals, and other technical-analysis observations.
+
+Use section status precisely:
+- available: the section is fully supported and has no matching limitation or
+  failure;
+- degraded: grounded findings remain available, but a matching limitation or
+  failure makes the section incomplete; cite the available findings and state
+  what is missing;
+- unavailable: no grounded findings remain for that section; cite no findings
+  and explain the matching limitation or failure.
+
+Never mark a section unavailable when the supplied source_findings still
+contain grounded findings for that section. If the overall comparison is
+degraded, mark comparative_assessment degraded and preserve the available
+evidence while explicitly stating the missing dimension or company. Include
+explicit report limitations whenever the Supervisor state is degraded or
+unavailable.
+
+Return only the JSON structure required by the supplied response schema.
+"""
+
+SUPERVISOR_REPORT_RESPONSE_FORMAT = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "supervisor_report",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "sections": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "section": {
+                                "type": "string",
+                                "enum": [
+                                    "market_performance",
+                                    "fundamental_performance",
+                                    "recent_developments",
+                                    "principal_risks",
+                                    "comparative_assessment",
+                                ],
+                            },
+                            "status": {
+                                "type": "string",
+                                "enum": [
+                                    "available",
+                                    "degraded",
+                                    "unavailable",
+                                ],
+                            },
+                            "text": {
+                                "type": "string",
+                            },
+                            "source_finding_ids": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string",
+                                },
+                            },
+                        },
+                        "required": [
+                            "section",
+                            "status",
+                            "text",
+                            "source_finding_ids",
+                        ],
+                    },
+                },
+                "limitations": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                    },
+                },
+            },
+            "required": [
+                "sections",
+                "limitations",
+            ],
+        },
+    },
+}
+
+
+def build_supervisor_report_repair_request(
+    context: Mapping[str, Any],
+    *,
+    validation_error: str,
+) -> dict[str, Any]:
+    """Build one controlled repair request after deterministic validation."""
+
+    if not isinstance(context, Mapping):
+        raise SupervisorReportContractError(
+            "Supervisor report context must be an object."
+        )
+
+    if (
+        not isinstance(validation_error, str)
+        or not validation_error.strip()
+    ):
+        raise SupervisorReportContractError(
+            "validation_error must be a nonblank string."
+        )
+
+    payload = build_supervisor_report_model_request(
+        context
+    )
+    guarded_relation_terms = ", ".join(
+        RELATION_TERMS
+    )
+    payload["messages"] = [
+        *payload["messages"],
+        {
+            "role": "user",
+            "content": (
+                "The previous synthesis attempt failed deterministic "
+                "application validation. Regenerate the entire report from "
+                "the same controlled context and correct this exact issue:\n"
+                f"{validation_error.strip()}\n"
+                "For this repair, proactively avoid every guarded relation "
+                "term unless that exact term already appears in a cited "
+                "worker statement. The safest repair is to present supported "
+                "values or facts side by side without directional or "
+                "qualitative comparison. Guarded relation terms: "
+                f"{guarded_relation_terms}.\n"
+                "Do not weaken, bypass, reinterpret, or argue with the "
+                "validator. Return only a corrected report matching the "
+                "response schema."
+            ),
+        },
+    ]
+
+    return payload
+
+
+def build_supervisor_report_model_request(
+    context: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build the controlled GPT OSS 120B final-synthesis request."""
+
+    if not isinstance(context, Mapping):
+        raise SupervisorReportContractError(
+            "Supervisor report context must be an object."
+        )
+
+    context_json = json.dumps(
+        dict(context),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+    return {
+        "model": SUPERVISOR_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": SUPERVISOR_REPORT_SYSTEM_PROMPT,
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Synthesize only this application-controlled Supervisor "
+                    "context:\n"
+                    f"{context_json}"
+                ),
+            },
+        ],
+        "response_format": dict(
+            SUPERVISOR_REPORT_RESPONSE_FORMAT
+        ),
+        "max_tokens": SUPERVISOR_MAX_TOKENS,
+        "temperature": 0,
+        "reasoning_effort": SUPERVISOR_REASONING_EFFORT,
+        "stream": False,
+    }
