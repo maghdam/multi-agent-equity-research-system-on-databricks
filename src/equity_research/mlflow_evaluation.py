@@ -344,28 +344,9 @@ def build_code_scorers() -> list[Any]:
     ]
 
 
-def ensure_llm_judge_runtime(
-    *,
-    model: str,
-) -> None:
-    """Fail fast when the selected managed judge runtime is unavailable."""
-
-    if model != "databricks":
-        return
-
-    try:
-        import databricks.agents.evals.judges  # noqa: F401
-    except ImportError as exc:
-        raise RuntimeError(
-            "Databricks-managed MLflow judges require the databricks-agents "
-            "runtime. Install the repository requirements, which use "
-            "mlflow[databricks]==3.16.0."
-        ) from exc
-
-
 def build_llm_judges(
     *,
-    model: str = "databricks",
+    model: str = "databricks:/databricks-gpt-oss-120b",
 ) -> list[Any]:
     """Return semantic Databricks judges for report-level quality."""
 
@@ -375,10 +356,6 @@ def build_llm_judges(
         )
 
     judge_model = model.strip()
-
-    ensure_llm_judge_runtime(
-        model=judge_model
-    )
 
     return [
         RelevanceToQuery(
@@ -400,7 +377,7 @@ def build_llm_judges(
 def build_evaluation_scorers(
     *,
     include_llm_judges: bool,
-    judge_model: str = "databricks",
+    judge_model: str = "databricks:/databricks-gpt-oss-120b",
 ) -> list[Any]:
     """Compose deterministic scorers and optional semantic LLM judges."""
 
