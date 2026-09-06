@@ -325,6 +325,37 @@ class SupervisorReportPromptTests(unittest.TestCase):
                 system_message,
             )
 
+    def test_schema_and_prompt_support_degraded_sections(self) -> None:
+        payload = build_supervisor_report_model_request(
+            build_supervisor_report_context(
+                _state(("AAPL", "MSFT"))
+            )
+        )
+
+        status_enum = (
+            payload["response_format"]["json_schema"]["schema"]
+            ["properties"]["sections"]["items"]["properties"]
+            ["status"]["enum"]
+        )
+        self.assertEqual(
+            status_enum,
+            [
+                "available",
+                "degraded",
+                "unavailable",
+            ],
+        )
+
+        system_message = payload["messages"][0]["content"]
+        self.assertIn(
+            "degraded: grounded findings remain available",
+            system_message,
+        )
+        self.assertIn(
+            "carry forward every source_finding_id",
+            system_message,
+        )
+
     def test_repair_request_includes_exact_validator_error(self) -> None:
         context = build_supervisor_report_context(
             _state()
