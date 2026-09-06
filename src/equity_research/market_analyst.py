@@ -192,6 +192,20 @@ def validate_market_analyst_output(
                 "Each Market Analyst finding must be an object."
             )
 
+        unknown_finding_fields = set(raw) - {
+            "finding_id",
+            "dimension",
+            "symbols",
+            "statement",
+            "metric_references",
+        }
+
+        if unknown_finding_fields:
+            raise AgentContractError(
+                "Market Analyst finding has unknown fields: "
+                f"{sorted(unknown_finding_fields)}."
+            )
+
         finding_id = _required_text(
             raw.get("finding_id"),
             "finding_id",
@@ -257,6 +271,13 @@ def validate_market_analyst_output(
                 metric_references=references,
             )
         )
+
+    _validate_ready_coverage(
+        findings=findings,
+        symbols=symbols,
+        market_by_symbol=market_by_symbol,
+        fundamental_by_symbol=fundamental_by_symbol,
+    )
 
     limitations = _derive_limitations(
         symbols=symbols,
@@ -354,6 +375,42 @@ def _parse_metric_reference(
         as_of_date=as_of_date,
         fields=fields,
     )
+
+
+def _validate_ready_coverage(
+    *,
+    findings: Sequence[StructuredFinding],
+    symbols: Sequence[str],
+    market_by_symbol: Mapping[str, MarketMetricsToolResult],
+    fundamental_by_symbol: Mapping[str, FundamentalMetricsToolResult],
+) -> None:
+    covered = {
+        (
+            finding.dimension,
+            symbol,
+        )
+        for finding in findings
+        for symbol in finding.symbols
+    }
+
+    for symbol in symbols:
+        if (
+            market_by_symbol[symbol].status == "ready"
+            and ("market", symbol) not in covered
+        ):
+            raise AgentContractError(
+                f"Ready market metrics for {symbol} require at least "
+                "one market finding."
+            )
+
+        if (
+            fundamental_by_symbol[symbol].status == "ready"
+            and ("fundamental", symbol) not in covered
+        ):
+            raise AgentContractError(
+                f"Ready fundamental metrics for {symbol} require at least "
+                "one fundamental finding."
+            )
 
 
 def _derive_limitations(
