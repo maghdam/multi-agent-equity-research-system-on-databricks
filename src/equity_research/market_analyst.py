@@ -13,6 +13,10 @@ from equity_research.agent_contracts import (
     AgentLimitation,
 )
 from equity_research.config import Equity
+from equity_research.numeric_fidelity import (
+    extract_numeric_claims,
+    numeric_claim_matches_expected,
+)
 from equity_research.structured_data_tools import (
     FundamentalMetricsToolResult,
     MarketMetricsToolResult,
@@ -49,6 +53,46 @@ FUNDAMENTAL_ANALYTICAL_FIELDS = frozenset(
         "net_margin_ttm",
         "assets_latest",
         "revenue_growth_latest_fy",
+        "net_income_change_latest_fy",
+    }
+)
+
+MARKET_RATE_FIELDS = frozenset(
+    {
+        "return_1d",
+        "return_5d",
+        "return_20d",
+        "return_60d",
+        "annualized_volatility_20d",
+        "annualized_volatility_60d",
+        "current_drawdown_60d",
+        "max_drawdown_60d",
+        "close_vs_sma_20",
+        "close_vs_sma_60",
+        "sma_20_vs_sma_60",
+    }
+)
+
+MARKET_NUMBER_FIELDS = frozenset(
+    {
+        "close",
+        "sma_20",
+        "sma_60",
+    }
+)
+
+FUNDAMENTAL_RATE_FIELDS = frozenset(
+    {
+        "net_margin_ttm",
+        "revenue_growth_latest_fy",
+    }
+)
+
+FUNDAMENTAL_MONEY_FIELDS = frozenset(
+    {
+        "revenue_ttm",
+        "net_income_ttm",
+        "assets_latest",
         "net_income_change_latest_fy",
     }
 )
@@ -262,6 +306,13 @@ def validate_market_analyst_output(
                 "Finding symbols must exactly match referenced metric symbols."
             )
 
+        _validate_statement_numeric_fidelity(
+            statement=statement,
+            references=references,
+            market_by_symbol=market_by_symbol,
+            fundamental_by_symbol=fundamental_by_symbol,
+        )
+
         findings.append(
             StructuredFinding(
                 finding_id=finding_id,
@@ -375,6 +426,122 @@ def _parse_metric_reference(
         as_of_date=as_of_date,
         fields=fields,
     )
+
+
+def _validate_statement_numeric_fidelity(
+    *,
+    statement: str,
+    references: Sequence[MetricReference],
+    market_by_symbol: Mapping[str, MarketMetricsToolResult],
+    fundamental_by_symbol: Mapping[str, FundamentalMetricsToolResult],
+) -> None:
+    percent_values: list[Decimal] = []
+    scaled_money_values: list[Decimal] = []
+    number_values: list[Decimal] = []
+    allowed_dates: list[date] = []
+
+    for reference in references:
+        result = (
+            market_by_symbol[reference.symbol]
+            if reference.dataset == "market_metrics"
+            else fundamental_by_symbol[reference.symbol]
+        )
+        metric = result.metric
+
+        if result.status != "ready" or metric is None:
+            raise AgentContractError(
+                "Numeric fidelity validation requires ready referenced metrics."
+            )
+
+        allowed_dates.append(
+            metric.as_of_date
+        )
+
+        if reference.dataset == "market_metrics":
+            allowed_dates.append(
+                metric.window_start_date_60d
+            )
+
+            for field in reference.fields:
+                value = getattr(
+                    metric,
+                    field,
+                )
+
+                if field in MARKET_RATE_FIELDS:
+                    percent_values.append(
+                        value
+                    )
+                    number_values.append(
+                        value
+                    )
+                elif field in MARKET_NUMBER_FIELDS:
+                    number_values.append(
+                        value
+                    )
+        else:
+            allowed_dates.extend(
+                (
+                    metric.fundamental_period_end,
+                    metric.latest_fy_end,
+                    metric.prior_fy_end,
+                )
+            )
+
+            for field in reference.fields:
+                value = getattr(
+                    metric,
+                    field,
+                )
+
+                if field in FUNDAMENTAL_RATE_FIELDS:
+                    percent_values.append(
+                        value
+                    )
+                    number_values.append(
+                        value
+                    )
+                elif field in FUNDAMENTAL_MONEY_FIELDS:
+                    scaled_money_values.append(
+                        value
+                    )
+                    number_values.append(
+                        value
+                    )
+
+    unsupported = tuple(
+        claim
+        for claim in extract_numeric_claims(
+            statement
+        )
+        if not numeric_claim_matches_expected(
+            claim,
+            expected_percent_values=tuple(
+                percent_values
+            ),
+            expected_scaled_money_values=tuple(
+                scaled_money_values
+            ),
+            expected_number_values=tuple(
+                number_values
+            ),
+            expected_dates=tuple(
+                dict.fromkeys(
+                    allowed_dates
+                )
+            ),
+        )
+    )
+
+    if unsupported:
+        claims = ", ".join(
+            repr(claim.raw)
+            for claim in unsupported
+        )
+        raise AgentContractError(
+            "Market Analyst statement contains numerical claims that are not "
+            f"supported by its referenced ready Gold values: {claims}."
+        )
 
 
 def _validate_ready_coverage(
