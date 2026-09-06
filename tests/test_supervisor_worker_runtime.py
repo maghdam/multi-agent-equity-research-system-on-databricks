@@ -200,7 +200,7 @@ class SupervisorWorkerRuntimeConfigTests(unittest.TestCase):
 
         self.assertEqual(
             config.retrieval_results_per_symbol,
-            3,
+            5,
         )
 
     def test_rejects_blank_required_resource(self) -> None:
