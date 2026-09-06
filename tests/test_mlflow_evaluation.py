@@ -199,6 +199,14 @@ class MlflowEvaluationCaseTests(unittest.TestCase):
             "single_company",
         )
         self.assertEqual(
+            rows[0]["tags"],
+            {
+                "case_id": "E1",
+                "category": "grounded_single_company",
+                "source": "ai_research_contract",
+            },
+        )
+        self.assertEqual(
             rows[1]["inputs"]["requested_symbols"],
             ["AAPL", "MSFT"],
         )
