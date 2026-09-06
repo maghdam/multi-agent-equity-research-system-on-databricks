@@ -14,6 +14,7 @@ from equity_research.supervisor_contracts import (
 )
 
 
+ReportSectionStatus = Literal["available", "unavailable"]
 ReportSectionName = Literal[
     "market_performance",
     "fundamental_performance",
@@ -45,6 +46,7 @@ class ReportSection:
     """One synthesized report section with deterministic finding provenance."""
 
     section: ReportSectionName
+    status: ReportSectionStatus
     text: str
     source_finding_ids: tuple[str, ...]
 
@@ -198,7 +200,7 @@ def validate_supervisor_report_output(
         section = _parse_section(
             raw_section,
             source_findings=source_findings,
-            mode=state.request.mode,
+            state=state,
         )
 
         if section.section in seen_sections:
@@ -331,7 +333,7 @@ def _parse_section(
     raw: object,
     *,
     source_findings: Mapping[str, ReportSourceFinding],
-    mode: str,
+    state: SupervisorState,
 ) -> ReportSection:
     if not isinstance(raw, Mapping):
         raise SupervisorReportContractError(
@@ -340,6 +342,7 @@ def _parse_section(
 
     allowed = {
         "section",
+        "status",
         "text",
         "source_finding_ids",
     }
@@ -363,6 +366,15 @@ def _parse_section(
             f"Unknown report section: {section!r}."
         )
 
+    status = raw.get(
+        "status"
+    )
+
+    if status not in {"available", "unavailable"}:
+        raise SupervisorReportContractError(
+            "Report section status must be 'available' or 'unavailable'."
+        )
+
     text = _required_text(
         raw.get("text"),
         "section text",
@@ -376,11 +388,6 @@ def _parse_section(
             "source_finding_ids must be a list."
         )
 
-    if not raw_ids:
-        raise SupervisorReportContractError(
-            f"Report section {section!r} requires source_finding_ids."
-        )
-
     source_ids = tuple(
         _required_text(
             value,
@@ -388,6 +395,28 @@ def _parse_section(
         )
         for value in raw_ids
     )
+
+    if status == "available" and not source_ids:
+        raise SupervisorReportContractError(
+            f"Available report section {section!r} requires source_finding_ids."
+        )
+
+    if status == "unavailable" and source_ids:
+        raise SupervisorReportContractError(
+            f"Unavailable report section {section!r} must not cite findings."
+        )
+
+    if (
+        status == "unavailable"
+        and not _section_unavailability_supported(
+            section=section,
+            state=state,
+        )
+    ):
+        raise SupervisorReportContractError(
+            f"Report section {section!r} cannot be unavailable without "
+            "a matching Supervisor limitation or failure."
+        )
 
     if len(set(source_ids)) != len(source_ids):
         raise SupervisorReportContractError(
@@ -405,15 +434,17 @@ def _parse_section(
             f"Report section cites unknown worker findings: {missing}."
         )
 
-    _validate_section_sources(
-        section=section,
-        source_ids=source_ids,
-        source_findings=source_findings,
-        mode=mode,
-    )
+    if status == "available":
+        _validate_section_sources(
+            section=section,
+            source_ids=source_ids,
+            source_findings=source_findings,
+            mode=state.request.mode,
+        )
 
     return ReportSection(
         section=section,
+        status=status,
         text=text,
         source_finding_ids=source_ids,
     )
@@ -489,6 +520,65 @@ def _validate_section_sources(
             raise SupervisorReportContractError(
                 "comparative_assessment must cite findings covering both companies."
             )
+
+
+def _section_unavailability_supported(
+    *,
+    section: str,
+    state: SupervisorState,
+) -> bool:
+    failure_routes = {
+        failure.route_id
+        for failure in state.failures
+    }
+
+    if section == "market_performance":
+        return (
+            "market_analysis" in failure_routes
+            or any(
+                limitation.agent == "market_analyst"
+                and limitation.dimension == "market"
+                for limitation in state.limitations
+            )
+        )
+
+    if section == "fundamental_performance":
+        return (
+            "market_analysis" in failure_routes
+            or any(
+                limitation.agent == "market_analyst"
+                and limitation.dimension == "fundamental"
+                for limitation in state.limitations
+            )
+        )
+
+    if section == "recent_developments":
+        return (
+            "recent_developments" in failure_routes
+            or any(
+                limitation.agent == "company_researcher"
+                and limitation.dimension == "recent_developments"
+                for limitation in state.limitations
+            )
+        )
+
+    if section == "principal_risks":
+        return (
+            "principal_risks" in failure_routes
+            or any(
+                limitation.agent == "company_researcher"
+                and limitation.dimension == "principal_risks"
+                for limitation in state.limitations
+            )
+        )
+
+    if section == "comparative_assessment":
+        return bool(
+            state.failures
+            or state.limitations
+        )
+
+    return False
 
 
 def _parse_limitations(
