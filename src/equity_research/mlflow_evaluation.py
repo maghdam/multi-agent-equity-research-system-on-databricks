@@ -340,6 +340,12 @@ def summarize_observability_spans(
                 "retrieval_result_count": get_attribute(
                     "equity_research.retrieval_result_count"
                 ),
+                "injection_marker_present": get_attribute(
+                    "equity_research.injection_marker_present"
+                ),
+                "unauthorized_tool_calls": get_attribute(
+                    "equity_research.unauthorized_tool_calls"
+                ),
             }
         )
 
