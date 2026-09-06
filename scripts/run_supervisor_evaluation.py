@@ -105,10 +105,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--judge-model",
-        default="databricks",
+        default="databricks:/databricks-gpt-oss-120b",
         help=(
-            "MLflow judge model. 'databricks' uses Databricks-hosted evaluation "
-            "models under a Databricks tracking URI."
+            "MLflow judge model URI. Defaults to the Databricks-hosted "
+            "databricks-gpt-oss-120b serving model."
         ),
     )
 
