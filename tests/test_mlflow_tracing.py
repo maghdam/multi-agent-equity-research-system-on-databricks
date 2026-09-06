@@ -1,5 +1,6 @@
 """Offline tests for MLflow tracing configuration and graph wrapping."""
 
+import os
 import sys
 import unittest
 from contextlib import nullcontext
@@ -132,9 +133,20 @@ class MlflowTracingRuntimeTests(unittest.TestCase):
             profile="profile-1",
         )
 
-        tracking_uri = configure_mlflow_tracing(
-            config
-        )
+        with patch.dict(
+            os.environ,
+            {
+                "DATABRICKS_CONFIG_PROFILE": "stale-profile",
+            },
+        ):
+            tracking_uri = configure_mlflow_tracing(
+                config
+            )
+
+            self.assertEqual(
+                os.environ["DATABRICKS_CONFIG_PROFILE"],
+                "profile-1",
+            )
 
         self.assertEqual(
             tracking_uri,
@@ -142,6 +154,50 @@ class MlflowTracingRuntimeTests(unittest.TestCase):
         )
         set_tracking_uri.assert_called_once_with(
             "databricks://profile-1"
+        )
+        set_experiment.assert_called_once_with(
+            "/Shared/equity-research-test"
+        )
+        autolog.assert_called_once_with(
+            log_traces=True,
+            silent=False,
+        )
+
+    @patch("equity_research.mlflow_tracing.mlflow_langchain_autolog")
+    @patch("equity_research.mlflow_tracing.mlflow.set_experiment")
+    @patch("equity_research.mlflow_tracing.mlflow.set_tracking_uri")
+    def test_configure_without_profile_preserves_existing_sdk_profile(
+        self,
+        set_tracking_uri,
+        set_experiment,
+        autolog,
+    ) -> None:
+        config = MlflowTracingConfig(
+            experiment_name="/Shared/equity-research-test",
+            profile=None,
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                "DATABRICKS_CONFIG_PROFILE": "existing-profile",
+            },
+        ):
+            tracking_uri = configure_mlflow_tracing(
+                config
+            )
+
+            self.assertEqual(
+                os.environ["DATABRICKS_CONFIG_PROFILE"],
+                "existing-profile",
+            )
+
+        self.assertEqual(
+            tracking_uri,
+            "databricks",
+        )
+        set_tracking_uri.assert_called_once_with(
+            "databricks"
         )
         set_experiment.assert_called_once_with(
             "/Shared/equity-research-test"
