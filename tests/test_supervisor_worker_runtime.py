@@ -144,6 +144,8 @@ def _evidence(
     symbol: str,
     source_type: str,
     rank: int = 1,
+    title: str | None = None,
+    text: str = "Synthetic controlled evidence.",
 ) -> EvidenceRecord:
     filing = source_type == "filing"
 
@@ -161,9 +163,13 @@ def _evidence(
         source_system="sec" if filing else "alpaca",
         configured_symbols=(symbol,),
         title=(
-            f"{symbol} Risk Factors"
-            if filing
-            else f"{symbol} News"
+            title
+            if title is not None
+            else (
+                f"{symbol} Risk Factors"
+                if filing
+                else f"{symbol} News"
+            )
         ),
         evidence_date=date(2026, 8, 30),
         source_url="https://example.test/evidence",
@@ -175,7 +181,7 @@ def _evidence(
         section_code="item_1a" if filing else None,
         section_title="Risk Factors" if filing else None,
         chunk_index=0,
-        text="Synthetic controlled evidence.",
+        text=text,
         source_response_id=f"{symbol}-response",
         source_fetched_at=datetime(
             2026,
@@ -546,6 +552,69 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
         self.assertEqual(
             result.limitations[0].reason_code,
             "insufficient_evidence",
+        )
+
+    def test_recent_development_worker_filters_finance_noise(
+        self,
+    ) -> None:
+        company_agent_runner = Mock(
+            return_value=_company_agent_result(
+                "recent_developments",
+                ("MSFT",),
+            )
+        )
+        workers = DatabricksSupervisorWorkers(
+            config=self.config,
+            equities=EQUITIES,
+            vector_query=Mock(
+                return_value={"symbol": "MSFT"}
+            ),
+            company_agent_runner=company_agent_runner,
+        )
+
+        with patch(
+            "equity_research.supervisor_worker_runtime."
+            "parse_retrieval_response",
+            return_value=(
+                _evidence(
+                    "1" * 64,
+                    symbol="MSFT",
+                    source_type="news",
+                    title="Microsoft 13F institutional holding update",
+                ),
+                _evidence(
+                    "2" * 64,
+                    symbol="MSFT",
+                    source_type="news",
+                    title="Microsoft Golden Cross technical analysis",
+                ),
+                _evidence(
+                    "3" * 64,
+                    symbol="MSFT",
+                    source_type="news",
+                    title="Microsoft launches new enterprise AI service",
+                ),
+            ),
+        ):
+            workers.company_worker(
+                request=_request("MSFT"),
+                topic="recent_developments",
+            )
+
+        supplied_evidence = company_agent_runner.call_args.kwargs[
+            "evidence"
+        ]
+
+        self.assertEqual(
+            tuple(
+                item.evidence_id
+                for item in supplied_evidence
+            ),
+            ("3" * 64,),
+        )
+        self.assertEqual(
+            supplied_evidence[0].retrieval_rank,
+            1,
         )
 
     def test_principal_risk_worker_uses_item_1a_filing_filter(self) -> None:
