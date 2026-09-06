@@ -355,7 +355,15 @@ class SupervisorReportPromptTests(unittest.TestCase):
             normalized_system_message,
         )
         self.assertIn(
-            "carry forward every source_finding_id",
+            "comparison-eligible base dimensions only",
+            normalized_system_message,
+        )
+        self.assertIn(
+            "do not cite that dimension or make a comparative statement",
+            normalized_system_message,
+        )
+        self.assertIn(
+            "do not turn an observed event into an inferred motive",
             normalized_system_message,
         )
 
