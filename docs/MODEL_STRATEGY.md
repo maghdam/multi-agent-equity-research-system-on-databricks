@@ -812,16 +812,18 @@ system.ai.gpt-oss-120b
 
 The choice remains an evaluation baseline rather than a permanent requirement.
 
-The first meaningful model-routing experiment should compare:
+The first meaningful final-synthesis model experiment should compare:
 
 ```text
 Configuration A
-Supervisor     = GPT OSS 120B
-Worker agents  = GPT OSS 20B
+Terminal synthesis = GPT OSS 120B
+Worker agents      = GPT OSS 20B
+Deterministic routing/aggregation unchanged
 
 Configuration B
-Supervisor     = GPT OSS 20B
-Worker agents  = GPT OSS 20B
+Terminal synthesis = GPT OSS 20B
+Worker agents      = GPT OSS 20B
+Deterministic routing/aggregation unchanged
 ```
 
 Compare at least:
@@ -830,13 +832,15 @@ Compare at least:
 - correctness;
 - citation support;
 - conflict handling;
-- routing/tool-call success;
+- report-contract first-pass/repair/fallback rates;
 - latency;
 - input/output token usage;
 - serving cost when cost data are available.
 
-The larger Supervisor is retained only if its quality gain justifies the
-additional latency/cost.
+GPT OSS 120B is retained for terminal synthesis only if its quality gain
+justifies the additional latency/cost. Worker routing and state aggregation are
+not part of this model comparison because they remain deterministic LangGraph
+logic in both configurations.
 
 ### 11.1 Multi-turn application evaluation
 
