@@ -198,23 +198,19 @@ def build_deterministic_supervisor_report(
         )
 
     if state.request.mode == "comparison":
-        inherited_ids = tuple(
-            source_id
-            for raw_section in raw_sections
-            if raw_section["status"] in {"available", "degraded"}
-            for source_id in raw_section["source_finding_ids"]
-        )
-        inherited_ids = tuple(
-            dict.fromkeys(
-                inherited_ids
-            )
+        inherited_ids = _comparison_eligible_source_ids(
+            raw_sections,
+            source_findings=source_findings,
+            requested_symbols=state.request.requested_symbols,
         )
         comparison_has_issue = _section_issue_supported(
             section="comparative_assessment",
             state=state,
         )
         comparison_text = _deterministic_comparison_text(
-            raw_sections
+            raw_sections,
+            source_findings=source_findings,
+            requested_symbols=state.request.requested_symbols,
         )
         raw_sections.append(
             {
@@ -313,8 +309,76 @@ def _deterministic_section_status(
     )
 
 
+def _comparison_eligible_source_ids(
+    sections: Sequence[Mapping[str, Any] | ReportSection],
+    *,
+    source_findings: Mapping[str, ReportSourceFinding],
+    requested_symbols: Sequence[str],
+) -> tuple[str, ...]:
+    requested = set(
+        requested_symbols
+    )
+    eligible: list[str] = []
+
+    for section in sections:
+        if isinstance(
+            section,
+            ReportSection,
+        ):
+            section_name = section.section
+            status = section.status
+            source_ids = section.source_finding_ids
+        else:
+            section_name = section.get(
+                "section"
+            )
+            status = section.get(
+                "status"
+            )
+            raw_ids = section.get(
+                "source_finding_ids"
+            )
+            source_ids = (
+                tuple(raw_ids)
+                if isinstance(raw_ids, list)
+                else ()
+            )
+
+        if (
+            section_name == "comparative_assessment"
+            or status not in {"available", "degraded"}
+            or not source_ids
+        ):
+            continue
+
+        covered = {
+            symbol
+            for source_id in source_ids
+            if source_id in source_findings
+            for symbol in source_findings[source_id].symbols
+        }
+
+        if not requested.issubset(
+            covered
+        ):
+            continue
+
+        for source_id in source_ids:
+            if source_id not in eligible:
+                eligible.append(
+                    source_id
+                )
+
+    return tuple(
+        eligible
+    )
+
+
 def _deterministic_comparison_text(
     raw_sections: Sequence[Mapping[str, Any]],
+    *,
+    source_findings: Mapping[str, ReportSourceFinding],
+    requested_symbols: Sequence[str],
 ) -> str:
     labels = {
         "market_performance": "Market performance",
@@ -322,16 +386,43 @@ def _deterministic_comparison_text(
         "recent_developments": "Recent developments",
         "principal_risks": "Principal risks",
     }
+    eligible_ids = set(
+        _comparison_eligible_source_ids(
+            raw_sections,
+            source_findings=source_findings,
+            requested_symbols=requested_symbols,
+        )
+    )
     parts = []
 
     for raw_section in raw_sections:
+        source_ids = set(
+            raw_section["source_finding_ids"]
+        )
+
+        if (
+            not source_ids
+            or not source_ids.issubset(
+                eligible_ids
+            )
+        ):
+            continue
+
         section = raw_section["section"]
         text = raw_section["text"]
         parts.append(
             f"{labels[section]}: {text}"
         )
 
-    return " ".join(parts)
+    if parts:
+        return " ".join(
+            parts
+        )
+
+    return (
+        "No report dimension has grounded findings covering every requested "
+        "company, so no comparative conclusion is available."
+    )
 
 
 def _deterministic_report_limitations(
@@ -460,6 +551,7 @@ def validate_supervisor_report_output(
 
     _validate_comparative_source_inheritance(
         sections,
+        source_findings=source_findings,
         state=state,
     )
 
@@ -844,6 +936,7 @@ def _available_source_ids_for_section(
 def _validate_comparative_source_inheritance(
     sections: Sequence[ReportSection],
     *,
+    source_findings: Mapping[str, ReportSourceFinding],
     state: SupervisorState,
 ) -> None:
     if state.request.mode != "comparison":
@@ -861,26 +954,35 @@ def _validate_comparative_source_inheritance(
     if comparative is None:
         return
 
-    inherited_ids = {
-        source_id
-        for section in sections
-        if (
-            section.section != "comparative_assessment"
-            and section.status in {"available", "degraded"}
+    eligible_ids = set(
+        _comparison_eligible_source_ids(
+            sections,
+            source_findings=source_findings,
+            requested_symbols=state.request.requested_symbols,
         )
-        for source_id in section.source_finding_ids
-    }
+    )
     comparative_ids = set(
         comparative.source_finding_ids
     )
     missing = sorted(
-        inherited_ids - comparative_ids
+        eligible_ids - comparative_ids
+    )
+    unexpected = sorted(
+        comparative_ids - eligible_ids
     )
 
     if missing:
         raise SupervisorReportContractError(
-            "comparative_assessment must inherit source_finding_ids from "
-            f"all grounded report sections; missing {missing}."
+            "comparative_assessment must inherit every source_finding_id from "
+            "base dimensions grounded for all requested companies; "
+            f"missing {missing}."
+        )
+
+    if unexpected:
+        raise SupervisorReportContractError(
+            "comparative_assessment must not cite source findings from a "
+            "dimension that lacks grounded coverage for every requested "
+            f"company; unexpected {unexpected}."
         )
 
 
