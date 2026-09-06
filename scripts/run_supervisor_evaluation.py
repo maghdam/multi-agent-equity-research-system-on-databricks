@@ -1,4 +1,4 @@
-"""Run live MLflow GenAI evaluation for contract cases E1-E3."""
+"""Run live MLflow GenAI evaluation for contract cases E1-E5."""
 
 from __future__ import annotations
 
@@ -25,9 +25,13 @@ from equity_research.controlled_evaluation_fixtures import (  # noqa: E402
     e4_company_worker,
     e4_market_worker,
     e4_report_synthesizer,
+    e5_company_worker,
+    e5_market_worker,
+    e5_report_synthesizer,
 )
 from equity_research.mlflow_evaluation import (  # noqa: E402
     build_evaluation_scorers,
+    build_evidence_degradation_scorers,
     build_live_evaluation_data,
     build_scope_rejection_scorers,
     build_structured_degradation_scorers,
@@ -68,7 +72,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Databricks SQL warehouse ID. Required for report cases E1/E2 "
-            "and managed report datasets; intentionally not required for E3."
+            "and managed report datasets; not required for controlled E3-E5."
         ),
     )
     parser.add_argument(
@@ -86,7 +90,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Physical Gold schema name. Required for report cases E1/E2 "
-            "and managed report datasets; intentionally not required for E3."
+            "and managed report datasets; not required for controlled E3-E5."
         ),
     )
     parser.add_argument(
@@ -94,7 +98,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Fully qualified physical Vector Search index name. Required for "
-            "report cases E1/E2 and managed report datasets; not required for E3."
+            "report cases E1/E2 and managed report datasets; not required for controlled E3-E5."
         ),
     )
     parser.add_argument(
@@ -288,11 +292,12 @@ def main() -> None:
             if case_id in {
                 "E3",
                 "E4",
+                "E5",
             }
         }
         if controlled_cases and len(normalized_case_ids) != 1:
             raise ValueError(
-                "Controlled failure cases E3 and E4 must be evaluated "
+                "Controlled failure cases E3, E4, and E5 must be evaluated "
                 "separately from report cases."
             )
 
@@ -300,6 +305,8 @@ def main() -> None:
             evaluation_kind = "scope_rejection"
         elif normalized_case_ids == ("E4",):
             evaluation_kind = "structured_degradation"
+        elif normalized_case_ids == ("E5",):
+            evaluation_kind = "evidence_degradation"
         else:
             evaluation_kind = "report"
 
@@ -308,11 +315,12 @@ def main() -> None:
             in {
                 "scope_rejection",
                 "structured_degradation",
+                "evidence_degradation",
             }
             and args.include_llm_judges
         ):
             raise ValueError(
-                "Controlled E3/E4 failure cases are deterministic and must "
+                "Controlled E3/E4/E5 failure cases are deterministic and must "
                 "not run LLM judges."
             )
 
@@ -397,6 +405,11 @@ def main() -> None:
                     request=request
                 )
 
+            if evaluation_kind == "evidence_degradation":
+                return e5_market_worker(
+                    request=request
+                )
+
             if workers is None:
                 raise RuntimeError(
                     "E3 scope rejection reached the Market Analyst boundary."
@@ -413,6 +426,50 @@ def main() -> None:
 
             if evaluation_kind == "structured_degradation":
                 return e4_company_worker(
+                    request=request,
+                    topic=topic,
+                )
+
+            if evaluation_kind == "evidence_degradation":
+                if topic == "recent_developments":
+                    with mlflow.start_span(
+                        name=(
+                            "controlled_evaluation_retrieval_e5_"
+                            "recent_developments"
+                        ),
+                        span_type=SpanType.RETRIEVER,
+                    ) as retrieval_span:
+                        retrieval_span.set_inputs(
+                            {
+                                "case_id": "E5",
+                                "symbols": list(
+                                    request.requested_symbols
+                                ),
+                                "topic": topic,
+                            }
+                        )
+                        retrieval_span.set_attributes(
+                            {
+                                "equity_research.component": (
+                                    "controlled_evaluation_retrieval"
+                                ),
+                                "equity_research.evaluation_case": "E5",
+                                "equity_research.fixture_type": (
+                                    "insufficient_retrieval_evidence"
+                                ),
+                                "equity_research.retrieval_result_count": 0,
+                            }
+                        )
+                        result = e5_company_worker(
+                            request=request,
+                            topic=topic,
+                        )
+                        retrieval_span.set_outputs(
+                            []
+                        )
+                        return result
+
+                return e5_company_worker(
                     request=request,
                     topic=topic,
                 )
@@ -439,6 +496,11 @@ def main() -> None:
 
             if evaluation_kind == "structured_degradation":
                 return e4_report_synthesizer(
+                    state=state
+                )
+
+            if evaluation_kind == "evidence_degradation":
+                return e5_report_synthesizer(
                     state=state
                 )
 
@@ -575,6 +637,65 @@ def main() -> None:
                     )
                     return output
 
+            if evaluation_kind == "evidence_degradation":
+                with mlflow.start_span(
+                    name="controlled_evaluation_fixture_e5",
+                    span_type=SpanType.AGENT,
+                ) as fixture_span:
+                    fixture_span.set_inputs(
+                        {
+                            "case_id": "E5",
+                            "symbols": [
+                                symbol.strip().upper()
+                                for symbol in requested_symbols
+                            ],
+                            "fixture": (
+                                "missing_recent_development_evidence"
+                            ),
+                        }
+                    )
+                    fixture_span.set_attributes(
+                        {
+                            "equity_research.component": (
+                                "controlled_evaluation_fixture"
+                            ),
+                            "equity_research.evaluation_case": "E5",
+                            "equity_research.fixture_type": (
+                                "insufficient_retrieval_evidence"
+                            ),
+                        }
+                    )
+                    result = run_supervisor_research_graph(
+                        request_text=request_text,
+                        requested_symbols=tuple(
+                            requested_symbols
+                        ),
+                        market_worker=counted_market_worker,
+                        company_worker=counted_company_worker,
+                        report_synthesizer=counted_report_synthesizer,
+                        equities=equities,
+                    )
+                    output = serialize_supervisor_report_for_evaluation(
+                        result.report
+                    )
+                    fixture_span.set_outputs(
+                        {
+                            "status": output["status"],
+                            "synthesis_mode": output["synthesis_mode"],
+                            "evidence_count": output["evidence_count"],
+                            "market_worker_calls": downstream_calls[
+                                "market_worker"
+                            ],
+                            "company_worker_calls": downstream_calls[
+                                "company_worker"
+                            ],
+                            "report_synthesizer_calls": downstream_calls[
+                                "report_synthesizer"
+                            ],
+                        }
+                    )
+                    return output
+
             result = run_supervisor_research_graph(
                 request_text=request_text,
                 requested_symbols=tuple(
@@ -606,6 +727,8 @@ def main() -> None:
         scorers = build_scope_rejection_scorers()
     elif evaluation_kind == "structured_degradation":
         scorers = build_structured_degradation_scorers()
+    elif evaluation_kind == "evidence_degradation":
+        scorers = build_evidence_degradation_scorers()
     else:
         scorers = build_evaluation_scorers(
             include_llm_judges=args.include_llm_judges,
@@ -616,9 +739,10 @@ def main() -> None:
         if evaluation_kind in {
             "scope_rejection",
             "structured_degradation",
+            "evidence_degradation",
         }:
             raise ValueError(
-                "--llm-judge is not applicable to deterministic E3/E4."
+                "--llm-judge is not applicable to deterministic E3/E4/E5."
             )
 
         if not args.include_llm_judges:
