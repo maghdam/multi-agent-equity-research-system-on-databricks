@@ -512,6 +512,148 @@ class MarketAnalystContractTests(unittest.TestCase):
             )
 
 
+    def test_accepts_numerically_faithful_market_and_fundamental_prose(
+        self,
+    ) -> None:
+        result = validate_market_analyst_output(
+            {
+                "findings": [
+                    {
+                        "finding_id": "M1",
+                        "dimension": "market",
+                        "symbols": ["AAPL"],
+                        "statement": (
+                            "On 2026-09-04 AAPL returned 3.0% over 20 sessions."
+                        ),
+                        "metric_references": [
+                            {
+                                "dataset": "market_metrics",
+                                "symbol": "AAPL",
+                                "as_of_date": "2026-09-04",
+                                "fields": ["return_20d"],
+                            }
+                        ],
+                    },
+                    {
+                        "finding_id": "F1",
+                        "dimension": "fundamental",
+                        "symbols": ["AAPL"],
+                        "statement": (
+                            "AAPL reported $0.2 billion of TTM net income."
+                        ),
+                        "metric_references": [
+                            {
+                                "dataset": "fundamental_metrics",
+                                "symbol": "AAPL",
+                                "as_of_date": "2026-07-31",
+                                "fields": ["net_income_ttm"],
+                            }
+                        ],
+                    },
+                ]
+            },
+            requested_symbols=("AAPL",),
+            market_results=(_market_result("AAPL"),),
+            fundamental_results=(_fundamental_result("AAPL"),),
+            equities=EQUITIES,
+        )
+
+        self.assertEqual(
+            len(result.findings),
+            2,
+        )
+
+    def test_rejects_raw_ratio_mislabeled_as_percentage(self) -> None:
+        with self.assertRaisesRegex(
+            AgentContractError,
+            "numerical claims that are not supported",
+        ):
+            validate_market_analyst_output(
+                {
+                    "findings": [
+                        {
+                            "finding_id": "M1",
+                            "dimension": "market",
+                            "symbols": ["AAPL"],
+                            "statement": "AAPL returned 0.03%.",
+                            "metric_references": [
+                                {
+                                    "dataset": "market_metrics",
+                                    "symbol": "AAPL",
+                                    "as_of_date": "2026-09-04",
+                                    "fields": ["return_20d"],
+                                }
+                            ],
+                        },
+                        {
+                            "finding_id": "F1",
+                            "dimension": "fundamental",
+                            "symbols": ["AAPL"],
+                            "statement": "AAPL remained profitable.",
+                            "metric_references": [
+                                {
+                                    "dataset": "fundamental_metrics",
+                                    "symbol": "AAPL",
+                                    "as_of_date": "2026-07-31",
+                                    "fields": ["net_margin_ttm"],
+                                }
+                            ],
+                        },
+                    ]
+                },
+                requested_symbols=("AAPL",),
+                market_results=(_market_result("AAPL"),),
+                fundamental_results=(_fundamental_result("AAPL"),),
+                equities=EQUITIES,
+            )
+
+    def test_rejects_scaled_money_decimal_place_shift(self) -> None:
+        with self.assertRaisesRegex(
+            AgentContractError,
+            "numerical claims that are not supported",
+        ):
+            validate_market_analyst_output(
+                {
+                    "findings": [
+                        {
+                            "finding_id": "M1",
+                            "dimension": "market",
+                            "symbols": ["AAPL"],
+                            "statement": "AAPL market data remained available.",
+                            "metric_references": [
+                                {
+                                    "dataset": "market_metrics",
+                                    "symbol": "AAPL",
+                                    "as_of_date": "2026-09-04",
+                                    "fields": ["return_20d"],
+                                }
+                            ],
+                        },
+                        {
+                            "finding_id": "F1",
+                            "dimension": "fundamental",
+                            "symbols": ["AAPL"],
+                            "statement": (
+                                "AAPL reported $0.02 billion of TTM net income."
+                            ),
+                            "metric_references": [
+                                {
+                                    "dataset": "fundamental_metrics",
+                                    "symbol": "AAPL",
+                                    "as_of_date": "2026-07-31",
+                                    "fields": ["net_income_ttm"],
+                                }
+                            ],
+                        },
+                    ]
+                },
+                requested_symbols=("AAPL",),
+                market_results=(_market_result("AAPL"),),
+                fundamental_results=(_fundamental_result("AAPL"),),
+                equities=EQUITIES,
+            )
+
+
 class WorkerAgentRunnerTests(unittest.TestCase):
     def test_market_runner_validates_model_output_end_to_end(self) -> None:
         captured = {}
