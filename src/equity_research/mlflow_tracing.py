@@ -4,8 +4,9 @@ Tracing is opt-in. This module configures Databricks-managed MLflow and enables
 MLflow's supported LangGraph tracing integration through LangChain autologging.
 
 The graph state intentionally contains validated request/worker/report objects rather
-than raw provider article or filing bodies. Trace tags and metadata added here are
-limited to project/runtime scope and do not include provider source text.
+than raw provider article or filing bodies. Explicit RETRIEVER spans may contain only
+validated, application-controlled RAG chunks actually supplied to the Company
+Researcher. Trace tags and metadata remain limited to project/runtime scope.
 """
 
 from __future__ import annotations
@@ -30,7 +31,9 @@ from equity_research.supervisor_research_graph import (
 DEFAULT_TRACE_EXPERIMENT = "/Shared/equity-research-genai"
 TRACE_PROJECT = "multi-agent-equity-research-system"
 TRACE_COMPONENT = "supervisor_research_graph"
-TRACE_PRIVACY_BOUNDARY = "validated_graph_state_no_raw_provider_text"
+TRACE_PRIVACY_BOUNDARY = (
+    "validated_graph_state_plus_controlled_rag_chunks_no_raw_provider_responses"
+)
 
 
 @dataclass(frozen=True)
