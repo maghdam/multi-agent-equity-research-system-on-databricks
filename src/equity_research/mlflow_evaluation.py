@@ -24,6 +24,11 @@ LIVE_EVALUATION_CASES: dict[str, dict[str, Any]] = {
             ),
             "requested_symbols": ["AAPL"],
         },
+        "tags": {
+            "case_id": "E1",
+            "category": "grounded_single_company",
+            "source": "ai_research_contract",
+        },
         "expectations": {
             "expected_mode": "single_company",
             "expected_symbols": ["AAPL"],
@@ -42,6 +47,11 @@ LIVE_EVALUATION_CASES: dict[str, dict[str, Any]] = {
                 "financial performance, and what developments and risks matter?"
             ),
             "requested_symbols": ["AAPL", "MSFT"],
+        },
+        "tags": {
+            "case_id": "E2",
+            "category": "grounded_comparison",
+            "source": "ai_research_contract",
         },
         "expectations": {
             "expected_mode": "comparison",
@@ -231,6 +241,11 @@ def build_live_evaluation_data(
                     ]["requested_symbols"]
                 ),
             },
+            "tags": dict(
+                LIVE_EVALUATION_CASES[case_id][
+                    "tags"
+                ]
+            ),
             "expectations": {
                 "expected_mode": LIVE_EVALUATION_CASES[case_id][
                     "expectations"
