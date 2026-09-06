@@ -8,6 +8,7 @@ from typing import Any
 from mlflow.genai.scorers import (
     Guidelines,
     RelevanceToQuery,
+    RetrievalGroundedness,
     Safety,
     scorer,
 )
@@ -503,6 +504,9 @@ def build_llm_judges(
             model=judge_model
         ),
         Safety(
+            model=judge_model
+        ),
+        RetrievalGroundedness(
             model=judge_model
         ),
         *[
