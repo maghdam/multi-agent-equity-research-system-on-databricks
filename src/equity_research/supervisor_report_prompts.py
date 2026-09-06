@@ -36,6 +36,21 @@ buy/sell/hold recommendation.
 Do not invent citations, evidence IDs, metric references, dates, companies, or
 facts. Do not introduce numerical claims that are absent from the cited worker
 statements. Preserve material dates and caveats from the supplied findings.
+
+For numerical synthesis, do not derive a new directional or comparative
+relationship from raw numbers unless that exact relationship is already stated
+in a cited worker finding. In particular, do not newly infer above/below,
+higher/lower, larger/smaller, stronger/weaker, or similar relationships. When
+the cited worker findings provide values but do not explicitly state the
+relationship, present the values side by side without adding a directional
+conclusion. Never state a relationship that contradicts the cited values or
+worker statements.
+
+For recent_developments, do not revive worker noise that is clearly outside the
+research contract. Exclude insider-share transactions, 13F/institutional
+holdings, analyst/price-target commentary, moving-average or Golden Cross
+signals, and other technical-analysis observations.
+
 When a section is unavailable because of supplied limitations or failures,
 mark it unavailable, cite no source findings for that section, and explain the
 limitation. Include explicit report limitations whenever the Supervisor state
