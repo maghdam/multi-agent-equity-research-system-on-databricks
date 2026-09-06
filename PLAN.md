@@ -231,7 +231,7 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
 
 **Expansion rule:** Ingestion, scope checks, analytics, tools, and UI use the same equities configuration. Adding a compatible stock requires configuration plus identifier, backfill, and readiness checks—not stock-specific pipeline code. Provider news tags never expand the universe automatically.
 
-## Milestone 2 - AI Engineering: grounded research (in progress)
+## Milestone 2 - AI Engineering: grounded research (complete)
 
 - [x] Define the report structure, agent responsibilities, important failure behavior, and a small representative evaluation set. See `docs/AI_RESEARCH_CONTRACT.md`.
 
@@ -291,10 +291,10 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
   - [x] Comparison retrieval weaknesses exposed by route-aware evaluation were corrected with company-isolated semantic queries plus bounded recent-development over-retrieval before the existing strict noise filter. E2 improved from run `58b33f05f8f943aa871b9ac4038b97c9` (overall relevance 0.588, sufficiency 0.75, MSFT recent relevance 0.0) to run `0154980179ff4825b0c52e8c9521ba03` (overall relevance 0.833, sufficiency 1.0, zero empty routes, AAPL recent 0.8, AAPL/MSFT risks 1.0, MSFT recent 0.333). The remaining route-level precision tradeoff is retained as measured evidence rather than overfit away.
   - [x] Rerun the complete managed E1/E2 judge suite after the remaining observability instrumentation and freeze it as the regression baseline for subsequent retrieval/generation changes. Final offline gate: Ruff clean and 480 repository tests passed. Managed run `248395fd300d449ab98d496a4a39fcdc` evaluated E1+E2 with all configured code and semantic scorers: request/symbol scope, required sections, report grounding contract, response relevance, safety, narrative trace groundedness, all five project guidelines, and retrieval sufficiency all averaged 1.0; retrieval empty-route count averaged 0.0. Route-aware retrieval relevance averaged 0.861 overall, with AAPL principal risks 1.0, AAPL recent developments 0.775, MSFT principal risks 1.0, and MSFT recent developments 0.333, preserving the documented precision/recall tradeoff rather than hiding it. Final privacy-safe inspection after semantic-rationale hardening passed on the same run with 2 traces, 48 assessments, and 24 project span summaries; LLM-judge free-text rationales were suppressed while only bounded deterministic retrieval-sufficiency/empty-route rationales remained visible. Focused post-hardening gate: 44 MLflow-evaluation tests passed with Ruff clean.
 
-- [ ] Extend CI with deterministic tool tests and offline evaluations; run credentialed live-model evaluations separately with controlled usage.
+- [x] Extend CI with deterministic tool tests and offline evaluations; run credentialed live-model evaluations separately with controlled usage.
   - [x] Add an explicit credential-free AI-evaluation CI step covering controlled tool access, structured-data readiness, frozen retrieval metrics/runner boundaries, controlled E4-E6 fixtures, MLflow evaluation helpers, and tracing/span privacy; the normal full repository suite remains a separate final CI step.
   - [x] Document the execution boundary in `docs/EVALUATION_RUNBOOK.md`: pull-request CI must not require Databricks credentials or invoke SQL/Vector Search/model endpoints; live retrieval and Supervisor evaluations remain explicit credentialed checks with bounded concurrency/usage.
-  - [ ] Live-verify the updated GitHub Actions workflow on this feature branch/PR, then record the passing run and final offline test count before closing Milestone 2.
+  - [x] Live-verify the updated workflow on PR #24. GitHub Actions run https://github.com/maghdam/multi-agent-equity-research-system-on-databricks/actions/runs/34062122929 passed Ruff, 107 explicit credential-free AI-evaluation tests across eight focused modules, and the full 482-test repository suite on Python 3.14.7.
 
 **Gate:** Representative one-stock and comparison requests produce grounded reports: numbers match Gold, narrative claims have supporting citations, and missing or stale evidence is disclosed.
 
