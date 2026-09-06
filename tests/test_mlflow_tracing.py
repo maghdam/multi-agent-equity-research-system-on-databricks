@@ -266,7 +266,8 @@ class MlflowTracingRuntimeTests(unittest.TestCase):
             kwargs["metadata"],
             {
                 "privacy_boundary": (
-                    "validated_graph_state_no_raw_provider_text"
+                    "validated_graph_state_plus_controlled_rag_chunks_"
+                    "no_raw_provider_responses"
                 ),
                 "structured_authority": "gold_metrics",
                 "narrative_authority": (
