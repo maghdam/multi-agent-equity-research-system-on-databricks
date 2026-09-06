@@ -21,6 +21,7 @@ from equity_research.mlflow_evaluation import (  # noqa: E402
     _run_grounding_guidelines_with_parse_retry,
     build_live_evaluation_data,
     build_narrative_trace_grounding_judge,
+    build_trace_aware_retrieval_relevance_judge,
     build_trace_aware_retrieval_sufficiency_judge,
     build_evaluation_scorers,
     build_evidence_degradation_scorers,
@@ -1315,6 +1316,149 @@ class MlflowJudgeConfigurationTests(unittest.TestCase):
         )
         self.assertGreaterEqual(
             len(EQUITY_RESEARCH_GUIDELINES),
+            5,
+        )
+
+    def test_builds_trace_aware_retrieval_relevance_judge(self) -> None:
+        judge = build_trace_aware_retrieval_relevance_judge(
+            model="databricks:/databricks-gpt-oss-120b"
+        )
+
+        self.assertEqual(
+            judge.name,
+            "retrieval_relevance",
+        )
+
+    def test_retrieval_relevance_reports_route_specific_precision(
+        self,
+    ) -> None:
+        inner = Mock(
+            side_effect=[
+                SimpleNamespace(
+                    value="yes",
+                    rationale="private rationale 1",
+                ),
+                SimpleNamespace(
+                    value="yes",
+                    rationale="private rationale 2",
+                ),
+                SimpleNamespace(
+                    value="yes",
+                    rationale="private rationale 3",
+                ),
+                SimpleNamespace(
+                    value="no",
+                    rationale="private rationale 4",
+                ),
+                SimpleNamespace(
+                    value="no",
+                    rationale="private rationale 5",
+                ),
+            ]
+        )
+
+        with patch(
+            "equity_research.mlflow_evaluation.Guidelines",
+            return_value=inner,
+        ):
+            judge = build_trace_aware_retrieval_relevance_judge(
+                model="databricks:/databricks-gpt-oss-120b"
+            )
+
+        trace = Mock()
+        trace.search_spans.return_value = [
+            SimpleNamespace(
+                inputs={
+                    "query": "AAPL risks",
+                    "symbol": "AAPL",
+                    "topic": "principal_risks",
+                    "source_type": "filing",
+                },
+                outputs=[
+                    {
+                        "id": "a" * 64,
+                        "page_content": "Risk evidence one.",
+                        "metadata": {
+                            "source_type": "filing",
+                        },
+                    },
+                    {
+                        "id": "b" * 64,
+                        "page_content": "Risk evidence two.",
+                        "metadata": {
+                            "source_type": "filing",
+                        },
+                    },
+                ],
+            ),
+            SimpleNamespace(
+                inputs={
+                    "query": "AAPL developments",
+                    "symbol": "AAPL",
+                    "topic": "recent_developments",
+                    "source_type": "news",
+                },
+                outputs=[
+                    {
+                        "id": "c" * 64,
+                        "page_content": "Development evidence.",
+                        "metadata": {
+                            "source_type": "news",
+                        },
+                    },
+                    {
+                        "id": "d" * 64,
+                        "page_content": "Noise one.",
+                        "metadata": {
+                            "source_type": "news",
+                        },
+                    },
+                    {
+                        "id": "e" * 64,
+                        "page_content": "Noise two.",
+                        "metadata": {
+                            "source_type": "news",
+                        },
+                    },
+                ],
+            ),
+        ]
+
+        feedbacks = judge(
+            trace=trace
+        )
+        by_name = {
+            feedback.name: feedback
+            for feedback in feedbacks
+        }
+
+        self.assertEqual(
+            by_name["retrieval_relevance"].value,
+            0.6,
+        )
+        self.assertEqual(
+            by_name[
+                "retrieval_relevance_aapl_principal_risks"
+            ].value,
+            1.0,
+        )
+        self.assertAlmostEqual(
+            by_name[
+                "retrieval_relevance_aapl_recent_developments"
+            ].value,
+            1 / 3,
+        )
+        self.assertNotIn(
+            "private rationale",
+            str(
+                [
+                    feedback.rationale
+                    for feedback in feedbacks
+                ]
+            ),
+        )
+        self.assertEqual(
+            inner.call_count,
             5,
         )
 
