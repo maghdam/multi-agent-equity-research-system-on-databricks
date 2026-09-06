@@ -11,11 +11,13 @@ from equity_research.databricks_cli_runtime import (
 from equity_research.supervisor_contracts import SupervisorState
 from equity_research.supervisor_report import (
     SupervisorReport,
+    SupervisorReportContractError,
     build_supervisor_report_context,
     validate_supervisor_report_output,
 )
 from equity_research.supervisor_report_prompts import (
     build_supervisor_report_model_request,
+    build_supervisor_report_repair_request,
 )
 from equity_research.worker_agent_runtime import (
     parse_structured_chat_response,
@@ -51,7 +53,25 @@ def run_supervisor_report_synthesis(
         response
     )
 
-    return validate_supervisor_report_output(
-        raw_output,
-        state=state,
-    )
+    try:
+        return validate_supervisor_report_output(
+            raw_output,
+            state=state,
+        )
+    except SupervisorReportContractError as exc:
+        repair_payload = build_supervisor_report_repair_request(
+            context,
+            validation_error=str(exc),
+        )
+        repair_response = model_query(
+            payload=repair_payload,
+            profile=profile,
+        )
+        repaired_output = parse_structured_chat_response(
+            repair_response
+        )
+
+        return validate_supervisor_report_output(
+            repaired_output,
+            state=state,
+        )
