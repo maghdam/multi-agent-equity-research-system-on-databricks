@@ -169,6 +169,7 @@ def require_managed_evaluation_dataset_runtime() -> None:
 
 MANUAL_OBSERVABILITY_SPAN_PREFIXES = (
     "supervisor_scope_validation",
+    "controlled_evaluation_fixture_",
     "gold_",
     "company_researcher_retrieval_",
     "market_analyst_20b_",
@@ -261,6 +262,12 @@ def summarize_observability_spans(
                 ),
                 "unsupported_symbol_count": get_attribute(
                     "equity_research.unsupported_symbol_count"
+                ),
+                "evaluation_case": get_attribute(
+                    "equity_research.evaluation_case"
+                ),
+                "fixture_type": get_attribute(
+                    "equity_research.fixture_type"
                 ),
             }
         )
