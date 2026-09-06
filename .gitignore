@@ -17,8 +17,10 @@ venv/
 *.pem
 *.key
 
-# Databricks and local tooling
+# Databricks, MLflow, and local tooling
 .databricks/
+mlflow.db
+mlruns/
 .idea/
 .vscode/
 
