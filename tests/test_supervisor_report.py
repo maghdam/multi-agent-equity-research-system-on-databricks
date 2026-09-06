@@ -387,6 +387,111 @@ class SupervisorReportValidationTests(unittest.TestCase):
             },
         )
 
+    def test_degraded_comparison_excludes_incomplete_dimension(self) -> None:
+        state = _state(
+            ("AAPL", "MSFT"),
+            recent_result=_degraded_recent_result(),
+        )
+        output = _comparison_output()
+        output["sections"][2] = {
+            "section": "recent_developments",
+            "status": "degraded",
+            "text": "AAPL has a grounded recent development; MSFT coverage is missing.",
+            "source_finding_ids": [
+                "recent_developments:AAPL:recent_developments",
+            ],
+        }
+        output["sections"][4]["status"] = "degraded"
+        output["sections"][4]["source_finding_ids"] = [
+            "market_analysis:market_AAPL",
+            "market_analysis:market_MSFT",
+            "market_analysis:fundamental_AAPL",
+            "market_analysis:fundamental_MSFT",
+            "principal_risks:AAPL:principal_risks",
+            "principal_risks:MSFT:principal_risks",
+        ]
+        output["limitations"] = [
+            "MSFT recent-development evidence is unavailable.",
+        ]
+
+        report = validate_supervisor_report_output(
+            output,
+            state=state,
+        )
+
+        comparative = next(
+            section
+            for section in report.sections
+            if section.section == "comparative_assessment"
+        )
+        self.assertNotIn(
+            "recent_developments:AAPL:recent_developments",
+            comparative.source_finding_ids,
+        )
+
+    def test_comparison_rejects_source_from_incomplete_dimension(self) -> None:
+        state = _state(
+            ("AAPL", "MSFT"),
+            recent_result=_degraded_recent_result(),
+        )
+        output = _comparison_output()
+        output["sections"][2] = {
+            "section": "recent_developments",
+            "status": "degraded",
+            "text": "AAPL has a grounded recent development; MSFT coverage is missing.",
+            "source_finding_ids": [
+                "recent_developments:AAPL:recent_developments",
+            ],
+        }
+        output["sections"][4]["status"] = "degraded"
+        output["sections"][4]["source_finding_ids"] = [
+            "market_analysis:market_AAPL",
+            "market_analysis:market_MSFT",
+            "market_analysis:fundamental_AAPL",
+            "market_analysis:fundamental_MSFT",
+            "recent_developments:AAPL:recent_developments",
+            "principal_risks:AAPL:principal_risks",
+            "principal_risks:MSFT:principal_risks",
+        ]
+        output["limitations"] = [
+            "MSFT recent-development evidence is unavailable.",
+        ]
+
+        with self.assertRaisesRegex(
+            SupervisorReportContractError,
+            "lacks grounded coverage for every requested company",
+        ):
+            validate_supervisor_report_output(
+                output,
+                state=state,
+            )
+
+    def test_deterministic_comparison_omits_incomplete_dimension(self) -> None:
+        report = build_deterministic_supervisor_report(
+            _state(
+                ("AAPL", "MSFT"),
+                recent_result=_degraded_recent_result(),
+            )
+        )
+
+        comparative = next(
+            section
+            for section in report.sections
+            if section.section == "comparative_assessment"
+        )
+        self.assertEqual(
+            comparative.status,
+            "degraded",
+        )
+        self.assertNotIn(
+            "recent_developments:AAPL:recent_developments",
+            comparative.source_finding_ids,
+        )
+        self.assertNotIn(
+            "Recent developments:",
+            comparative.text,
+        )
+
     def test_rejects_unknown_worker_finding_reference(self) -> None:
         output = _single_output()
         output["sections"][0]["source_finding_ids"] = [
