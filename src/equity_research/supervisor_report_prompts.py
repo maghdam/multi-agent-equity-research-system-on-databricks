@@ -6,7 +6,10 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-from equity_research.supervisor_report import SupervisorReportContractError
+from equity_research.supervisor_report import (
+    RELATION_TERMS,
+    SupervisorReportContractError,
+)
 
 
 SUPERVISOR_MODEL = "system.ai.gpt-oss-120b"
@@ -162,6 +165,9 @@ def build_supervisor_report_repair_request(
     payload = build_supervisor_report_model_request(
         context
     )
+    guarded_relation_terms = ", ".join(
+        RELATION_TERMS
+    )
     payload["messages"] = [
         *payload["messages"],
         {
@@ -171,6 +177,12 @@ def build_supervisor_report_repair_request(
                 "application validation. Regenerate the entire report from "
                 "the same controlled context and correct this exact issue:\n"
                 f"{validation_error.strip()}\n"
+                "For this repair, proactively avoid every guarded relation "
+                "term unless that exact term already appears in a cited "
+                "worker statement. The safest repair is to present supported "
+                "values or facts side by side without directional or "
+                "qualitative comparison. Guarded relation terms: "
+                f"{guarded_relation_terms}.\n"
                 "Do not weaken, bypass, reinterpret, or argue with the "
                 "validator. Return only a corrected report matching the "
                 "response schema."
