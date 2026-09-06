@@ -119,6 +119,44 @@ def main() -> None:
     span_summaries = 0
 
     for trace in traces:
+        trace_data = getattr(
+            trace,
+            "data",
+            None,
+        )
+        raw_spans = getattr(
+            trace_data,
+            "spans",
+            (),
+        )
+        span_names_by_id = {
+            getattr(
+                span,
+                "span_id",
+                None,
+            ): getattr(
+                span,
+                "name",
+                None,
+            )
+            for span in raw_spans
+            if isinstance(
+                getattr(
+                    span,
+                    "span_id",
+                    None,
+                ),
+                str,
+            )
+            and isinstance(
+                getattr(
+                    span,
+                    "name",
+                    None,
+                ),
+                str,
+            )
+        }
         assessments = trace.search_assessments()
 
         for summary in summarize_trace_assessments(
@@ -136,10 +174,23 @@ def main() -> None:
             ):
                 continue
 
+            source_span = span_names_by_id.get(
+                summary["span_id"]
+            )
+            fields = [
+                "ASSESSMENT",
+                f"name={summary['name']}",
+                f"value={summary['value']}",
+            ]
+            if source_span is not None:
+                fields.append(
+                    f"span={source_span}"
+                )
+
             print(
-                "ASSESSMENT"
-                f"; name={summary['name']}"
-                f"; value={summary['value']}"
+                "; ".join(
+                    fields
+                )
             )
 
             if summary["rationale"] is not None:
@@ -159,17 +210,6 @@ def main() -> None:
             printed += 1
 
         if args.show_span_summary:
-            trace_data = getattr(
-                trace,
-                "data",
-                None,
-            )
-            raw_spans = getattr(
-                trace_data,
-                "spans",
-                (),
-            )
-
             for span_summary in summarize_observability_spans(
                 raw_spans
             ):
