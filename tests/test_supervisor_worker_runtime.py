@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
+from equity_research.agent_contracts import AgentLimitation  # noqa: E402
 from equity_research.company_researcher import (  # noqa: E402
     CompanyResearcherResult,
     ResearchFinding,
@@ -337,7 +338,9 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
             equities=EQUITIES,
         )
 
-    def test_company_comparison_retrieves_each_symbol_separately(self) -> None:
+    def test_company_comparison_retrieves_and_runs_each_symbol_separately(
+        self,
+    ) -> None:
         vector_query = Mock(
             side_effect=[
                 {"symbol": "AAPL"},
@@ -345,10 +348,16 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
             ]
         )
         company_agent_runner = Mock(
-            return_value=_company_agent_result(
-                "recent_developments",
-                ("AAPL", "MSFT"),
-            )
+            side_effect=[
+                _company_agent_result(
+                    "recent_developments",
+                    ("AAPL",),
+                ),
+                _company_agent_result(
+                    "recent_developments",
+                    ("MSFT",),
+                ),
+            ]
         )
 
         workers = DatabricksSupervisorWorkers(
@@ -383,14 +392,68 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
                 topic="recent_developments",
             )
 
+        self.assertEqual(vector_query.call_count, 2)
         self.assertEqual(
-            result,
-            _company_agent_result(
-                "recent_developments",
-                ("AAPL", "MSFT"),
+            tuple(
+                call.kwargs["requested_symbols"]
+                for call in parser.call_args_list
+            ),
+            (
+                ("AAPL",),
+                ("MSFT",),
             ),
         )
-        self.assertEqual(vector_query.call_count, 2)
+
+        self.assertEqual(
+            company_agent_runner.call_count,
+            2,
+        )
+        first_call, second_call = (
+            company_agent_runner.call_args_list
+        )
+        self.assertEqual(
+            first_call.kwargs["requested_symbols"],
+            ("AAPL",),
+        )
+        self.assertEqual(
+            second_call.kwargs["requested_symbols"],
+            ("MSFT",),
+        )
+        self.assertEqual(
+            tuple(
+                item.evidence_id
+                for item in first_call.kwargs["evidence"]
+            ),
+            ("a" * 64,),
+        )
+        self.assertEqual(
+            tuple(
+                item.evidence_id
+                for item in second_call.kwargs["evidence"]
+            ),
+            ("b" * 64,),
+        )
+
+        self.assertEqual(
+            tuple(
+                finding.symbols
+                for finding in result.findings
+            ),
+            (
+                ("AAPL",),
+                ("MSFT",),
+            ),
+        )
+        self.assertEqual(
+            tuple(
+                finding.finding_id
+                for finding in result.findings
+            ),
+            (
+                "AAPL:recent_developments-AAPL",
+                "MSFT:recent_developments-MSFT",
+            ),
+        )
 
         filters = [
             json.loads(
@@ -398,7 +461,6 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
             )
             for call in vector_query.call_args_list
         ]
-
         self.assertEqual(
             filters,
             [
@@ -413,51 +475,28 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
             ],
         )
 
-        self.assertEqual(
-            tuple(
-                call.kwargs["requested_symbols"]
-                for call in parser.call_args_list
-            ),
-            (
-                ("AAPL",),
-                ("MSFT",),
-            ),
-        )
-
-        supplied_evidence = company_agent_runner.call_args.kwargs[
-            "evidence"
-        ]
-        self.assertEqual(
-            tuple(
-                item.evidence_id
-                for item in supplied_evidence
-            ),
-            (
-                "a" * 64,
-                "b" * 64,
-            ),
-        )
-        self.assertEqual(
-            tuple(
-                item.retrieval_rank
-                for item in supplied_evidence
-            ),
-            (1, 2),
-        )
-
-    def test_company_worker_deduplicates_shared_evidence(self) -> None:
-        shared = _evidence(
-            "c" * 64,
-            symbol="AAPL",
-            source_type="news",
+    def test_company_comparison_scopes_insufficiency_to_missing_symbol(
+        self,
+    ) -> None:
+        limitation = AgentLimitation(
+            agent="company_researcher",
+            symbol=None,
+            dimension="recent_developments",
+            reason_code="insufficient_evidence",
+            message="No sufficiently relevant evidence was found.",
         )
         company_agent_runner = Mock(
-            return_value=_company_agent_result(
-                "recent_developments",
-                ("AAPL", "MSFT"),
-            )
+            side_effect=[
+                _company_agent_result(
+                    "recent_developments",
+                    ("AAPL",),
+                ),
+                CompanyResearcherResult(
+                    findings=(),
+                    limitations=(limitation,),
+                ),
+            ]
         )
-
         workers = DatabricksSupervisorWorkers(
             config=self.config,
             equities=EQUITIES,
@@ -474,26 +513,39 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
             "equity_research.supervisor_worker_runtime."
             "parse_retrieval_response",
             side_effect=[
-                (shared,),
-                (shared,),
+                (
+                    _evidence(
+                        "c" * 64,
+                        symbol="AAPL",
+                        source_type="news",
+                    ),
+                ),
+                (),
             ],
         ):
-            workers.company_worker(
+            result = workers.company_worker(
                 request=_request("AAPL", "MSFT"),
                 topic="recent_developments",
             )
 
-        supplied_evidence = company_agent_runner.call_args.kwargs[
-            "evidence"
-        ]
-
         self.assertEqual(
-            len(supplied_evidence),
+            tuple(
+                finding.symbols
+                for finding in result.findings
+            ),
+            (("AAPL",),),
+        )
+        self.assertEqual(
+            len(result.limitations),
             1,
         )
         self.assertEqual(
-            supplied_evidence[0].retrieval_rank,
-            1,
+            result.limitations[0].symbol,
+            "MSFT",
+        )
+        self.assertEqual(
+            result.limitations[0].reason_code,
+            "insufficient_evidence",
         )
 
     def test_principal_risk_worker_uses_item_1a_filing_filter(self) -> None:
