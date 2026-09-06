@@ -12,7 +12,7 @@ from equity_research.market_analyst import MarketAnalystResult
 from equity_research.supervisor_contracts import SupervisorState
 
 
-ReportSectionStatus = Literal["available", "unavailable"]
+ReportSectionStatus = Literal["available", "degraded", "unavailable"]
 ReportSectionName = Literal[
     "market_performance",
     "fundamental_performance",
@@ -243,6 +243,11 @@ def validate_supervisor_report_output(
             "Single-company reports must not contain comparative_assessment."
         )
 
+    _validate_comparative_source_inheritance(
+        sections,
+        state=state,
+    )
+
     limitations = _parse_limitations(
         raw_limitations,
         state=state,
@@ -379,9 +384,10 @@ def _parse_section(
         "status"
     )
 
-    if status not in {"available", "unavailable"}:
+    if status not in {"available", "degraded", "unavailable"}:
         raise SupervisorReportContractError(
-            "Report section status must be 'available' or 'unavailable'."
+            "Report section status must be 'available', 'degraded', or "
+            "'unavailable'."
         )
 
     text = _required_text(
@@ -405,27 +411,59 @@ def _parse_section(
         for value in raw_ids
     )
 
-    if status == "available" and not source_ids:
-        raise SupervisorReportContractError(
-            f"Available report section {section!r} requires source_finding_ids."
-        )
+    section_has_issue = _section_issue_supported(
+        section=section,
+        state=state,
+    )
+    available_source_ids = _available_source_ids_for_section(
+        section=section,
+        source_findings=source_findings,
+    )
 
-    if status == "unavailable" and source_ids:
-        raise SupervisorReportContractError(
-            f"Unavailable report section {section!r} must not cite findings."
-        )
+    if status == "available":
+        if not source_ids:
+            raise SupervisorReportContractError(
+                f"Available report section {section!r} requires "
+                "source_finding_ids."
+            )
 
-    if (
-        status == "unavailable"
-        and not _section_unavailability_supported(
-            section=section,
-            state=state,
-        )
-    ):
-        raise SupervisorReportContractError(
-            f"Report section {section!r} cannot be unavailable without "
-            "a matching Supervisor limitation or failure."
-        )
+        if section_has_issue:
+            raise SupervisorReportContractError(
+                f"Report section {section!r} must be degraded or unavailable "
+                "because the Supervisor state contains a matching limitation "
+                "or failure."
+            )
+
+    if status == "degraded":
+        if not source_ids:
+            raise SupervisorReportContractError(
+                f"Degraded report section {section!r} requires grounded "
+                "source_finding_ids."
+            )
+
+        if not section_has_issue:
+            raise SupervisorReportContractError(
+                f"Report section {section!r} cannot be degraded without "
+                "a matching Supervisor limitation or failure."
+            )
+
+    if status == "unavailable":
+        if source_ids:
+            raise SupervisorReportContractError(
+                f"Unavailable report section {section!r} must not cite findings."
+            )
+
+        if not section_has_issue:
+            raise SupervisorReportContractError(
+                f"Report section {section!r} cannot be unavailable without "
+                "a matching Supervisor limitation or failure."
+            )
+
+        if available_source_ids:
+            raise SupervisorReportContractError(
+                f"Report section {section!r} cannot be unavailable while "
+                "grounded worker findings remain available."
+            )
 
     if len(set(source_ids)) != len(source_ids):
         raise SupervisorReportContractError(
@@ -443,7 +481,7 @@ def _parse_section(
             f"Report section cites unknown worker findings: {missing}."
         )
 
-    if status == "available":
+    if status in {"available", "degraded"}:
         _validate_section_sources(
             section=section,
             source_ids=source_ids,
@@ -536,6 +574,96 @@ def _validate_section_sources(
             )
 
 
+def _available_source_ids_for_section(
+    *,
+    section: str,
+    source_findings: Mapping[str, ReportSourceFinding],
+) -> tuple[str, ...]:
+    if section == "market_performance":
+        return tuple(
+            source_id
+            for source_id, source in source_findings.items()
+            if (
+                source.route_id == "market_analysis"
+                and source.dimension_or_topic == "market"
+            )
+        )
+
+    if section == "fundamental_performance":
+        return tuple(
+            source_id
+            for source_id, source in source_findings.items()
+            if (
+                source.route_id == "market_analysis"
+                and source.dimension_or_topic == "fundamental"
+            )
+        )
+
+    if section == "recent_developments":
+        return tuple(
+            source_id
+            for source_id, source in source_findings.items()
+            if source.route_id == "recent_developments"
+        )
+
+    if section == "principal_risks":
+        return tuple(
+            source_id
+            for source_id, source in source_findings.items()
+            if source.route_id == "principal_risks"
+        )
+
+    if section == "comparative_assessment":
+        return tuple(
+            source_findings
+        )
+
+    return ()
+
+
+def _validate_comparative_source_inheritance(
+    sections: Sequence[ReportSection],
+    *,
+    state: SupervisorState,
+) -> None:
+    if state.request.mode != "comparison":
+        return
+
+    comparative = next(
+        (
+            section
+            for section in sections
+            if section.section == "comparative_assessment"
+        ),
+        None,
+    )
+
+    if comparative is None:
+        return
+
+    inherited_ids = {
+        source_id
+        for section in sections
+        if (
+            section.section != "comparative_assessment"
+            and section.status in {"available", "degraded"}
+        )
+        for source_id in section.source_finding_ids
+    }
+    comparative_ids = set(
+        comparative.source_finding_ids
+    )
+    missing = sorted(
+        inherited_ids - comparative_ids
+    )
+
+    if missing:
+        raise SupervisorReportContractError(
+            "comparative_assessment must inherit source_finding_ids from "
+            f"all grounded report sections; missing {missing}."
+        )
+
+
 def _validate_relation_grounding(
     *,
     text: str,
@@ -567,7 +695,7 @@ def _validate_relation_grounding(
         )
 
 
-def _section_unavailability_supported(
+def _section_issue_supported(
     *,
     section: str,
     state: SupervisorState,
