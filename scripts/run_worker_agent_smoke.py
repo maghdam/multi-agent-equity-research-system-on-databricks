@@ -275,8 +275,7 @@ def _print_research_findings(
 ) -> None:
     for finding in result.findings:
         print(
-            prefix
-            f"; id={finding.finding_id}"
+            f"{prefix}; id={finding.finding_id}"
             f"; characterization={finding.characterization}"
             f"; symbols={','.join(finding.symbols)}"
             f"; evidence_ids={','.join(finding.evidence_ids)}"
