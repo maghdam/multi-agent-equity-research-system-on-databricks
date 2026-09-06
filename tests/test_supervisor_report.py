@@ -136,6 +136,30 @@ def _company_result(
     )
 
 
+def _degraded_recent_result() -> CompanyResearcherResult:
+    return CompanyResearcherResult(
+        findings=(
+            ResearchFinding(
+                finding_id="AAPL:recent_developments",
+                topic="recent_developments",
+                characterization="development",
+                symbols=("AAPL",),
+                statement="AAPL recent_developments statement.",
+                evidence_ids=("a" * 64,),
+            ),
+        ),
+        limitations=(
+            AgentLimitation(
+                agent="company_researcher",
+                symbol="MSFT",
+                dimension="recent_developments",
+                reason_code="insufficient_evidence",
+                message="No grounded recent-development evidence for MSFT.",
+            ),
+        ),
+    )
+
+
 def _state(
     symbols: tuple[str, ...],
     *,
