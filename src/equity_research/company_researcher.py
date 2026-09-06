@@ -66,6 +66,17 @@ def build_company_researcher_context(
         requested_symbols=set(symbols),
     )
 
+    if (
+        normalized_topic == "recent_developments"
+        and any(
+            item.source_type != "news"
+            for item in evidence_by_id.values()
+        )
+    ):
+        raise AgentContractError(
+            "Recent-development context may contain only news evidence."
+        )
+
     return {
         "topic": normalized_topic,
         "requested_symbols": list(symbols),
@@ -137,16 +148,15 @@ def validate_company_researcher_output(
             "insufficient_evidence",
         )
 
-    if not evidence_by_id:
-        if raw_findings:
-            raise AgentContractError(
-                "Company Researcher cannot return findings without evidence."
-            )
+    if not evidence_by_id and raw_findings:
+        raise AgentContractError(
+            "Company Researcher cannot return findings without evidence."
+        )
 
-        if insufficient is None:
-            raise AgentContractError(
-                "Empty evidence requires an insufficient_evidence explanation."
-            )
+    if not raw_findings and insufficient is None:
+        raise AgentContractError(
+            "No findings require an insufficient_evidence explanation."
+        )
 
     findings: list[ResearchFinding] = []
     seen_ids: set[str] = set()
@@ -155,6 +165,21 @@ def validate_company_researcher_output(
         if not isinstance(raw, Mapping):
             raise AgentContractError(
                 "Each Company Researcher finding must be an object."
+            )
+
+        unknown_finding_fields = set(raw) - {
+            "finding_id",
+            "topic",
+            "characterization",
+            "symbols",
+            "statement",
+            "evidence_ids",
+        }
+
+        if unknown_finding_fields:
+            raise AgentContractError(
+                "Company Researcher finding has unknown fields: "
+                f"{sorted(unknown_finding_fields)}."
             )
 
         finding_id = _required_text(
