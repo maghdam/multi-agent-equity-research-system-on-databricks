@@ -2,9 +2,9 @@
 
 Build a small research app that compares AAPL and MSFT using market data, company fundamentals, and cited news/filing evidence. See [README.md](README.md) for the architecture and expected output.
 
-**Current position:** Milestone 1 — Data Engineering is complete and Milestone 2 — AI Engineering is active. The deterministic RAG corpus, managed embeddings/vector index, independent retrieval holdout, and controlled structured-data/retrieval tool layer are implemented and live-verified in Databricks. The controlled Gold path uses parameterized Statement Execution against only `market_metrics` and `fundamental_metrics`, enforces configured-symbol scope and readiness, and returns explicit missing/stale states. The controlled retrieval path uses the HYBRID baseline with bounded result counts, server-side company/source/section filters, strict client-side scope validation, stable evidence IDs, citation/provenance metadata, and untrusted-text handling. Credential-free GitHub Actions continues to run Ruff correctness lint and the offline test suite on pull requests and pushes to `main`.
+**Current position:** Milestone 1 — Data Engineering is complete and Milestone 2 — AI Engineering is active. The deterministic RAG corpus, managed embeddings/vector index, independent retrieval holdout, controlled structured-data/retrieval tools, and both worker agents are implemented and live-verified in Databricks. The Market Analyst consumes only controlled ready Gold metrics and returns findings whose symbols, dimensions, metric fields, and exact as-of dates are validated deterministically. The Company Researcher consumes only controlled retrieval evidence, treats retrieved text as untrusted, preserves supplied evidence IDs, distinguishes company developments from irrelevant market/personnel activity, and distinguishes SEC-disclosed risks from news-based risk context. Both workers use the Unity Catalog model service `system.ai.gpt-oss-20b` through structured JSON output, followed by application-side validation. Credential-free GitHub Actions continues to run Ruff correctness lint and the offline test suite on pull requests and pushes to `main`.
 
-**Next:** Implement the Market Analyst and Company Researcher on top of the verified controlled tools, then connect them through the LangGraph Supervisor before report/citation and MLflow evaluation work.
+**Next:** Implement and independently test the LangGraph Supervisor over the verified worker-agent interfaces, then add structured report/citation validation and MLflow tracing/evaluation.
 
 ## Implementation roadmap
 
@@ -71,8 +71,8 @@ flowchart TB
     B --> C["Chunking / embeddings / vector index"]
     C --> D["Controlled SQL + retrieval tools ✅"]
 
-    D --> E1["Market Analyst"]
-    D --> E2["Company Researcher"]
+    D --> E1["Market Analyst ✅"]
+    D --> E2["Company Researcher ✅"]
 
     E1 --> F["LangGraph Supervisor"]
     E2 --> F
@@ -231,7 +231,7 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
 
 **Expansion rule:** Ingestion, scope checks, analytics, tools, and UI use the same equities configuration. Adding a compatible stock requires configuration plus identifier, backfill, and readiness checks—not stock-specific pipeline code. Provider news tags never expand the universe automatically.
 
-## Milestone 2 - AI Engineering: grounded research (pending)
+## Milestone 2 - AI Engineering: grounded research (in progress)
 
 - [x] Define the report structure, agent responsibilities, important failure behavior, and a small representative evaluation set. See `docs/AI_RESEARCH_CONTRACT.md`.
 
@@ -254,7 +254,14 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
   - The thin Databricks CLI runtime supports Statement Execution polling and synchronous Vector Search without adding a Databricks Python SDK dependency. The live smoke runner requires physical target resource names so development-mode bundle prefixes are explicit rather than guessed.
   - Live verification on 2026-09-06 passed against `workspace.dev_mohammad_m_aghdam_equity_research_gold` and `workspace.dev_mohammad_m_aghdam_equity_research_ai.research_chunks_index`: AAPL/MSFT market metrics were ready at common `as_of_date = 2026-09-04`; AAPL fundamentals were ready at `2026-07-31` from a 10-Q and MSFT at `2026-07-29` from a 10-K; controlled AAPL HYBRID news retrieval returned 3 scoped results; controlled AAPL Item 1A filing retrieval returned 3 scoped results with stable evidence/document identities. The smoke output excludes provider source text.
 
-- [ ] Implement the Market Analyst, Company Researcher, and LangGraph Supervisor with structured reports, citations, and clear errors.
+- [x] Implement and independently test the Market Analyst and Company Researcher worker agents on top of the controlled tools.
+  - Worker inputs are deterministic, JSON-safe contexts built only from controlled tool outputs. Stale/missing Gold rows are not exposed as usable metric values; their limitations are propagated explicitly.
+  - The Market Analyst uses `system.ai.gpt-oss-20b` with strict structured JSON output and low reasoning effort. Application validation requires every ready market/fundamental dimension to be covered, rejects out-of-scope symbols, wrong datasets, stale/unavailable references, incorrect as-of dates, unsupported metric fields, and silent omission of ready dimensions.
+  - The Company Researcher uses the same worker model and may cite only evidence IDs supplied by controlled retrieval. Retrieved source text is labeled `untrusted_text`; prompt-like content remains evidence rather than instructions. Recent-development findings may use only news evidence, and filing-only SEC Risk Factors findings must be characterized as `company_disclosed_risk`; `risk_context` requires current news evidence.
+  - Live verification on 2026-09-06 passed for AAPL over the existing development Gold schema and managed Vector Search index. The Market Analyst returned two validated findings with exact Gold references and no limitations. The recent-developments worker returned one company-specific product finding and excluded an irrelevant politician stock-purchase item after prompt refinement. The principal-risks worker returned three validated SEC Item 1A findings, all correctly characterized as company-disclosed risks with existing evidence IDs. The live smoke log excludes provider source text.
+  - Final offline gate after refinement: 21 focused worker-contract tests and 309 repository tests passed; Ruff was clean.
+
+- [ ] Implement and independently test the LangGraph Supervisor over the verified worker outputs, including request-mode validation, worker routing, degraded-state propagation, and explicit failure behavior.
 
 - [ ] Add MLflow tracing and GenAI evaluation. Combine deterministic numerical/citation checks with retrieval metrics such as hit-rate@k and MRR, plus precision@k and recall@k when relevance labels are sufficiently exhaustive, plus MLflow judges for retrieval relevance/groundedness/sufficiency, response relevance, correctness, safety, and project guidelines.
 
@@ -266,7 +273,7 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
 
 ## Milestone 3 - Application and end-to-end delivery (pending)
 
-- [x] Select the initial app-facing chat-model baseline and multi-turn evaluation strategy. The application routes user requests directly to the LangGraph Supervisor using `databricks-gpt-oss-120b`; evaluation will compare that configuration with a GPT OSS 20B Supervisor using the same worker agents. See `docs/MODEL_STRATEGY.md`.
+- [x] Select the initial app-facing chat-model baseline and multi-turn evaluation strategy. The application will route user requests directly to the LangGraph Supervisor using `system.ai.gpt-oss-120b`; evaluation will compare that configuration with a GPT OSS 20B Supervisor using the same worker agents. See `docs/MODEL_STRATEGY.md`.
 
 - [ ] Build configured stock/period selection, charts, comparison metrics, a cited report, and evidence-grounded follow-up chat.
 

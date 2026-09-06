@@ -107,6 +107,32 @@ def execute_statement_via_cli(
     )
 
 
+def query_chat_completions_via_cli(
+    *,
+    payload: Mapping[str, Any],
+    profile: str | None = None,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+) -> dict[str, Any]:
+    """Execute one non-streaming Databricks Chat Completions request."""
+
+    if not isinstance(payload, Mapping):
+        raise ControlledToolExecutionError(
+            "chat payload must be a mapping."
+        )
+
+    if payload.get("stream") is not False:
+        raise ControlledToolExecutionError(
+            "Controlled worker-agent chat requests must set stream=false."
+        )
+
+    return _api_post_json(
+        path="/ai-gateway/mlflow/v1/chat/completions",
+        payload=payload,
+        profile=profile,
+        runner=runner,
+    )
+
+
 def query_vector_index_via_cli(
     *,
     index_name: str,

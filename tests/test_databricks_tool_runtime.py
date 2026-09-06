@@ -15,6 +15,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from equity_research.databricks_cli_runtime import (  # noqa: E402
     ControlledToolExecutionError,
     execute_statement_via_cli,
+    query_chat_completions_via_cli,
     query_vector_index_via_cli,
 )
 from equity_research.structured_data_access import (  # noqa: E402
@@ -319,6 +320,72 @@ class DatabricksCliRuntimeTests(unittest.TestCase):
                     "statement": "SELECT 1",
                 },
                 runner=runner,
+            )
+
+    def test_chat_executor_uses_fixed_gateway_and_nonstreaming_payload(
+        self,
+    ) -> None:
+        runner = Mock(
+            return_value=subprocess.CompletedProcess(
+                args=[],
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "choices": [
+                            {
+                                "finish_reason": "stop",
+                                "message": {
+                                    "role": "assistant",
+                                    "content": "{\"findings\":[]}",
+                                },
+                            }
+                        ]
+                    }
+                ),
+                stderr="",
+            )
+        )
+
+        response = query_chat_completions_via_cli(
+            payload={
+                "model": "system.ai.gpt-oss-20b",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "test",
+                    }
+                ],
+                "stream": False,
+            },
+            profile="free-edition-us-east-2",
+            runner=runner,
+        )
+
+        self.assertIn("choices", response)
+
+        command = runner.call_args.args[0]
+
+        self.assertEqual(
+            command[:4],
+            [
+                "databricks",
+                "api",
+                "post",
+                "/ai-gateway/mlflow/v1/chat/completions",
+            ],
+        )
+
+    def test_chat_executor_rejects_streaming_request(self) -> None:
+        with self.assertRaisesRegex(
+            ControlledToolExecutionError,
+            "must set stream=false",
+        ):
+            query_chat_completions_via_cli(
+                payload={
+                    "model": "system.ai.gpt-oss-20b",
+                    "messages": [],
+                    "stream": True,
+                }
             )
 
     def test_vector_executor_uses_controlled_query_endpoint(self) -> None:
