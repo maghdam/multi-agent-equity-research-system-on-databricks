@@ -40,7 +40,7 @@ from equity_research.worker_agent_runtime import (
 
 
 DEFAULT_CATALOG = "workspace"
-DEFAULT_RETRIEVAL_RESULTS_PER_SYMBOL = 3
+DEFAULT_RETRIEVAL_RESULTS_PER_SYMBOL = 5
 
 
 @dataclass(frozen=True)
