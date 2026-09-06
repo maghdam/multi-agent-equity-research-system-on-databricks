@@ -287,6 +287,7 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
 
 - [ ] Correct measured weaknesses and rerun the same evaluations to check for regressions.
   - [x] Numeric-fidelity, comparison-scope, and narrative-grounding issues exposed by tracing/evaluation were corrected and re-evaluated on E1/E2.
+  - [x] Comparison retrieval weaknesses exposed by route-aware evaluation were corrected with company-isolated semantic queries plus bounded recent-development over-retrieval before the existing strict noise filter. E2 improved from run `58b33f05f8f943aa871b9ac4038b97c9` (overall relevance 0.588, sufficiency 0.75, MSFT recent relevance 0.0) to run `0154980179ff4825b0c52e8c9521ba03` (overall relevance 0.833, sufficiency 1.0, zero empty routes, AAPL recent 0.8, AAPL/MSFT risks 1.0, MSFT recent 0.333). The remaining route-level precision tradeoff is retained as measured evidence rather than overfit away.
   - [ ] Rerun the complete managed E1/E2 judge suite after the remaining observability instrumentation, then use the same evaluation set as the regression baseline for subsequent retrieval/generation changes.
 
 - [ ] Extend CI with deterministic tool tests and offline evaluations; run credentialed live-model evaluations separately with controlled usage.
