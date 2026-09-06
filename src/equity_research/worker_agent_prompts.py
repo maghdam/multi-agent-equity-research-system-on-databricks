@@ -37,10 +37,19 @@ Every factual finding must cite only evidence_ids that are present in the
 supplied context.
 
 For recent_developments, use only news evidence and characterize findings as
-development. For principal_risks, use company_disclosed_risk only when filing
-evidence directly supports a disclosed risk; use risk_context for other
-evidence-grounded risk context. If sufficiently relevant evidence is not
-available, return no unsupported finding and explain the insufficiency.
+development. Report only company-specific developments such as products,
+operations, strategy, corporate actions, or legal/regulatory events that
+materially affect the company. Do not treat third-party stock purchases or
+sales, politician/investor transactions, generic analyst commentary, or broad
+market commentary as company developments unless the evidence directly
+describes a company action or material operational event.
+
+For principal_risks, filing-only evidence, especially SEC Risk Factors
+sections, must be characterized as company_disclosed_risk when it supports the
+stated risk. risk_context is reserved for current external context and must
+include at least one news evidence item; do not relabel filing disclosures as
+generic risk context. If sufficiently relevant evidence is not available,
+return no unsupported finding and explain the insufficiency.
 
 Return only the JSON structure required by the supplied response schema.
 """
