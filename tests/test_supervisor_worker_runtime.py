@@ -3,9 +3,12 @@
 import json
 import sys
 import unittest
+from contextlib import nullcontext
 from datetime import date, datetime, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
+
+from mlflow.entities import SpanType
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -479,6 +482,99 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
                     "source_type": "news",
                 },
             ],
+        )
+
+    def test_company_retrieval_emits_controlled_mlflow_retriever_span(
+        self,
+    ) -> None:
+        evidence = _evidence(
+            "a" * 64,
+            symbol="AAPL",
+            source_type="news",
+            text=(
+                "Apple introduced a device leasing option that shifts "
+                "financing exposure to a partner."
+            ),
+        )
+        company_agent_runner = Mock(
+            return_value=_company_agent_result(
+                "recent_developments",
+                ("AAPL",),
+            )
+        )
+        workers = DatabricksSupervisorWorkers(
+            config=self.config,
+            equities=EQUITIES,
+            vector_query=Mock(
+                return_value={"symbol": "AAPL"}
+            ),
+            company_agent_runner=company_agent_runner,
+        )
+        retrieval_span = Mock()
+
+        with (
+            patch(
+                "equity_research.supervisor_worker_runtime."
+                "mlflow.get_current_active_span",
+                return_value=Mock(),
+            ),
+            patch(
+                "equity_research.supervisor_worker_runtime."
+                "mlflow.start_span",
+                return_value=nullcontext(
+                    retrieval_span
+                ),
+            ) as start_span,
+            patch(
+                "equity_research.supervisor_worker_runtime."
+                "parse_retrieval_response",
+                return_value=(evidence,),
+            ),
+        ):
+            workers.company_worker(
+                request=_request("AAPL"),
+                topic="recent_developments",
+            )
+
+        start_span.assert_called_once_with(
+            name=(
+                "company_researcher_retrieval_"
+                "recent_developments_aapl"
+            ),
+            span_type=SpanType.RETRIEVER,
+        )
+        retrieval_span.set_inputs.assert_called_once()
+        inputs = retrieval_span.set_inputs.call_args.args[0]
+        self.assertEqual(
+            inputs["symbol"],
+            "AAPL",
+        )
+        self.assertEqual(
+            inputs["topic"],
+            "recent_developments",
+        )
+
+        retrieval_span.set_outputs.assert_called_once()
+        documents = retrieval_span.set_outputs.call_args.args[0]
+        self.assertEqual(
+            len(documents),
+            1,
+        )
+        self.assertEqual(
+            documents[0]["id"],
+            "a" * 64,
+        )
+        self.assertEqual(
+            documents[0]["page_content"],
+            evidence.text,
+        )
+        self.assertEqual(
+            documents[0]["metadata"]["chunk_id"],
+            "a" * 64,
+        )
+        self.assertEqual(
+            documents[0]["metadata"]["doc_uri"],
+            "https://example.test/evidence",
         )
 
     def test_company_comparison_scopes_insufficiency_to_missing_symbol(
