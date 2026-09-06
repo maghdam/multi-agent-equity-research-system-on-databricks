@@ -2,7 +2,7 @@
 
 > A production-oriented portfolio project combining data engineering and AI engineering on Databricks.
 
-**Status:** Milestone 1 — Data Engineering complete; Milestone 2 — AI Engineering in progress
+**Status:** Milestone 1 — Data Engineering complete; Milestone 2 — AI Engineering complete; Milestone 3 — Application delivery pending
 
 ## Overview
 
@@ -37,7 +37,7 @@ The MVP will not include trading execution, price prediction, portfolio optimiza
 - **Weekly SEC/fundamentals refresh:** scheduled at 02:00 America/New_York Sunday, with SEC company-facts and selected 10-K ingestion, Silver rebuilds, Gold fundamental metrics, and a final freshness/coverage/lineage verification gate. The full DAG is manually live-verified; the first periodic Sunday execution is pending.
 - **Milestone 1 — Data Engineering:** complete. Bronze, Silver, Gold, CI, scheduled refresh orchestration, quality/freshness/lineage gates, safe replay behavior, and controlled deployment verification are all implemented and verified. The deployment gate was executed from the CI-tested `main` commit `caa3dcb` and completed with a converged bundle plan plus a successful serverless Spark smoke test.
 - **Operational audit policy:** the MVP uses fail-before-publication validation rather than partial publication plus quarantine tables. Immutable Bronze provenance, validation diagnostics, deterministic replay, Databricks job history, and final verification gates provide the required operational evidence; dedicated row-level rejection tables are deferred until a mixed valid/invalid batch workflow requires them.
-- **Milestone 2 — AI Engineering:** in progress. The deterministic RAG corpus, managed GTE embeddings/AI Search index, independent retrieval holdout, controlled Gold/retrieval tools, GPT OSS 20B Market Analyst and Company Researcher workers, deterministic LangGraph Supervisor, GPT OSS 120B terminal synthesis, report provenance validation, one bounded repair, and deterministic fallback are implemented and live-verified through the supported single-company and comparison paths. The final Supervisor branch gate passed 392 offline tests with Ruff clean; the AAPL terminal graph returned a ready report on first-pass model synthesis, while the AAPL/MSFT comparison correctly degraded the missing MSFT recent-development dimension and completed through the validated repair path. MLflow tracing/GenAI evaluation and subsequent measured refinements remain pending.
+- **Milestone 2 — AI Engineering:** complete. The deterministic RAG corpus, managed GTE embeddings/AI Search index, independent retrieval holdout, controlled Gold/retrieval tools, GPT OSS 20B Market Analyst and Company Researcher workers, deterministic LangGraph Supervisor, GPT OSS 120B terminal synthesis, report provenance validation, bounded repair/fallback, MLflow tracing, route-aware retrieval relevance/sufficiency, trace-aware narrative grounding, controlled E3-E6 failure/security evaluation, and the final E1/E2 managed regression baseline are implemented and live-verified. Pull-request CI now exposes a dedicated 107-test credential-free AI-evaluation gate plus the full 482-test repository suite; GitHub Actions run #25 passed both with Ruff clean on Python 3.14.7. Credentialed Databricks SQL, Vector Search, and model evaluations remain deliberately separate, bounded live checks.
 - Detailed implementation evidence and run links are tracked in [PLAN.md](PLAN.md).
 
 ## Architecture
@@ -127,7 +127,7 @@ Development follows one end-to-end workflow:
 3. **AI Engineering:** retrieval and tools, the multi-agent workflow, tracing, and evaluation.
 4. **Application delivery:** UI, monitoring, deployment, and reproducible demonstration.
 
-Each milestone has a tested completion gate. See [PLAN.md](PLAN.md) for progress, [DATA_CONTRACTS.md](DATA_CONTRACTS.md) for data and RAG corpus rules, [docs/AI_RESEARCH_CONTRACT.md](docs/AI_RESEARCH_CONTRACT.md) for behavioral requirements, [docs/MODEL_STRATEGY.md](docs/MODEL_STRATEGY.md) for model allocation, limits, chunking baselines, and MLflow evaluation strategy, [docs/REPOSITORY_GUIDE.md](docs/REPOSITORY_GUIDE.md) for the component-by-component map of implementation files, resources, tests, live verification, and robustness layers, and [docs/DATA_USAGE_PERMISSIONS.md](docs/DATA_USAGE_PERMISSIONS.md) for the private-runtime and public-portfolio data-use boundary.
+Each milestone has a tested completion gate. See [PLAN.md](PLAN.md) for progress, [DATA_CONTRACTS.md](DATA_CONTRACTS.md) for data and RAG corpus rules, [docs/AI_RESEARCH_CONTRACT.md](docs/AI_RESEARCH_CONTRACT.md) for behavioral requirements, [docs/MODEL_STRATEGY.md](docs/MODEL_STRATEGY.md) for model allocation, limits, chunking baselines, and MLflow evaluation strategy, [docs/EVALUATION_RUNBOOK.md](docs/EVALUATION_RUNBOOK.md) for the credential-free CI versus credentialed live-evaluation boundary, [docs/REPOSITORY_GUIDE.md](docs/REPOSITORY_GUIDE.md) for the component-by-component map of implementation files, resources, tests, live verification, and robustness layers, and [docs/DATA_USAGE_PERMISSIONS.md](docs/DATA_USAGE_PERMISSIONS.md) for the private-runtime and public-portfolio data-use boundary.
 
 ## Local Alpaca access check
 

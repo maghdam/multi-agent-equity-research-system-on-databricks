@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Mapping
+from contextlib import nullcontext
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any
+
+import mlflow
+from mlflow.entities import SpanType
 
 from equity_research.company_researcher import (
     CompanyResearcherResult,
@@ -18,6 +22,9 @@ from equity_research.databricks_cli_runtime import (
     query_vector_index_via_cli,
 )
 from equity_research.market_analyst import MarketAnalystResult
+from equity_research.mlflow_runtime_spans import (
+    optional_mlflow_span,
+)
 from equity_research.retrieval_tools import (
     MAX_RETRIEVAL_RESULTS,
     build_retrieval_query_payload,
@@ -181,49 +188,103 @@ class DatabricksSupervisorWorkers:
         _require_request(request)
         now_utc = self._clock()
 
-        market_payload = build_market_metrics_sql_request(
-            warehouse_id=self._config.warehouse_id,
-            catalog=self._config.catalog,
-            gold_schema=self._config.gold_schema,
-            requested_symbols=request.requested_symbols,
-            equities=self._equities,
-        )
-        market_response = self._statement_executor(
-            payload=market_payload,
-            profile=self._config.profile,
-        )
-        market_metrics = parse_market_metrics_statement_response(
-            market_response
-        )
-        market_results = prepare_market_metrics_results(
-            metrics=market_metrics,
-            requested_symbols=request.requested_symbols,
-            now_utc=now_utc,
-            equities=self._equities,
-        )
+        with optional_mlflow_span(
+            name="gold_market_metrics_access",
+            span_type=SpanType.TOOL,
+        ) as market_span:
+            if market_span is not None:
+                market_span.set_inputs(
+                    {
+                        "dataset": "market_metrics",
+                        "symbols": list(
+                            request.requested_symbols
+                        ),
+                    }
+                )
+                market_span.set_attributes(
+                    {
+                        "equity_research.authority": "gold",
+                        "equity_research.dataset": "market_metrics",
+                    }
+                )
 
-        fundamental_payload = build_fundamental_metrics_sql_request(
-            warehouse_id=self._config.warehouse_id,
-            catalog=self._config.catalog,
-            gold_schema=self._config.gold_schema,
-            requested_symbols=request.requested_symbols,
-            equities=self._equities,
-        )
-        fundamental_response = self._statement_executor(
-            payload=fundamental_payload,
-            profile=self._config.profile,
-        )
-        fundamental_metrics = (
-            parse_fundamental_metrics_statement_response(
-                fundamental_response
+            market_payload = build_market_metrics_sql_request(
+                warehouse_id=self._config.warehouse_id,
+                catalog=self._config.catalog,
+                gold_schema=self._config.gold_schema,
+                requested_symbols=request.requested_symbols,
+                equities=self._equities,
             )
-        )
-        fundamental_results = prepare_fundamental_metrics_results(
-            metrics=fundamental_metrics,
-            requested_symbols=request.requested_symbols,
-            now_utc=now_utc,
-            equities=self._equities,
-        )
+            market_response = self._statement_executor(
+                payload=market_payload,
+                profile=self._config.profile,
+            )
+            market_metrics = parse_market_metrics_statement_response(
+                market_response
+            )
+            market_results = prepare_market_metrics_results(
+                metrics=market_metrics,
+                requested_symbols=request.requested_symbols,
+                now_utc=now_utc,
+                equities=self._equities,
+            )
+
+            if market_span is not None:
+                market_span.set_outputs(
+                    _gold_tool_result_summary(
+                        market_results
+                    )
+                )
+
+        with optional_mlflow_span(
+            name="gold_fundamental_metrics_access",
+            span_type=SpanType.TOOL,
+        ) as fundamental_span:
+            if fundamental_span is not None:
+                fundamental_span.set_inputs(
+                    {
+                        "dataset": "fundamental_metrics",
+                        "symbols": list(
+                            request.requested_symbols
+                        ),
+                    }
+                )
+                fundamental_span.set_attributes(
+                    {
+                        "equity_research.authority": "gold",
+                        "equity_research.dataset": "fundamental_metrics",
+                    }
+                )
+
+            fundamental_payload = build_fundamental_metrics_sql_request(
+                warehouse_id=self._config.warehouse_id,
+                catalog=self._config.catalog,
+                gold_schema=self._config.gold_schema,
+                requested_symbols=request.requested_symbols,
+                equities=self._equities,
+            )
+            fundamental_response = self._statement_executor(
+                payload=fundamental_payload,
+                profile=self._config.profile,
+            )
+            fundamental_metrics = (
+                parse_fundamental_metrics_statement_response(
+                    fundamental_response
+                )
+            )
+            fundamental_results = prepare_fundamental_metrics_results(
+                metrics=fundamental_metrics,
+                requested_symbols=request.requested_symbols,
+                now_utc=now_utc,
+                equities=self._equities,
+            )
+
+            if fundamental_span is not None:
+                fundamental_span.set_outputs(
+                    _gold_tool_result_summary(
+                        fundamental_results
+                    )
+                )
 
         return self._market_agent_runner(
             requested_symbols=request.requested_symbols,
@@ -266,44 +327,112 @@ class DatabricksSupervisorWorkers:
         results: list[tuple[str, CompanyResearcherResult]] = []
 
         for symbol in request.requested_symbols:
+            query_text = _company_retrieval_query_text(
+                request=request,
+                symbol=symbol,
+                topic=topic,
+                query_focus=query_focus,
+                equities=self._equities,
+            )
+            retrieval_candidate_limit = (
+                min(
+                    MAX_RETRIEVAL_RESULTS,
+                    self._config.retrieval_results_per_symbol * 2,
+                )
+                if (
+                    request.mode == "comparison"
+                    and topic == "recent_developments"
+                )
+                else self._config.retrieval_results_per_symbol
+            )
             payload = build_retrieval_query_payload(
-                query_text=(
-                    f"{request.request_text}\n"
-                    f"Research focus: {query_focus}"
-                ),
+                query_text=query_text,
                 requested_symbols=(symbol,),
                 source_type=source_type,
                 section_code=section_code,
-                num_results=self._config.retrieval_results_per_symbol,
+                num_results=retrieval_candidate_limit,
                 equities=self._equities,
             )
-            response = self._vector_query(
-                index_name=self._config.index_name,
-                payload=payload,
-                profile=self._config.profile,
-            )
-            symbol_evidence = parse_retrieval_response(
-                response,
-                requested_symbols=(symbol,),
-                expected_source_type=source_type,
-                equities=self._equities,
+            active_span = mlflow.get_current_active_span()
+            span_context = (
+                mlflow.start_span(
+                    name=(
+                        "company_researcher_retrieval_"
+                        f"{topic}_{symbol.lower()}"
+                    ),
+                    span_type=SpanType.RETRIEVER,
+                )
+                if active_span is not None
+                else nullcontext(
+                    None
+                )
             )
 
-            if topic == "recent_developments":
-                symbol_evidence = _filter_recent_development_evidence(
-                    symbol_evidence
+            with span_context as retrieval_span:
+                if retrieval_span is not None:
+                    retrieval_span.set_inputs(
+                        {
+                            "query": payload["query_text"],
+                            "symbol": symbol,
+                            "topic": topic,
+                            "source_type": source_type,
+                            "section_code": section_code,
+                            "num_results": retrieval_candidate_limit,
+                            "worker_evidence_limit": (
+                                self._config.retrieval_results_per_symbol
+                            ),
+                        }
+                    )
+
+                response = self._vector_query(
+                    index_name=self._config.index_name,
+                    payload=payload,
+                    profile=self._config.profile,
+                )
+                symbol_evidence = parse_retrieval_response(
+                    response,
+                    requested_symbols=(symbol,),
+                    expected_source_type=source_type,
+                    equities=self._equities,
                 )
 
-            ranked_evidence = tuple(
-                replace(
-                    item,
-                    retrieval_rank=rank,
+                if topic == "recent_developments":
+                    symbol_evidence = _filter_recent_development_evidence(
+                        symbol_evidence
+                    )
+
+                symbol_evidence = symbol_evidence[
+                    : self._config.retrieval_results_per_symbol
+                ]
+
+                ranked_evidence = tuple(
+                    replace(
+                        item,
+                        retrieval_rank=rank,
+                    )
+                    for rank, item in enumerate(
+                        symbol_evidence,
+                        start=1,
+                    )
                 )
-                for rank, item in enumerate(
-                    symbol_evidence,
-                    start=1,
-                )
-            )
+
+                if retrieval_span is not None:
+                    retrieval_span.set_attributes(
+                        {
+                            "equity_research.symbol": symbol,
+                            "equity_research.topic": topic,
+                            "equity_research.source_type": source_type,
+                            "equity_research.filtered_evidence_count": len(
+                                ranked_evidence
+                            ),
+                        }
+                    )
+                    retrieval_span.set_outputs(
+                        _mlflow_retriever_documents(
+                            ranked_evidence
+                        )
+                    )
+
             result = self._company_agent_runner(
                 topic=topic,
                 requested_symbols=(symbol,),
@@ -323,6 +452,97 @@ class DatabricksSupervisorWorkers:
             requested_symbols=request.requested_symbols,
             results=results,
         )
+
+
+def _company_retrieval_query_text(
+    *,
+    request: SupervisorRequest,
+    symbol: str,
+    topic: ResearchTopic,
+    query_focus: str,
+    equities: Mapping[str, Equity],
+) -> str:
+    """Build a symbol-specific semantic query without cross-company contamination."""
+
+    if request.mode == "single_company":
+        return (
+            f"{request.request_text}\n"
+            f"Research focus: {query_focus}"
+        )
+
+    equity = equities[symbol]
+
+    if topic == "recent_developments":
+        return (
+            "What important recent business developments at "
+            f"{equity.display_name} ({symbol}) could matter to an equity "
+            "researcher? Focus on products, operations, strategy, corporate "
+            "actions, and material legal or regulatory events."
+        )
+
+    return (
+        "What principal business and operating risks has "
+        f"{equity.display_name} ({symbol}) disclosed in SEC Risk Factors?"
+    )
+
+
+def _gold_tool_result_summary(
+    results: Sequence,
+) -> dict[str, Any]:
+    """Return Gold readiness/provenance summary without duplicating metric values."""
+
+    return {
+        "result_count": len(
+            results
+        ),
+        "ready_symbols": [
+            result.symbol
+            for result in results
+            if result.status == "ready"
+        ],
+        "unavailable": [
+            {
+                "symbol": result.symbol,
+                "reason_code": result.reason_code,
+            }
+            for result in results
+            if result.status != "ready"
+        ],
+        "as_of_dates": {
+            result.symbol: (
+                result.metric.as_of_date.isoformat()
+                if result.metric is not None
+                else None
+            )
+            for result in results
+        },
+    }
+
+
+def _mlflow_retriever_documents(
+    evidence: Sequence,
+) -> list[dict[str, Any]]:
+    """Render validated RAG evidence using MLflow's RETRIEVER span schema."""
+
+    return [
+        {
+            "id": item.evidence_id,
+            "page_content": item.text,
+            "metadata": {
+                "doc_uri": item.source_url,
+                "chunk_id": item.chunk_id,
+                "document_id": item.document_id,
+                "document_version_id": item.document_version_id,
+                "source_type": item.source_type,
+                "configured_symbols": list(
+                    item.configured_symbols
+                ),
+                "evidence_date": item.evidence_date.isoformat(),
+                "retrieval_rank": item.retrieval_rank,
+            },
+        }
+        for item in evidence
+    ]
 
 
 def _filter_recent_development_evidence(

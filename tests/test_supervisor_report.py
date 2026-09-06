@@ -136,6 +136,30 @@ def _company_result(
     )
 
 
+def _degraded_recent_result() -> CompanyResearcherResult:
+    return CompanyResearcherResult(
+        findings=(
+            ResearchFinding(
+                finding_id="AAPL:recent_developments",
+                topic="recent_developments",
+                characterization="development",
+                symbols=("AAPL",),
+                statement="AAPL recent_developments statement.",
+                evidence_ids=("a" * 64,),
+            ),
+        ),
+        limitations=(
+            AgentLimitation(
+                agent="company_researcher",
+                symbol="MSFT",
+                dimension="recent_developments",
+                reason_code="insufficient_evidence",
+                message="No grounded recent-development evidence for MSFT.",
+            ),
+        ),
+    )
+
+
 def _state(
     symbols: tuple[str, ...],
     *,
@@ -361,6 +385,111 @@ class SupervisorReportValidationTests(unittest.TestCase):
                 "a" * 64,
                 "b" * 64,
             },
+        )
+
+    def test_degraded_comparison_excludes_incomplete_dimension(self) -> None:
+        state = _state(
+            ("AAPL", "MSFT"),
+            recent_result=_degraded_recent_result(),
+        )
+        output = _comparison_output()
+        output["sections"][2] = {
+            "section": "recent_developments",
+            "status": "degraded",
+            "text": "AAPL has a grounded recent development; MSFT coverage is missing.",
+            "source_finding_ids": [
+                "recent_developments:AAPL:recent_developments",
+            ],
+        }
+        output["sections"][4]["status"] = "degraded"
+        output["sections"][4]["source_finding_ids"] = [
+            "market_analysis:market_AAPL",
+            "market_analysis:market_MSFT",
+            "market_analysis:fundamental_AAPL",
+            "market_analysis:fundamental_MSFT",
+            "principal_risks:AAPL:principal_risks",
+            "principal_risks:MSFT:principal_risks",
+        ]
+        output["limitations"] = [
+            "MSFT recent-development evidence is unavailable.",
+        ]
+
+        report = validate_supervisor_report_output(
+            output,
+            state=state,
+        )
+
+        comparative = next(
+            section
+            for section in report.sections
+            if section.section == "comparative_assessment"
+        )
+        self.assertNotIn(
+            "recent_developments:AAPL:recent_developments",
+            comparative.source_finding_ids,
+        )
+
+    def test_comparison_rejects_source_from_incomplete_dimension(self) -> None:
+        state = _state(
+            ("AAPL", "MSFT"),
+            recent_result=_degraded_recent_result(),
+        )
+        output = _comparison_output()
+        output["sections"][2] = {
+            "section": "recent_developments",
+            "status": "degraded",
+            "text": "AAPL has a grounded recent development; MSFT coverage is missing.",
+            "source_finding_ids": [
+                "recent_developments:AAPL:recent_developments",
+            ],
+        }
+        output["sections"][4]["status"] = "degraded"
+        output["sections"][4]["source_finding_ids"] = [
+            "market_analysis:market_AAPL",
+            "market_analysis:market_MSFT",
+            "market_analysis:fundamental_AAPL",
+            "market_analysis:fundamental_MSFT",
+            "recent_developments:AAPL:recent_developments",
+            "principal_risks:AAPL:principal_risks",
+            "principal_risks:MSFT:principal_risks",
+        ]
+        output["limitations"] = [
+            "MSFT recent-development evidence is unavailable.",
+        ]
+
+        with self.assertRaisesRegex(
+            SupervisorReportContractError,
+            "lacks grounded coverage for every requested company",
+        ):
+            validate_supervisor_report_output(
+                output,
+                state=state,
+            )
+
+    def test_deterministic_comparison_omits_incomplete_dimension(self) -> None:
+        report = build_deterministic_supervisor_report(
+            _state(
+                ("AAPL", "MSFT"),
+                recent_result=_degraded_recent_result(),
+            )
+        )
+
+        comparative = next(
+            section
+            for section in report.sections
+            if section.section == "comparative_assessment"
+        )
+        self.assertEqual(
+            comparative.status,
+            "degraded",
+        )
+        self.assertNotIn(
+            "recent_developments:AAPL:recent_developments",
+            comparative.source_finding_ids,
+        )
+        self.assertNotIn(
+            "Recent developments:",
+            comparative.text,
         )
 
     def test_rejects_unknown_worker_finding_reference(self) -> None:
@@ -643,7 +772,7 @@ class SupervisorReportValidationTests(unittest.TestCase):
         comparative["source_finding_ids"] = [
             source_id
             for source_id in comparative["source_finding_ids"]
-            if source_id != "recent_developments:MSFT:recent_developments"
+            if not source_id.startswith("recent_developments:")
         ]
         output["limitations"] = [
             "MSFT recent developments are unavailable because evidence is "
@@ -703,7 +832,7 @@ class SupervisorReportValidationTests(unittest.TestCase):
         output["sections"][-1]["source_finding_ids"] = [
             source_id
             for source_id in output["sections"][-1]["source_finding_ids"]
-            if source_id != "recent_developments:MSFT:recent_developments"
+            if not source_id.startswith("recent_developments:")
         ]
         output["limitations"] = [
             "MSFT recent developments are unavailable.",
@@ -728,7 +857,7 @@ class SupervisorReportValidationTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             SupervisorReportContractError,
-            "must inherit source_finding_ids",
+            "must inherit every source_finding_id",
         ):
             validate_supervisor_report_output(
                 output,
@@ -789,7 +918,7 @@ class SupervisorReportValidationTests(unittest.TestCase):
                 "recent_developments:AAPL:recent_developments",
             ),
         )
-        self.assertIn(
+        self.assertNotIn(
             "recent_developments:AAPL:recent_developments",
             comparative.source_finding_ids,
         )
@@ -832,6 +961,121 @@ class SupervisorReportValidationTests(unittest.TestCase):
             validate_supervisor_report_output(
                 output,
                 state=_state(("AAPL", "MSFT")),
+            )
+
+    def test_accepts_numeric_claim_copied_from_cited_worker_finding(
+        self,
+    ) -> None:
+        market_result = MarketAnalystResult(
+            findings=(
+                StructuredFinding(
+                    finding_id="market_AAPL",
+                    dimension="market",
+                    symbols=("AAPL",),
+                    statement="AAPL market statement.",
+                    metric_references=(
+                        MetricReference(
+                            dataset="market_metrics",
+                            symbol="AAPL",
+                            as_of_date=date(2026, 9, 4),
+                            fields=("return_20d", "close"),
+                        ),
+                    ),
+                ),
+                StructuredFinding(
+                    finding_id="fundamental_AAPL",
+                    dimension="fundamental",
+                    symbols=("AAPL",),
+                    statement=(
+                        "Apple reported trailing-12-month net income of "
+                        "$128.9 billion."
+                    ),
+                    metric_references=(
+                        MetricReference(
+                            dataset="fundamental_metrics",
+                            symbol="AAPL",
+                            as_of_date=date(2026, 7, 31),
+                            fields=("net_income_ttm",),
+                        ),
+                    ),
+                ),
+            ),
+            limitations=(),
+        )
+        state = _state(
+            ("AAPL",),
+            market_result=market_result,
+        )
+        output = _single_output()
+        output["sections"][1]["text"] = (
+            "Apple reported TTM net income of $128.9 billion."
+        )
+
+        report = validate_supervisor_report_output(
+            output,
+            state=state,
+        )
+
+        self.assertEqual(
+            report.sections[1].status,
+            "available",
+        )
+
+    def test_rejects_final_report_numeric_decimal_place_shift(
+        self,
+    ) -> None:
+        market_result = MarketAnalystResult(
+            findings=(
+                StructuredFinding(
+                    finding_id="market_AAPL",
+                    dimension="market",
+                    symbols=("AAPL",),
+                    statement="AAPL market statement.",
+                    metric_references=(
+                        MetricReference(
+                            dataset="market_metrics",
+                            symbol="AAPL",
+                            as_of_date=date(2026, 9, 4),
+                            fields=("return_20d", "close"),
+                        ),
+                    ),
+                ),
+                StructuredFinding(
+                    finding_id="fundamental_AAPL",
+                    dimension="fundamental",
+                    symbols=("AAPL",),
+                    statement=(
+                        "Apple reported trailing-12-month net income of "
+                        "$128.9 billion."
+                    ),
+                    metric_references=(
+                        MetricReference(
+                            dataset="fundamental_metrics",
+                            symbol="AAPL",
+                            as_of_date=date(2026, 7, 31),
+                            fields=("net_income_ttm",),
+                        ),
+                    ),
+                ),
+            ),
+            limitations=(),
+        )
+        state = _state(
+            ("AAPL",),
+            market_result=market_result,
+        )
+        output = _single_output()
+        output["sections"][1]["text"] = (
+            "Apple reported TTM net income of $12.89 billion."
+        )
+
+        with self.assertRaisesRegex(
+            SupervisorReportContractError,
+            "numerical claims absent from cited worker findings",
+        ):
+            validate_supervisor_report_output(
+                output,
+                state=state,
             )
 
     def test_rejects_unknown_top_level_field(self) -> None:

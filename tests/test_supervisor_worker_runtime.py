@@ -3,9 +3,13 @@
 import json
 import sys
 import unittest
+from contextlib import nullcontext
 from datetime import date, datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
+
+from mlflow.entities import SpanType
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -344,6 +348,136 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
             equities=EQUITIES,
         )
 
+    def test_market_worker_records_gold_tool_readiness_spans(
+        self,
+    ) -> None:
+        statement_executor = Mock(
+            side_effect=[
+                {"kind": "market"},
+                {"kind": "fundamental"},
+            ]
+        )
+        market_agent_runner = Mock(
+            return_value=_market_agent_result(
+                ("AAPL",)
+            )
+        )
+        workers = DatabricksSupervisorWorkers(
+            config=self.config,
+            equities=EQUITIES,
+            statement_executor=statement_executor,
+            market_agent_runner=market_agent_runner,
+            clock=lambda: datetime(
+                2026,
+                9,
+                6,
+                9,
+                0,
+                tzinfo=timezone.utc,
+            ),
+        )
+        market_span = Mock()
+        fundamental_span = Mock()
+
+        with (
+            patch(
+                "equity_research.supervisor_worker_runtime."
+                "optional_mlflow_span",
+                side_effect=[
+                    nullcontext(
+                        market_span
+                    ),
+                    nullcontext(
+                        fundamental_span
+                    ),
+                ],
+            ) as optional_span,
+            patch(
+                "equity_research.supervisor_worker_runtime."
+                "parse_market_metrics_statement_response",
+                return_value=("market-metric",),
+            ),
+            patch(
+                "equity_research.supervisor_worker_runtime."
+                "parse_fundamental_metrics_statement_response",
+                return_value=("fundamental-metric",),
+            ),
+            patch(
+                "equity_research.supervisor_worker_runtime."
+                "prepare_market_metrics_results",
+                return_value=(
+                    SimpleNamespace(
+                        symbol="AAPL",
+                        status="ready",
+                        reason_code=None,
+                        metric=SimpleNamespace(
+                            as_of_date=date(
+                                2026,
+                                9,
+                                4,
+                            )
+                        ),
+                    ),
+                ),
+            ),
+            patch(
+                "equity_research.supervisor_worker_runtime."
+                "prepare_fundamental_metrics_results",
+                return_value=(
+                    SimpleNamespace(
+                        symbol="AAPL",
+                        status="ready",
+                        reason_code=None,
+                        metric=SimpleNamespace(
+                            as_of_date=date(
+                                2026,
+                                7,
+                                31,
+                            )
+                        ),
+                    ),
+                ),
+            ),
+        ):
+            workers.market_worker(
+                request=_request("AAPL")
+            )
+
+        self.assertEqual(
+            optional_span.call_args_list[0].kwargs,
+            {
+                "name": "gold_market_metrics_access",
+                "span_type": SpanType.TOOL,
+            },
+        )
+        self.assertEqual(
+            optional_span.call_args_list[1].kwargs,
+            {
+                "name": "gold_fundamental_metrics_access",
+                "span_type": SpanType.TOOL,
+            },
+        )
+        market_span.set_outputs.assert_called_once_with(
+            {
+                "result_count": 1,
+                "ready_symbols": ["AAPL"],
+                "unavailable": [],
+                "as_of_dates": {
+                    "AAPL": "2026-09-04",
+                },
+            }
+        )
+        fundamental_span.set_outputs.assert_called_once_with(
+            {
+                "result_count": 1,
+                "ready_symbols": ["AAPL"],
+                "unavailable": [],
+                "as_of_dates": {
+                    "AAPL": "2026-07-31",
+                },
+            }
+        )
+
     def test_company_comparison_retrieves_and_runs_each_symbol_separately(
         self,
     ) -> None:
@@ -479,6 +613,307 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
                     "source_type": "news",
                 },
             ],
+        )
+
+        query_texts = [
+            call.kwargs["payload"]["query_text"]
+            for call in vector_query.call_args_list
+        ]
+        self.assertIn(
+            "Apple Inc. (AAPL)",
+            query_texts[0],
+        )
+        self.assertNotIn(
+            "Microsoft Corporation",
+            query_texts[0],
+        )
+        self.assertIn(
+            "Microsoft Corporation (MSFT)",
+            query_texts[1],
+        )
+        self.assertNotIn(
+            "Apple Inc.",
+            query_texts[1],
+        )
+        for query_text in query_texts:
+            self.assertNotIn(
+                "Compare Apple and Microsoft.",
+                query_text,
+            )
+
+    def test_comparison_recent_developments_overretrieves_then_caps_evidence(
+        self,
+    ) -> None:
+        vector_query = Mock(
+            side_effect=[
+                {"symbol": "AAPL"},
+                {"symbol": "MSFT"},
+            ]
+        )
+        company_agent_runner = Mock(
+            side_effect=[
+                _company_agent_result(
+                    "recent_developments",
+                    ("AAPL",),
+                ),
+                _company_agent_result(
+                    "recent_developments",
+                    ("MSFT",),
+                ),
+            ]
+        )
+        workers = DatabricksSupervisorWorkers(
+            config=self.config,
+            equities=EQUITIES,
+            vector_query=vector_query,
+            company_agent_runner=company_agent_runner,
+        )
+
+        with patch(
+            "equity_research.supervisor_worker_runtime."
+            "parse_retrieval_response",
+            side_effect=[
+                (
+                    _evidence(
+                        "1" * 64,
+                        symbol="AAPL",
+                        source_type="news",
+                        title="Apple analyst price target update",
+                    ),
+                    _evidence(
+                        "2" * 64,
+                        symbol="AAPL",
+                        source_type="news",
+                        title="Apple Golden Cross technical analysis",
+                    ),
+                    _evidence(
+                        "3" * 64,
+                        symbol="AAPL",
+                        source_type="news",
+                        title="Apple launches enterprise privacy service",
+                    ),
+                    _evidence(
+                        "4" * 64,
+                        symbol="AAPL",
+                        source_type="news",
+                        title="Apple expands manufacturing operations",
+                    ),
+                ),
+                (
+                    _evidence(
+                        "5" * 64,
+                        symbol="MSFT",
+                        source_type="news",
+                        title="Microsoft 13F institutional holding update",
+                    ),
+                    _evidence(
+                        "6" * 64,
+                        symbol="MSFT",
+                        source_type="news",
+                        title="Microsoft analyst ratings update",
+                    ),
+                    _evidence(
+                        "7" * 64,
+                        symbol="MSFT",
+                        source_type="news",
+                        title="Microsoft launches enterprise AI service",
+                    ),
+                    _evidence(
+                        "8" * 64,
+                        symbol="MSFT",
+                        source_type="news",
+                        title="Microsoft expands cloud operations",
+                    ),
+                ),
+            ],
+        ):
+            workers.company_worker(
+                request=_request("AAPL", "MSFT"),
+                topic="recent_developments",
+            )
+
+        self.assertEqual(
+            [
+                call.kwargs["payload"]["num_results"]
+                for call in vector_query.call_args_list
+            ],
+            [
+                4,
+                4,
+            ],
+        )
+        self.assertEqual(
+            [
+                tuple(
+                    item.evidence_id
+                    for item in call.kwargs["evidence"]
+                )
+                for call in company_agent_runner.call_args_list
+            ],
+            [
+                (
+                    "3" * 64,
+                    "4" * 64,
+                ),
+                (
+                    "7" * 64,
+                    "8" * 64,
+                ),
+            ],
+        )
+
+    def test_company_single_company_retrieval_preserves_request_text(
+        self,
+    ) -> None:
+        vector_query = Mock(
+            return_value={
+                "symbol": "AAPL",
+            }
+        )
+        company_agent_runner = Mock(
+            return_value=_company_agent_result(
+                "recent_developments",
+                ("AAPL",),
+            )
+        )
+        workers = DatabricksSupervisorWorkers(
+            config=self.config,
+            equities=EQUITIES,
+            vector_query=vector_query,
+            company_agent_runner=company_agent_runner,
+        )
+        request = SupervisorRequest(
+            request_text=(
+                "Research Apple and summarize recent developments."
+            ),
+            requested_symbols=("AAPL",),
+            mode="single_company",
+        )
+
+        with patch(
+            "equity_research.supervisor_worker_runtime."
+            "parse_retrieval_response",
+            return_value=(
+                _evidence(
+                    "a" * 64,
+                    symbol="AAPL",
+                    source_type="news",
+                ),
+            ),
+        ):
+            workers.company_worker(
+                request=request,
+                topic="recent_developments",
+            )
+
+        query_text = (
+            vector_query.call_args.kwargs[
+                "payload"
+            ][
+                "query_text"
+            ]
+        )
+        self.assertTrue(
+            query_text.startswith(
+                request.request_text
+            )
+        )
+        self.assertIn(
+            "Research focus:",
+            query_text,
+        )
+
+    def test_company_retrieval_emits_controlled_mlflow_retriever_span(
+        self,
+    ) -> None:
+        evidence = _evidence(
+            "a" * 64,
+            symbol="AAPL",
+            source_type="news",
+            text=(
+                "Apple introduced a device leasing option that shifts "
+                "financing exposure to a partner."
+            ),
+        )
+        company_agent_runner = Mock(
+            return_value=_company_agent_result(
+                "recent_developments",
+                ("AAPL",),
+            )
+        )
+        workers = DatabricksSupervisorWorkers(
+            config=self.config,
+            equities=EQUITIES,
+            vector_query=Mock(
+                return_value={"symbol": "AAPL"}
+            ),
+            company_agent_runner=company_agent_runner,
+        )
+        retrieval_span = Mock()
+
+        with (
+            patch(
+                "equity_research.supervisor_worker_runtime."
+                "mlflow.get_current_active_span",
+                return_value=Mock(),
+            ),
+            patch(
+                "equity_research.supervisor_worker_runtime."
+                "mlflow.start_span",
+                return_value=nullcontext(
+                    retrieval_span
+                ),
+            ) as start_span,
+            patch(
+                "equity_research.supervisor_worker_runtime."
+                "parse_retrieval_response",
+                return_value=(evidence,),
+            ),
+        ):
+            workers.company_worker(
+                request=_request("AAPL"),
+                topic="recent_developments",
+            )
+
+        start_span.assert_called_once_with(
+            name=(
+                "company_researcher_retrieval_"
+                "recent_developments_aapl"
+            ),
+            span_type=SpanType.RETRIEVER,
+        )
+        retrieval_span.set_inputs.assert_called_once()
+        inputs = retrieval_span.set_inputs.call_args.args[0]
+        self.assertEqual(
+            inputs["symbol"],
+            "AAPL",
+        )
+        self.assertEqual(
+            inputs["topic"],
+            "recent_developments",
+        )
+
+        retrieval_span.set_outputs.assert_called_once()
+        documents = retrieval_span.set_outputs.call_args.args[0]
+        self.assertEqual(
+            len(documents),
+            1,
+        )
+        self.assertEqual(
+            documents[0]["id"],
+            "a" * 64,
+        )
+        self.assertEqual(
+            documents[0]["page_content"],
+            evidence.text,
+        )
+        self.assertEqual(
+            documents[0]["metadata"]["chunk_id"],
+            "a" * 64,
+        )
+        self.assertEqual(
+            documents[0]["metadata"]["doc_uri"],
+            "https://example.test/evidence",
         )
 
     def test_company_comparison_scopes_insufficiency_to_missing_symbol(

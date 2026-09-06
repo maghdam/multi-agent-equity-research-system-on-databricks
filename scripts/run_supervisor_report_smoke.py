@@ -14,6 +14,10 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from equity_research.config import load_equities  # noqa: E402
+from equity_research.mlflow_tracing import (  # noqa: E402
+    MlflowTracingConfig,
+    run_traced_supervisor_research_graph,
+)
 from equity_research.supervisor_research_graph import (  # noqa: E402
     run_supervisor_research_graph,
 )
@@ -83,6 +87,19 @@ def parse_args() -> argparse.Namespace:
         default=5,
         help="Controlled HYBRID results retrieved independently per symbol/topic.",
     )
+    parser.add_argument(
+        "--mlflow-experiment",
+        default=None,
+        help=(
+            "Optional Databricks MLflow experiment path. When supplied, "
+            "LangGraph tracing is enabled for this smoke run."
+        ),
+    )
+    parser.add_argument(
+        "--trace-environment",
+        default="dev",
+        help="Trace environment tag used only when --mlflow-experiment is set.",
+    )
 
     return parser.parse_args()
 
@@ -119,14 +136,39 @@ def main() -> None:
             profile=args.profile,
         )
 
-    result = run_supervisor_research_graph(
-        request_text=request_text,
-        requested_symbols=symbols,
-        market_worker=workers.market_worker,
-        company_worker=workers.company_worker,
-        report_synthesizer=report_synthesizer,
-        equities=equities,
-    )
+    if (
+        isinstance(args.mlflow_experiment, str)
+        and args.mlflow_experiment.strip()
+    ):
+        tracing_config = MlflowTracingConfig(
+            experiment_name=args.mlflow_experiment.strip(),
+            profile=args.profile,
+            environment=args.trace_environment,
+        )
+        result = run_traced_supervisor_research_graph(
+            request_text=request_text,
+            requested_symbols=symbols,
+            market_worker=workers.market_worker,
+            company_worker=workers.company_worker,
+            report_synthesizer=report_synthesizer,
+            tracing_config=tracing_config,
+            equities=equities,
+        )
+        print(
+            "MLFLOW_TRACING=ENABLED"
+            f"; experiment={tracing_config.experiment_name}"
+            f"; environment={tracing_config.environment}"
+        )
+    else:
+        result = run_supervisor_research_graph(
+            request_text=request_text,
+            requested_symbols=symbols,
+            market_worker=workers.market_worker,
+            company_worker=workers.company_worker,
+            report_synthesizer=report_synthesizer,
+            equities=equities,
+        )
+
     report = result.report
 
     print("SUPERVISOR_REPORT_SMOKE=PASSED")

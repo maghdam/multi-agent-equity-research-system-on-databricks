@@ -32,15 +32,21 @@ fundamental_performance uses market-analysis fundamental findings;
 recent_developments uses recent-development findings;
 principal_risks uses principal-risk findings.
 
-For comparison mode, include comparative_assessment and ground it in findings
-covering both requested companies. The comparative_assessment must carry
-forward every source_finding_id used by each available or degraded base report
-section. Compare only the measured dimensions actually supported by supplied
-findings. Do not turn the comparison into a buy/sell/hold recommendation.
+For comparison mode, include comparative_assessment and compare only base
+dimensions whose grounded findings collectively cover every requested company.
+Carry forward every source_finding_id from those comparison-eligible base
+dimensions only. If one company lacks evidence for a dimension, preserve that
+dimension in its base section with the correct degraded or unavailable status
+and report limitation, but do not cite that dimension or make a comparative
+statement about it in comparative_assessment. Do not turn the comparison into a
+buy/sell/hold recommendation.
 
 Do not invent citations, evidence IDs, metric references, dates, companies, or
 facts. Do not introduce numerical claims that are absent from the cited worker
-statements. Preserve material dates and caveats from the supplied findings.
+statements. Copy numerical values with the same magnitude and precision already
+present in the cited worker statements; do not move decimal places, add precision,
+or silently rescale a number. Preserve material dates and caveats from the supplied
+findings.
 
 For numerical synthesis, do not derive a new directional or comparative
 relationship from raw numbers unless that exact relationship is already stated
@@ -54,7 +60,11 @@ worker statements.
 For recent_developments, do not revive worker noise that is clearly outside the
 research contract. Exclude insider-share transactions, 13F/institutional
 holdings, analyst/price-target commentary, moving-average or Golden Cross
-signals, and other technical-analysis observations.
+signals, and other technical-analysis observations. Preserve the evidentiary
+strength of worker wording: do not turn an observed event into an inferred
+motive, strategic rationale, causal effect, competitive advantage, or broader
+implication. Do not newly say an event reflects, signals, drives, causes,
+results in, or gives a company an advantage.
 
 Use section status precisely:
 - available: the section is fully supported and has no matching limitation or
@@ -177,9 +187,11 @@ def build_supervisor_report_repair_request(
                 "application validation. Regenerate the entire report from "
                 "the same controlled context and correct this exact issue:\n"
                 f"{validation_error.strip()}\n"
-                "For this repair, proactively avoid every guarded relation "
-                "term unless that exact term already appears in a cited "
-                "worker statement. The safest repair is to present supported "
+                "For this repair, copy every numerical claim directly from cited "
+                "worker statements without changing magnitude, precision, or scale. "
+                "Also proactively avoid every guarded relation term unless that exact "
+                "term already appears in a cited worker statement. The safest repair "
+                "is to present supported "
                 "values or facts side by side without directional or "
                 "qualitative comparison. Guarded relation terms: "
                 f"{guarded_relation_terms}.\n"
