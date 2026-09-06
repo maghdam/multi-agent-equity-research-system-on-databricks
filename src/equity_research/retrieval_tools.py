@@ -560,8 +560,8 @@ def _parse_datetime(
         parsed.tzinfo is None
         or parsed.utcoffset() is None
     ):
-        raise ControlledToolDataError(
-            f"{field} must include a timezone."
+        return parsed.replace(
+            tzinfo=timezone.utc
         )
 
     return parsed.astimezone(
