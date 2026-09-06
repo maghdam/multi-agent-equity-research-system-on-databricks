@@ -220,6 +220,46 @@ class MlflowAssessmentSummaryTests(unittest.TestCase):
             "judge unavailable",
         )
 
+    def test_scope_rejection_span_is_in_observability_summary(
+        self,
+    ) -> None:
+        attributes = {
+            "mlflow.spanType": "AGENT",
+            "equity_research.component": "scope_validation",
+            "equity_research.request_mode": "unsupported_scope",
+            "equity_research.rejection_reason": "unsupported_symbol",
+            "equity_research.unsupported_symbol_count": 1,
+        }
+        span = SimpleNamespace(
+            name="supervisor_scope_validation",
+            get_attribute=lambda key: attributes.get(key),
+        )
+
+        summaries = summarize_observability_spans(
+            [span]
+        )
+
+        self.assertEqual(
+            len(summaries),
+            1,
+        )
+        self.assertEqual(
+            summaries[0]["name"],
+            "supervisor_scope_validation",
+        )
+        self.assertEqual(
+            summaries[0]["request_mode"],
+            "unsupported_scope",
+        )
+        self.assertEqual(
+            summaries[0]["rejection_reason"],
+            "unsupported_symbol",
+        )
+        self.assertEqual(
+            summaries[0]["unsupported_symbol_count"],
+            1,
+        )
+
     def test_observability_span_summary_is_whitelisted_and_privacy_safe(
         self,
     ) -> None:
