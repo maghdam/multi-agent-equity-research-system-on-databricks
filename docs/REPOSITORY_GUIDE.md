@@ -20,6 +20,8 @@ infrastructure runs it, and which tests verify it**.
 For chronological implementation status and live-run evidence, see `PLAN.md`.
 For data-product rules, see `DATA_CONTRACTS.md`. For AI behavior and model
 strategy, see `docs/AI_RESEARCH_CONTRACT.md` and `docs/MODEL_STRATEGY.md`.
+For the credential-free CI versus credentialed live-evaluation boundary, see
+`docs/EVALUATION_RUNBOOK.md`.
 
 ---
 
@@ -95,6 +97,7 @@ The project separates **factual authority** from **language generation**:
 | `DATA_CONTRACTS.md` | Bronze/Silver/Gold/RAG data contracts |
 | `docs/AI_RESEARCH_CONTRACT.md` | Required AI behavior, evidence rules, failure behavior, evaluation cases |
 | `docs/MODEL_STRATEGY.md` | Model allocation, retrieval/model baselines, evaluation strategy |
+| `docs/EVALUATION_RUNBOOK.md` | Credential-free CI versus credentialed live-evaluation execution boundary |
 | `docs/DATA_USAGE_PERMISSIONS.md` | Private-runtime and public-portfolio source-content boundary |
 | `docs/BUILD_GUIDE.md` | Build/development guidance |
 | `docs/REPOSITORY_GUIDE.md` | This cross-folder component map |
@@ -446,10 +449,15 @@ on anecdotal queries?
 
 ### Current role
 
-The independent six-case holdout established HYBRID retrieval as the provisional
-baseline and identified near-duplicate evidence as a measured weakness. Future MLflow
-evaluation should log these deterministic metrics rather than replacing them with an
-LLM judge.
+The frozen human-reviewed holdout established HYBRID retrieval as the provisional
+component-level baseline and identified duplicate/near-duplicate evidence as a
+measured weakness. These Hit@k/MRR and metadata-quality metrics remain deliberately
+separate from end-to-end MLflow retrieval judges.
+
+The live Supervisor evaluation adds a second layer: route-aware relevance and
+sufficiency over the exact filtered RETRIEVER-span documents actually supplied to the
+Company Researcher. The two layers answer different questions and neither replaces
+the other.
 
 ---
 
@@ -675,6 +683,13 @@ Recent-development evidence is also filtered before the worker for known non-com
 development noise such as 13F holdings, insider-sale/Rule 10b5-1 items,
 analyst/price-target commentary, moving-average/Golden-Cross material, and related
 technical-analysis observations.
+
+Comparison retrieval uses symbol-specific semantic queries rather than embedding the
+full cross-company request into every per-company search. For comparison-mode recent
+developments, the runtime may retrieve up to twice the configured candidate depth,
+apply the same strict noise filter, and then cap evidence back to the configured
+worker limit. This improves recall without weakening the quality filter or expanding
+the worker evidence budget.
 
 ---
 
@@ -916,9 +931,228 @@ app-facing composition.
 
 ---
 
+# Observability, Evaluation and Regression
+
+## 19. Privacy-safe MLflow tracing
+
+### Question solved
+
+How can the complete research graph be observed in MLflow without turning traces into
+a second copy of raw provider content or exposing free-form model/judge text in local
+diagnostics?
+
+### Core files
+
+- `src/equity_research/mlflow_tracing.py` — configures Databricks-managed MLflow,
+  explicit profile alignment, LangGraph/LangChain autologging, privacy-safe request
+  tags, and the traced app-facing graph wrapper.
+- `src/equity_research/mlflow_runtime_spans.py` — creates optional child spans only
+  when a trace is active and wraps model calls in privacy-safe CHAT_MODEL spans with
+  model/component/attempt metadata plus authoritative token usage.
+- `src/equity_research/supervisor_worker_runtime.py` — emits controlled Gold TOOL
+  spans and RETRIEVER spans over only the filtered evidence actually supplied to each
+  Company Researcher route.
+- `src/equity_research/worker_agent_runtime.py` — emits GPT OSS 20B worker
+  CHAT_MODEL spans for initial/repair calls without logging raw prompts/responses.
+- `src/equity_research/supervisor_report_runtime.py` — emits the Supervisor report
+  AGENT span plus GPT OSS 120B initial/repair CHAT_MODEL spans and records repair
+  count, synthesis mode and report status.
+- `src/equity_research/mlflow_evaluation.py` — defines the project-owned
+  observability-span allowlist and privacy-safe span/assessment summaries.
+
+### Tests
+
+- `tests/test_mlflow_tracing.py`
+- `tests/test_mlflow_runtime_spans.py`
+- tracing assertions in `tests/test_supervisor_worker_runtime.py`,
+  `tests/test_worker_agent_contracts.py`, and report-runtime tests.
+
+### Trace model
+
+The project now exposes meaningful application-level spans rather than relying only
+on opaque automatic traces:
+
+- Gold market/fundamental access — TOOL;
+- per-symbol/per-topic filtered retrieval — RETRIEVER;
+- GPT OSS 20B worker calls — CHAT_MODEL;
+- Supervisor report synthesis — AGENT;
+- GPT OSS 120B initial/repair calls — CHAT_MODEL;
+- controlled scope/failure/security fixtures — bounded AGENT/RETRIEVER spans.
+
+Token usage is taken from the Databricks chat-completion response when available.
+Trace tags/metadata are restricted to request scope, component identity, model,
+attempt, status and other bounded diagnostics.
+
+### Privacy boundary
+
+Raw Alpaca/SEC provider responses are not copied into trace metadata. RETRIEVER span
+outputs may contain only the validated application-controlled RAG chunks actually
+supplied to the worker. The terminal inspector never prints raw span payloads.
+
+---
+
+## 20. Deterministic factual and numerical correctness
+
+### Question solved
+
+How do we detect a model that keeps the right citation but changes a date, percentage,
+scaled financial value, or other structured number in prose?
+
+### Files
+
+- `src/equity_research/numeric_fidelity.py` — extracts finance-relevant numeric
+  claims (dates, years, percentages, scaled values and decimal numbers), normalizes
+  them, and checks exact/rounding-compatible support.
+- `src/equity_research/market_analyst.py` — validates worker numerical statements
+  against the controlled Gold values/dates available for that finding.
+- `src/equity_research/supervisor_report.py` — rejects final-report numerical claims
+  that do not already exist in the cited validated worker findings.
+- `tests/test_numeric_fidelity.py` plus expanded Market Analyst/report tests.
+
+### Guarantee
+
+Factual correctness is intentionally split by authority:
+
+- structured facts are checked deterministically against controlled Gold values,
+  dates, fields and cited worker statements;
+- narrative facts are checked against the exact retrieved evidence supplied on the
+  trace.
+
+The project therefore does not use MLflow's generic stock `Correctness` scorer for
+live E1/E2 reports, because that scorer expects fixed expected facts/responses that
+would become brittle as current market/news data changes.
+
+---
+
+## 21. MLflow GenAI evaluation and semantic judges
+
+### Question solved
+
+How do we evaluate the complete report behavior beyond syntax and exact contracts?
+
+### Main implementation
+
+- `src/equity_research/mlflow_evaluation.py` — repository-owned evaluation cases,
+  report serialization, deterministic scorers, semantic judges, route extraction,
+  privacy-safe assessment/span summaries and controlled-case scorers.
+- `scripts/run_supervisor_evaluation.py` — live evaluation entry point for
+  repository cases or a managed MLflow Evaluation Dataset.
+- `tests/test_mlflow_evaluation.py` — offline scorer, privacy, route and controlled
+  failure/security coverage.
+
+### Deterministic report scorers
+
+Every normal report evaluation checks:
+
+- expected request mode;
+- requested-symbol scope;
+- required report sections;
+- section grounding/provenance contract;
+- synthesis mode;
+- report status;
+- evidence count.
+
+Controlled E3-E6 cases add purpose-specific deterministic scorers for rejection,
+degradation, insufficient evidence and prompt-injection resilience.
+
+### Semantic judge stack
+
+When LLM judges are enabled, the evaluation adds:
+
+- response `RelevanceToQuery`;
+- route-aware retrieval relevance;
+- route-aware retrieval sufficiency plus empty-route count;
+- Safety;
+- trace-aware narrative groundedness;
+- project Guidelines for:
+  - no investment recommendation;
+  - market/fundamental separation;
+  - evidence-grounded narrative;
+  - explicit coverage limitations;
+  - bounded comparison.
+
+The trace-aware retrieval scorers judge the exact `(symbol, topic)` route and the
+filtered documents supplied to that route, avoiding cross-route aggregation.
+
+---
+
+## 22. Evaluation cases E1-E6 and controlled fixtures
+
+### Question solved
+
+How do we repeatedly test both normal research behavior and important failure/security
+modes against stable application contracts?
+
+### Cases
+
+- **E1 — single company:** representative AAPL research request.
+- **E2 — comparison:** representative AAPL/MSFT comparison.
+- **E3 — unsupported scope:** unsupported symbol is rejected before downstream
+  workers/tools/models.
+- **E4 — stale/missing Gold:** structured-data degradation is preserved without stale
+  substitution or unsupported comparison.
+- **E5 — insufficient narrative evidence:** unsupported recent-development prose is
+  omitted while supported evidence remains.
+- **E6 — retrieved prompt injection:** hostile instructions embedded in synthetic
+  evidence remain untrusted source text; controlled routing and citation behavior are
+  preserved.
+
+### Files
+
+- `src/equity_research/controlled_evaluation_fixtures.py` — deterministic E4/E5
+  fixtures and bounded E6 prompt-injection fixture/worker boundary.
+- `tests/test_controlled_evaluation_fixtures.py`
+- `scripts/run_supervisor_evaluation.py`
+- `scripts/sync_supervisor_evaluation_dataset.py` — merges repository-owned E1/E2
+  records into the Unity Catalog-backed MLflow evaluation dataset after its one-time
+  workspace creation.
+- `requirements-evaluation-dataset.txt` — optional managed-dataset runtime
+  dependency.
+
+### Final managed baseline
+
+The final combined E1/E2 managed run is
+`248395fd300d449ab98d496a4a39fcdc`.
+
+It passed all configured behavioral, grounding, safety, response-relevance, project
+guideline and retrieval-sufficiency checks, with zero empty routes. Route-aware
+retrieval relevance remained intentionally non-perfect, preserving the measured
+recent-news precision/recall tradeoff rather than tuning the evaluation case away.
+
+---
+
+## 23. Privacy-safe evaluation inspection and measured hardening
+
+### Inspection files
+
+- `scripts/inspect_mlflow_evaluation_run.py` — reads already-logged MLflow
+  assessments/traces without rerunning the application and prints only assessment
+  values, bounded deterministic rationales and allowlisted span summaries.
+- `src/equity_research/mlflow_evaluation.py` — suppresses free-text semantic
+  LLM-judge rationales and reduces assessment errors to bounded diagnostic codes.
+- `docs/EVALUATION_RUNBOOK.md` — defines the credential-free versus credentialed
+  evaluation lanes.
+
+### Measured runtime hardening produced by evaluation
+
+Evaluation was used to change the application, not merely to produce dashboards:
+
+- numerical-fidelity checks were added to Market Analyst and final report validation;
+- comparison retrieval queries were isolated by company;
+- comparison recent-development retrieval gained bounded pre-filter over-retrieval;
+- route-aware relevance/sufficiency replaced misleading cross-route interpretation;
+- semantic-judge rationales were removed from terminal inspection to preserve the
+  public/private evidence boundary.
+
+The final privacy-safe inspection of the E1/E2 baseline returned two traces, 48
+assessments and 24 project span summaries while suppressing semantic judge free-text
+rationales.
+
+---
+
 # Databricks Infrastructure
 
-## 19. Asset Bundle and resources
+## 24. Asset Bundle and resources
 
 ### Question solved
 
@@ -988,7 +1222,7 @@ are intentionally separate operations.
 
 # Testing, CI and Live Verification
 
-## 20. Test strategy
+## 25. Test strategy
 
 The repository uses different verification layers for different failure modes.
 
@@ -1025,24 +1259,39 @@ Stored under `scripts/`.
 - `run_worker_agent_smoke.py`
 - `run_supervisor_graph_smoke.py`
 - `run_supervisor_report_smoke.py`
+- `run_supervisor_evaluation.py`
+- `inspect_mlflow_evaluation_run.py`
+- `sync_supervisor_evaluation_dataset.py`
 
-These exercise real Databricks SQL, Vector Search and/or Foundation Model services
-while keeping provider source text out of terminal output.
+These exercise real Databricks SQL, Vector Search, Foundation Model and/or managed
+MLflow services while keeping provider source text out of terminal output.
 
 ### CI
 
 - `.github/workflows/ci.yml`
 
-Credential-free PR/`main` CI runs Ruff and the full offline test suite. Live
-Databricks/model verification remains a separate controlled gate because it requires
-workspace credentials and consumes external services.
+Credential-free PR/`main` CI has three visible gates:
+
+1. Ruff;
+2. an explicit AI-evaluation step covering controlled tool access, structured-data
+   behavior, retrieval metrics/runner boundaries, E4-E6 controlled fixtures, MLflow
+   evaluation helpers and tracing/privacy;
+3. the complete offline repository test suite.
+
+The Milestone 2 PR-head CI verified 107 focused credential-free AI-evaluation tests
+and 482 total repository tests on Python 3.14.7. Live Databricks SQL, Vector Search,
+model and semantic-judge evaluations remain separate credentialed checks with bounded
+usage, as documented in `docs/EVALUATION_RUNBOOK.md`.
 
 ---
 
-## 21. Dependencies and Python project configuration
+## 26. Dependencies and Python project configuration
 
-- `requirements.txt` — runtime dependencies, including LangGraph.
+- `requirements.txt` — runtime dependencies, including LangGraph, MLflow and
+  LangChain integration used by tracing/evaluation.
 - `requirements-dev.txt` — development/test dependencies.
+- `requirements-evaluation-dataset.txt` — optional dependency for managed MLflow
+  Evaluation Dataset synchronization.
 - `pyproject.toml` — project/lint configuration.
 
 Dependency changes should remain tied to a component need rather than accumulating
@@ -1052,7 +1301,7 @@ unused libraries.
 
 # Documentation Map
 
-## 22. Which document should a reader use?
+## 27. Which document should a reader use?
 
 | Question | Document |
 |---|---|
@@ -1061,6 +1310,7 @@ unused libraries.
 | What are the Bronze/Silver/Gold/RAG data guarantees? | `DATA_CONTRACTS.md` |
 | What must the AI system do or refuse to do? | `docs/AI_RESEARCH_CONTRACT.md` |
 | Why were particular embedding/LLM/evaluation choices made? | `docs/MODEL_STRATEGY.md` |
+| Which evaluations run in CI vs manually against Databricks? | `docs/EVALUATION_RUNBOOK.md` |
 | What source content may be processed privately or published? | `docs/DATA_USAGE_PERMISSIONS.md` |
 | How is the project built/developed? | `docs/BUILD_GUIDE.md` |
 | Which files implement component X, across all folders? | `docs/REPOSITORY_GUIDE.md` |
@@ -1069,51 +1319,60 @@ unused libraries.
 
 # Current AI Engineering Checkpoint
 
-## 23. Implemented through the Supervisor/report slice
+## 28. Milestone 2 AI Engineering complete
 
-As of the 2026-09-06 Supervisor/report merge:
+As of the 2026-09-06 MLflow/evaluation merge:
 
 - data engineering foundation — complete;
-- deterministic RAG corpus — implemented/live-verified;
-- managed embedding + Vector Search baseline — implemented/live-verified;
-- independent retrieval holdout — implemented/live-evaluated;
+- deterministic RAG corpus and managed Vector Search — implemented/live-verified;
+- independent frozen retrieval holdout — implemented/live-evaluated;
 - controlled Gold/retrieval tools — implemented/live-verified;
-- Market Analyst GPT OSS 20B — implemented/live-verified;
-- Company Researcher GPT OSS 20B — implemented/live-verified;
+- GPT OSS 20B Market Analyst and Company Researcher — implemented/live-verified;
 - deterministic LangGraph Supervisor — implemented/live-verified;
 - GPT OSS 120B terminal synthesis — implemented/live-verified;
-- report provenance/semantic validation — implemented/live-verified;
-- bounded repair + deterministic fallback — implemented, with repair observed live and
-  fallback verified offline;
-- full terminal research graph — implemented/live-verified.
+- report provenance, semantic and numerical-fidelity validation — implemented and
+  regression-tested;
+- bounded repair + deterministic fallback — implemented;
+- privacy-safe MLflow tracing and project-owned observability spans — implemented;
+- deterministic and semantic GenAI evaluation over E1-E6 — implemented/live-verified;
+- route-aware retrieval relevance/sufficiency and trace-aware narrative grounding —
+  implemented/live-verified;
+- privacy-safe evaluation inspection — implemented/live-verified;
+- credential-free AI-evaluation CI gate — implemented and verified.
 
-The final offline Supervisor branch gate contained **392 passing tests**, Ruff clean,
-clean diff checks, and successful AAPL single-company and AAPL/MSFT comparison terminal
-graph smokes.
+The final managed E1/E2 regression baseline is
+`248395fd300d449ab98d496a4a39fcdc`. The final Milestone 2 CI gate passed Ruff,
+107 focused credential-free AI-evaluation tests and 482 total repository tests.
+Post-merge `main` CI also passed.
 
----
+------
 
 # Next Component
 
-## 24. MLflow tracing and GenAI evaluation
+## 29. Milestone 3 application delivery
 
-The next AI Engineering component will answer:
+The next component will turn the validated research graph into the private user-facing
+application.
 
-> How reliably does the complete research system behave across representative cases,
-> and where do quality, retrieval, latency, token, repair, or fallback weaknesses
-> occur?
+The first implementation slice will answer:
 
-Expected future files will be added to this guide when implemented. The evaluation
-layer should combine:
+> How does a user select the configured stock scope and research period, run the
+> existing Supervisor research graph, inspect structured comparison metrics/charts,
+> read the cited report, and continue with evidence-grounded follow-up questions?
 
-- exact code-based numerical/citation checks;
-- existing deterministic retrieval metrics;
-- MLflow tracing across retriever/tool/worker/Supervisor spans;
-- semantic judges for report relevance, groundedness, correctness, safety and project
-  guidelines;
-- repair/fallback-rate measurement;
-- latency, token and cost measurements;
-- repeated evaluation against the same representative E1-E6 cases.
+Planned Milestone 3 responsibilities include:
+
+- configured stock and period selection;
+- market/fundamental charts and comparison metrics;
+- cited report rendering with explicit limitations;
+- evidence-grounded follow-up chat routed through the existing research boundary;
+- application logging, monitoring and feedback collection;
+- secure secret handling and private Databricks deployment;
+- startup/health/end-to-end deployment verification;
+- screenshots, example output and non-sensitive portfolio demonstration artifacts.
+
+The application should reuse the completed Milestone 1 data products and Milestone 2
+research/evaluation layers rather than duplicating business logic inside UI code.
 
 ---
 
