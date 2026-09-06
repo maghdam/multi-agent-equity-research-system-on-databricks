@@ -78,7 +78,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--retrieval-results-per-symbol",
         type=int,
-        default=3,
+        default=5,
         help="Controlled HYBRID results retrieved independently per symbol/topic.",
     )
 
