@@ -298,7 +298,11 @@ class MlflowJudgeConfigurationTests(unittest.TestCase):
             [
                 "relevance_to_query",
                 "safety",
-                "equity_research_guidelines",
+                "guideline_no_investment_recommendation",
+                "guideline_market_fundamental_separation",
+                "guideline_evidence_grounded_narrative",
+                "guideline_coverage_limitations",
+                "guideline_bounded_comparison",
             ],
         )
         self.assertTrue(
@@ -327,7 +331,7 @@ class MlflowJudgeConfigurationTests(unittest.TestCase):
         )
         self.assertEqual(
             len(combined),
-            10,
+            14,
         )
 
     def test_rejects_blank_judge_model(self) -> None:
