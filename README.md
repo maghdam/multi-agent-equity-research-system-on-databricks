@@ -37,7 +37,7 @@ The MVP will not include trading execution, price prediction, portfolio optimiza
 - **Weekly SEC/fundamentals refresh:** scheduled at 02:00 America/New_York Sunday, with SEC company-facts and selected 10-K ingestion, Silver rebuilds, Gold fundamental metrics, and a final freshness/coverage/lineage verification gate. The full DAG is manually live-verified; the first periodic Sunday execution is pending.
 - **Milestone 1 — Data Engineering:** complete. Bronze, Silver, Gold, CI, scheduled refresh orchestration, quality/freshness/lineage gates, safe replay behavior, and controlled deployment verification are all implemented and verified. The deployment gate was executed from the CI-tested `main` commit `caa3dcb` and completed with a converged bundle plan plus a successful serverless Spark smoke test.
 - **Operational audit policy:** the MVP uses fail-before-publication validation rather than partial publication plus quarantine tables. Immutable Bronze provenance, validation diagnostics, deterministic replay, Databricks job history, and final verification gates provide the required operational evidence; dedicated row-level rejection tables are deferred until a mixed valid/invalid batch workflow requires them.
-- **Milestone 2 — AI Engineering:** in progress. Deterministic `research_documents` and `research_chunks` are implemented, offline-tested, persisted as managed Delta tables in the AI schema, and live-verified on real validated Alpaca news and SEC filing inputs. The verified corpus contains 149 documents and 329 chunks; an unchanged rerun reproduced the same corpus identity and document/chunk fingerprints. Managed embeddings and a bundle-managed Databricks AI Search Delta Sync index are now live-verified on all 329 chunks using `databricks-gte-large-en`. Two initial ANN smoke tests for MSFT cyber/AI risk and AAPL supply-chain risk each returned 5/5 company-matching results, with 4/5 results from SEC Item 1A. Controlled retrieval tools, agents, and MLflow GenAI evaluation remain pending.
+- **Milestone 2 — AI Engineering:** in progress. The deterministic RAG corpus, managed GTE embeddings/AI Search index, independent retrieval holdout, controlled Gold/retrieval tools, GPT OSS 20B Market Analyst and Company Researcher workers, deterministic LangGraph Supervisor, GPT OSS 120B terminal synthesis, report provenance validation, one bounded repair, and deterministic fallback are implemented and live-verified through the supported single-company and comparison paths. The final Supervisor branch gate passed 392 offline tests with Ruff clean; the AAPL terminal graph returned a ready report on first-pass model synthesis, while the AAPL/MSFT comparison correctly degraded the missing MSFT recent-development dimension and completed through the validated repair path. MLflow tracing/GenAI evaluation and subsequent measured refinements remain pending.
 - Detailed implementation evidence and run links are tracked in [PLAN.md](PLAN.md).
 
 ## Architecture
@@ -80,12 +80,13 @@ flowchart TB
     E1 --> B3 --> S3 --> G2
     E2 --> B4 --> S4 --> R
 
-    G1 --> M["Market Analyst"]
+    G1 --> M["Market Analyst<br/>GPT OSS 20B"]
     G2 --> M
-    R --> C["Company Researcher"]
-    M --> P["LangGraph Supervisor"]
+    R --> C["Company Researcher<br/>GPT OSS 20B"]
+    M --> P["Deterministic LangGraph Supervisor"]
     C --> P
-    P --> U["Dashboard, cited report, and follow-up chat"]
+    P --> F["GPT OSS 120B terminal synthesis<br/>+ deterministic report validation"]
+    F --> U["Dashboard, cited report, and follow-up chat"]
 ```
 
 Gold is intentionally **not** a one-to-one mirror of Silver. Structured price and fundamental data feed analytical Gold tables, while validated news and filing text primarily become retrieval/indexing assets for the AI layer.
@@ -113,7 +114,7 @@ The application will return:
 - SEC EDGAR APIs
 - LangGraph multi-agent orchestration
 - Retrieval-Augmented Generation (RAG) with deterministic research documents/chunks, embeddings, and vector retrieval for filings and news
-- Databricks Foundation Model APIs: GTE Large (En) embedding baseline, GPT OSS worker/Supervisor models
+- Databricks Foundation Model APIs: GTE Large (En) embedding baseline, GPT OSS 20B workers, GPT OSS 120B terminal synthesis
 - MLflow 3 tracing and GenAI evaluation with deterministic retrieval metrics, code-based scorers, and LLM judges
 - Automated data-quality and agent evaluations
 
@@ -126,7 +127,7 @@ Development follows one end-to-end workflow:
 3. **AI Engineering:** retrieval and tools, the multi-agent workflow, tracing, and evaluation.
 4. **Application delivery:** UI, monitoring, deployment, and reproducible demonstration.
 
-Each milestone has a tested completion gate. See [PLAN.md](PLAN.md) for progress, [DATA_CONTRACTS.md](DATA_CONTRACTS.md) for data and RAG corpus rules, [docs/AI_RESEARCH_CONTRACT.md](docs/AI_RESEARCH_CONTRACT.md) for behavioral requirements, [docs/MODEL_STRATEGY.md](docs/MODEL_STRATEGY.md) for model allocation, limits, chunking baselines, and MLflow evaluation strategy, and [docs/DATA_USAGE_PERMISSIONS.md](docs/DATA_USAGE_PERMISSIONS.md) for the private-runtime and public-portfolio data-use boundary.
+Each milestone has a tested completion gate. See [PLAN.md](PLAN.md) for progress, [DATA_CONTRACTS.md](DATA_CONTRACTS.md) for data and RAG corpus rules, [docs/AI_RESEARCH_CONTRACT.md](docs/AI_RESEARCH_CONTRACT.md) for behavioral requirements, [docs/MODEL_STRATEGY.md](docs/MODEL_STRATEGY.md) for model allocation, limits, chunking baselines, and MLflow evaluation strategy, [docs/REPOSITORY_GUIDE.md](docs/REPOSITORY_GUIDE.md) for the component-by-component map of implementation files, resources, tests, live verification, and robustness layers, and [docs/DATA_USAGE_PERMISSIONS.md](docs/DATA_USAGE_PERMISSIONS.md) for the private-runtime and public-portfolio data-use boundary.
 
 ## Local Alpaca access check
 
