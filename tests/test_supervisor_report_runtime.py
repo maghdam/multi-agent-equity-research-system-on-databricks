@@ -36,6 +36,7 @@ from equity_research.supervisor_report_prompts import (  # noqa: E402
     SUPERVISOR_REASONING_EFFORT,
     SUPERVISOR_REPORT_RESPONSE_FORMAT,
     build_supervisor_report_model_request,
+    build_supervisor_report_repair_request,
 )
 from equity_research.supervisor_report_runtime import (  # noqa: E402
     run_supervisor_report_synthesis,
@@ -324,6 +325,48 @@ class SupervisorReportPromptTests(unittest.TestCase):
                 system_message,
             )
 
+    def test_repair_request_includes_exact_validator_error(self) -> None:
+        context = build_supervisor_report_context(
+            _state()
+        )
+        payload = build_supervisor_report_repair_request(
+            context,
+            validation_error=(
+                "Report introduces an unsupported comparative relation "
+                "'below' that is absent from cited worker findings."
+            ),
+        )
+
+        self.assertEqual(
+            payload["model"],
+            "system.ai.gpt-oss-120b",
+        )
+        self.assertEqual(
+            len(payload["messages"]),
+            3,
+        )
+        repair_message = payload["messages"][-1]["content"]
+        self.assertIn(
+            "unsupported comparative relation 'below'",
+            repair_message,
+        )
+        self.assertIn(
+            "Regenerate the entire report",
+            repair_message,
+        )
+
+    def test_repair_request_rejects_blank_validation_error(self) -> None:
+        with self.assertRaisesRegex(
+            SupervisorReportContractError,
+            "validation_error must be a nonblank string",
+        ):
+            build_supervisor_report_repair_request(
+                build_supervisor_report_context(
+                    _state()
+                ),
+                validation_error=" ",
+            )
+
     def test_prompt_builder_rejects_non_mapping_context(self) -> None:
         with self.assertRaisesRegex(
             SupervisorReportContractError,
@@ -384,6 +427,67 @@ class SupervisorReportRuntimeTests(unittest.TestCase):
             False,
         )
 
+    def test_repairs_one_deterministic_validation_failure(self) -> None:
+        invalid = _single_report_output()
+        invalid["sections"][0]["source_finding_ids"] = [
+            "market_analysis:invented"
+        ]
+        valid = _single_report_output()
+        model_query = Mock(
+            side_effect=[
+                _chat_response(invalid),
+                _chat_response(valid),
+            ]
+        )
+
+        report = run_supervisor_report_synthesis(
+            state=_state(),
+            profile="profile-1",
+            model_query=model_query,
+        )
+
+        self.assertEqual(
+            report.status,
+            "ready",
+        )
+        self.assertEqual(
+            model_query.call_count,
+            2,
+        )
+        repair_payload = model_query.call_args_list[1].kwargs[
+            "payload"
+        ]
+        self.assertIn(
+            "unknown worker findings",
+            repair_payload["messages"][-1]["content"],
+        )
+
+    def test_second_invalid_report_still_fails(self) -> None:
+        invalid = _single_report_output()
+        invalid["sections"][0]["source_finding_ids"] = [
+            "market_analysis:invented"
+        ]
+        model_query = Mock(
+            side_effect=[
+                _chat_response(invalid),
+                _chat_response(invalid),
+            ]
+        )
+
+        with self.assertRaisesRegex(
+            SupervisorReportContractError,
+            "unknown worker findings",
+        ):
+            run_supervisor_report_synthesis(
+                state=_state(),
+                model_query=model_query,
+            )
+
+        self.assertEqual(
+            model_query.call_count,
+            2,
+        )
+
     def test_accepts_reasoning_plus_single_final_text_block(self) -> None:
         report = run_supervisor_report_synthesis(
             state=_state(),
@@ -432,16 +536,20 @@ class SupervisorReportRuntimeTests(unittest.TestCase):
             ]
         }
 
+        model_query = Mock(
+            return_value=response
+        )
+
         with self.assertRaisesRegex(
             AgentModelResponseError,
             "not valid JSON",
         ):
             run_supervisor_report_synthesis(
                 state=_state(),
-                model_query=Mock(
-                    return_value=response
-                ),
+                model_query=model_query,
             )
+
+        model_query.assert_called_once()
 
     def test_rejects_truncated_model_response(self) -> None:
         response = {
@@ -456,16 +564,20 @@ class SupervisorReportRuntimeTests(unittest.TestCase):
             ]
         }
 
+        model_query = Mock(
+            return_value=response
+        )
+
         with self.assertRaisesRegex(
             AgentModelResponseError,
             "did not finish normally",
         ):
             run_supervisor_report_synthesis(
                 state=_state(),
-                model_query=Mock(
-                    return_value=response
-                ),
+                model_query=model_query,
             )
+
+        model_query.assert_called_once()
 
     def test_rejects_noncallable_model_query(self) -> None:
         with self.assertRaisesRegex(
