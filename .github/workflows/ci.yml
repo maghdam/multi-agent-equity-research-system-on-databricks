@@ -36,5 +36,16 @@ jobs:
       - name: Ruff lint
         run: ruff check .
 
+      - name: Credential-free AI evaluation gates
+        run: |
+          python -m unittest discover -s tests -p "test_tool_access_requests.py"
+          python -m unittest discover -s tests -p "test_structured_data_tools.py"
+          python -m unittest discover -s tests -p "test_retrieval_evaluation.py"
+          python -m unittest discover -s tests -p "test_live_retrieval_evaluation.py"
+          python -m unittest discover -s tests -p "test_controlled_evaluation_fixtures.py"
+          python -m unittest discover -s tests -p "test_mlflow_evaluation.py"
+          python -m unittest discover -s tests -p "test_mlflow_runtime_spans.py"
+          python -m unittest discover -s tests -p "test_mlflow_tracing.py"
+
       - name: Offline unit and contract tests
         run: python -m unittest discover -s tests -p "test_*.py"
