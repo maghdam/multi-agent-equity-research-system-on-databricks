@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any, Callable
 
 from equity_research.databricks_cli_runtime import (
@@ -12,6 +13,7 @@ from equity_research.supervisor_contracts import SupervisorState
 from equity_research.supervisor_report import (
     SupervisorReport,
     SupervisorReportContractError,
+    build_deterministic_supervisor_report,
     build_supervisor_report_context,
     validate_supervisor_report_output,
 )
@@ -71,7 +73,17 @@ def run_supervisor_report_synthesis(
             repair_response
         )
 
-        return validate_supervisor_report_output(
-            repaired_output,
-            state=state,
+        try:
+            repaired_report = validate_supervisor_report_output(
+                repaired_output,
+                state=state,
+            )
+        except SupervisorReportContractError:
+            return build_deterministic_supervisor_report(
+                state
+            )
+
+        return replace(
+            repaired_report,
+            synthesis_mode="repaired_model",
         )
