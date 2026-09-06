@@ -595,6 +595,21 @@ class SupervisorReportValidationTests(unittest.TestCase):
                 state=state,
             )
 
+    def test_rejects_unbacked_comparative_relation(self) -> None:
+        output = _comparison_output()
+        output["sections"][-1]["text"] = (
+            "Apple assets are larger than Microsoft's."
+        )
+
+        with self.assertRaisesRegex(
+            SupervisorReportContractError,
+            "unsupported comparative relation 'larger'",
+        ):
+            validate_supervisor_report_output(
+                output,
+                state=_state(("AAPL", "MSFT")),
+            )
+
     def test_rejects_unknown_top_level_field(self) -> None:
         output = _single_output()
         output["extra"] = "not allowed"
