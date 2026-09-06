@@ -12,11 +12,13 @@ from equity_research.company_researcher import (
     CompanyResearcherResult,
     ResearchFinding,
     ResearchTopic,
+    validate_company_researcher_output,
 )
 from equity_research.market_analyst import (
     MarketAnalystResult,
     validate_market_analyst_output,
 )
+from equity_research.retrieval_tools import EvidenceRecord
 from equity_research.structured_data_tools import (
     prepare_fundamental_metrics_results,
     prepare_market_metrics_results,
@@ -340,6 +342,221 @@ def e4_report_synthesizer(
     return build_deterministic_supervisor_report(
         state
     )
+
+
+def e5_market_worker(
+    *,
+    request: SupervisorRequest,
+) -> MarketAnalystResult:
+    """Exercise ready structured-data contracts for the controlled E5 fixture."""
+
+    _require_e5_request(
+        request
+    )
+
+    market_results = prepare_market_metrics_results(
+        metrics=(
+            _e4_market_metric(
+                "AAPL",
+                as_of_date=date(
+                    2026,
+                    9,
+                    4,
+                ),
+            ),
+        ),
+        requested_symbols=request.requested_symbols,
+        now_utc=E4_NOW_UTC,
+        equities=E4_EQUITIES,
+    )
+    fundamental_results = prepare_fundamental_metrics_results(
+        metrics=(
+            _e4_fundamental_metric(
+                "AAPL",
+                as_of_date=date(
+                    2026,
+                    7,
+                    31,
+                ),
+            ),
+        ),
+        requested_symbols=request.requested_symbols,
+        now_utc=E4_NOW_UTC,
+        equities=E4_EQUITIES,
+    )
+
+    raw_output = {
+        "findings": [
+            {
+                "finding_id": "market_AAPL",
+                "dimension": "market",
+                "symbols": ["AAPL"],
+                "statement": (
+                    "AAPL market metrics remain available in the controlled "
+                    "E5 fixture."
+                ),
+                "metric_references": [
+                    {
+                        "dataset": "market_metrics",
+                        "symbol": "AAPL",
+                        "as_of_date": "2026-09-04",
+                        "fields": ["return_20d"],
+                    }
+                ],
+            },
+            {
+                "finding_id": "fundamental_AAPL",
+                "dimension": "fundamental",
+                "symbols": ["AAPL"],
+                "statement": (
+                    "AAPL fundamental metrics remain available in the "
+                    "controlled E5 fixture."
+                ),
+                "metric_references": [
+                    {
+                        "dataset": "fundamental_metrics",
+                        "symbol": "AAPL",
+                        "as_of_date": "2026-07-31",
+                        "fields": ["revenue_ttm"],
+                    }
+                ],
+            },
+        ]
+    }
+
+    return validate_market_analyst_output(
+        raw_output,
+        requested_symbols=request.requested_symbols,
+        market_results=market_results,
+        fundamental_results=fundamental_results,
+        equities=E4_EQUITIES,
+    )
+
+
+def e5_company_worker(
+    *,
+    request: SupervisorRequest,
+    topic: ResearchTopic,
+) -> CompanyResearcherResult:
+    """Exercise the real insufficient-evidence Company Researcher contract."""
+
+    _require_e5_request(
+        request
+    )
+
+    if topic == "recent_developments":
+        return validate_company_researcher_output(
+            {
+                "findings": [],
+                "insufficient_evidence": (
+                    "No sufficiently relevant controlled news evidence was "
+                    "found for AAPL recent developments."
+                ),
+            },
+            topic=topic,
+            requested_symbols=request.requested_symbols,
+            evidence=(),
+            equities=E4_EQUITIES,
+        )
+
+    if topic == "principal_risks":
+        evidence = (
+            EvidenceRecord(
+                evidence_id="e" * 64,
+                retrieval_rank=1,
+                chunk_id="e" * 64,
+                document_id="e5-aapl-risk-document",
+                document_version_id="e5-aapl-risk-document-v1",
+                source_type="filing",
+                source_system="sec",
+                configured_symbols=("AAPL",),
+                title="Controlled E5 AAPL Risk Factors",
+                evidence_date=date(
+                    2026,
+                    7,
+                    31,
+                ),
+                source_url=(
+                    "https://www.sec.gov/Archives/controlled-e5-aapl-risk"
+                ),
+                source_business_id="e5-aapl-risk",
+                section_code="1A",
+                section_title="Risk Factors",
+                chunk_index=0,
+                text=(
+                    "AAPL disclosed a controlled synthetic risk used only "
+                    "to preserve supported E5 narrative coverage."
+                ),
+                source_response_id="e5-aapl-risk-response",
+                source_fetched_at=datetime(
+                    2026,
+                    9,
+                    5,
+                    8,
+                    0,
+                    tzinfo=timezone.utc,
+                ),
+                source_ingestion_run_id="e5-aapl-risk-run",
+            ),
+        )
+        return validate_company_researcher_output(
+            {
+                "findings": [
+                    {
+                        "finding_id": "AAPL:principal_risks",
+                        "topic": "principal_risks",
+                        "characterization": "company_disclosed_risk",
+                        "symbols": ["AAPL"],
+                        "statement": (
+                            "AAPL principal risk coverage remains supported "
+                            "by controlled synthetic filing evidence."
+                        ),
+                        "evidence_ids": ["e" * 64],
+                    }
+                ],
+                "insufficient_evidence": None,
+            },
+            topic=topic,
+            requested_symbols=request.requested_symbols,
+            evidence=evidence,
+            equities=E4_EQUITIES,
+        )
+
+    raise ValueError(
+        f"Unsupported E5 research topic: {topic!r}."
+    )
+
+
+def e5_report_synthesizer(
+    *,
+    state: SupervisorState,
+) -> SupervisorReport:
+    """Use the deterministic validated renderer for the controlled E5 fixture."""
+
+    return build_deterministic_supervisor_report(
+        state
+    )
+
+
+def _require_e5_request(
+    request: SupervisorRequest,
+) -> None:
+    if not isinstance(
+        request,
+        SupervisorRequest,
+    ):
+        raise TypeError(
+            "E5 fixture requires SupervisorRequest."
+        )
+
+    if (
+        request.mode != "single_company"
+        or request.requested_symbols
+        != ("AAPL",)
+    ):
+        raise ValueError(
+            "E5 fixture requires single-company scope ('AAPL',)."
+        )
 
 
 def _require_e4_request(
