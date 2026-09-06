@@ -641,6 +641,67 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
                 query_text,
             )
 
+    def test_company_single_company_retrieval_preserves_request_text(
+        self,
+    ) -> None:
+        vector_query = Mock(
+            return_value={
+                "symbol": "AAPL",
+            }
+        )
+        company_agent_runner = Mock(
+            return_value=_company_agent_result(
+                "recent_developments",
+                ("AAPL",),
+            )
+        )
+        workers = DatabricksSupervisorWorkers(
+            config=self.config,
+            equities=EQUITIES,
+            vector_query=vector_query,
+            company_agent_runner=company_agent_runner,
+        )
+        request = SupervisorRequest(
+            request_text=(
+                "Research Apple and summarize recent developments."
+            ),
+            requested_symbols=("AAPL",),
+            mode="single_company",
+        )
+
+        with patch(
+            "equity_research.supervisor_worker_runtime."
+            "parse_retrieval_response",
+            return_value=(
+                _evidence(
+                    "a" * 64,
+                    symbol="AAPL",
+                    source_type="news",
+                ),
+            ),
+        ):
+            workers.company_worker(
+                request=request,
+                topic="recent_developments",
+            )
+
+        query_text = (
+            vector_query.call_args.kwargs[
+                "payload"
+            ][
+                "query_text"
+            ]
+        )
+        self.assertTrue(
+            query_text.startswith(
+                request.request_text
+            )
+        )
+        self.assertIn(
+            "Research focus:",
+            query_text,
+        )
+
     def test_company_retrieval_emits_controlled_mlflow_retriever_span(
         self,
     ) -> None:
