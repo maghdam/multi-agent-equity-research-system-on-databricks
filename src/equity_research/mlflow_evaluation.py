@@ -353,6 +353,11 @@ def summarize_observability_spans(
     return summaries
 
 
+SENSITIVE_ASSESSMENT_RATIONALE_PREFIXES = (
+    "retrieval_relevance",
+)
+
+
 def summarize_trace_assessments(
     assessments: Sequence[Any],
 ) -> list[dict[str, Any]]:
@@ -385,6 +390,11 @@ def summarize_trace_assessments(
             assessment,
             "rationale",
         )
+        if name.strip().startswith(
+            SENSITIVE_ASSESSMENT_RATIONALE_PREFIXES
+        ):
+            rationale = None
+
         error = _assessment_field(
             assessment,
             "error",
