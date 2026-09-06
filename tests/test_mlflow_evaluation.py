@@ -7,6 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from mlflow.entities import SpanType
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
@@ -1377,7 +1379,7 @@ class MlflowJudgeConfigurationTests(unittest.TestCase):
             ],
         )
         trace.search_spans.assert_called_once_with(
-            span_type="RETRIEVER"
+            span_type=SpanType.RETRIEVER
         )
 
     def test_retrieval_sufficiency_reports_partial_rate_for_empty_route(
