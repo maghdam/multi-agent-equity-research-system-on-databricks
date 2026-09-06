@@ -193,6 +193,7 @@ def main() -> None:
                     "unsupported_symbol_count",
                     "evaluation_case",
                     "fixture_type",
+                    "retrieval_result_count",
                     "token_usage",
                 ):
                     value = span_summary[
