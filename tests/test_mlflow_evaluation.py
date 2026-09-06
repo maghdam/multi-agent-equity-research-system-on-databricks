@@ -213,6 +213,7 @@ class MlflowAssessmentSummaryTests(unittest.TestCase):
                 {
                     "name": "guideline_evidence_grounded_narrative",
                     "value": False,
+                    "span_id": None,
                     "rationale": "Serialized rationale.",
                     "error": "Serialized error.",
                 }
