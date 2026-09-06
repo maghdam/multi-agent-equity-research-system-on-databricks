@@ -15,6 +15,49 @@ from mlflow.genai.scorers import (
 from equity_research.supervisor_report import SupervisorReport
 
 
+LIVE_EVALUATION_CASES: dict[str, dict[str, Any]] = {
+    "E1": {
+        "inputs": {
+            "request_text": (
+                "Research AAPL and summarize market performance, fundamentals, "
+                "recent developments, and principal risks."
+            ),
+            "requested_symbols": ["AAPL"],
+        },
+        "expectations": {
+            "expected_mode": "single_company",
+            "expected_symbols": ["AAPL"],
+            "required_sections": [
+                "market_performance",
+                "fundamental_performance",
+                "recent_developments",
+                "principal_risks",
+            ],
+        },
+    },
+    "E2": {
+        "inputs": {
+            "request_text": (
+                "Compare AAPL and MSFT. Which has stronger recent market and "
+                "financial performance, and what developments and risks matter?"
+            ),
+            "requested_symbols": ["AAPL", "MSFT"],
+        },
+        "expectations": {
+            "expected_mode": "comparison",
+            "expected_symbols": ["AAPL", "MSFT"],
+            "required_sections": [
+                "market_performance",
+                "fundamental_performance",
+                "recent_developments",
+                "principal_risks",
+                "comparative_assessment",
+            ],
+        },
+    },
+}
+
+
 EQUITY_RESEARCH_GUIDELINES = (
     "The response must remain an equity-research report and must not provide "
     "buy, sell, hold, trading, or portfolio-allocation recommendations.",
@@ -27,6 +70,75 @@ EQUITY_RESEARCH_GUIDELINES = (
     "Comparative conclusions must stay limited to dimensions actually supported "
     "for both requested companies and must not become an investment recommendation.",
 )
+
+
+def build_live_evaluation_data(
+    case_ids: Sequence[str],
+) -> list[dict[str, Any]]:
+    """Build frozen E1/E2 live-evaluation rows from the AI research contract."""
+
+    if isinstance(case_ids, (str, bytes)):
+        raise ValueError(
+            "case_ids must be a sequence of evaluation IDs."
+        )
+
+    normalized = tuple(
+        str(case_id).strip().upper()
+        for case_id in case_ids
+    )
+
+    if not normalized:
+        raise ValueError(
+            "At least one evaluation case is required."
+        )
+
+    if len(set(normalized)) != len(normalized):
+        raise ValueError(
+            "Evaluation case IDs must be unique."
+        )
+
+    unknown = [
+        case_id
+        for case_id in normalized
+        if case_id not in LIVE_EVALUATION_CASES
+    ]
+
+    if unknown:
+        raise ValueError(
+            "Unsupported live evaluation case IDs: "
+            f"{unknown}. Supported live cases are E1 and E2."
+        )
+
+    return [
+        {
+            "inputs": {
+                "request_text": LIVE_EVALUATION_CASES[case_id][
+                    "inputs"
+                ]["request_text"],
+                "requested_symbols": list(
+                    LIVE_EVALUATION_CASES[case_id][
+                        "inputs"
+                    ]["requested_symbols"]
+                ),
+            },
+            "expectations": {
+                "expected_mode": LIVE_EVALUATION_CASES[case_id][
+                    "expectations"
+                ]["expected_mode"],
+                "expected_symbols": list(
+                    LIVE_EVALUATION_CASES[case_id][
+                        "expectations"
+                    ]["expected_symbols"]
+                ),
+                "required_sections": list(
+                    LIVE_EVALUATION_CASES[case_id][
+                        "expectations"
+                    ]["required_sections"]
+                ),
+            },
+        }
+        for case_id in normalized
+    ]
 
 
 def serialize_supervisor_report_for_evaluation(
