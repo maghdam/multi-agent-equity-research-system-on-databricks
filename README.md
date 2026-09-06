@@ -52,43 +52,65 @@ flowchart TB
         E2["SEC Filings"]
     end
 
-    subgraph B["Bronze - Raw provider history"]
-        direction LR
-        B1["price_responses ✅"]
-        B2["news_responses ✅"]
-        B3["company_facts_responses ✅"]
-        B4["filing_documents ✅"]
+    subgraph DE["Milestone 1 — Data Engineering ✅"]
+        direction TB
+        B["Bronze Delta<br/>raw immutable provider history"]
+        S["Silver Delta<br/>validated business records"]
+        G["Gold metrics<br/>authoritative structured facts"]
+        R["RAG corpus<br/>research_documents + research_chunks"]
     end
 
-    subgraph S["Silver - Validated business records"]
-        direction LR
-        S1["daily_prices ✅"]
-        S2["news_articles ✅"]
-        S3["company_facts ✅"]
-        S4["filing_sections ✅"]
+    subgraph AI["Milestone 2 — AI Engineering ✅"]
+        direction TB
+        CT["Controlled Gold tools"]
+        VS["Managed embeddings + Vector Search<br/>HYBRID retrieval"]
+        MA["Market Analyst<br/>GPT OSS 20B"]
+        CR["Company Researcher<br/>GPT OSS 20B"]
+        SUP["Deterministic LangGraph Supervisor"]
+        SYN["GPT OSS 120B terminal synthesis"]
+        VAL["Deterministic report validation<br/>numeric fidelity + provenance<br/>one repair + deterministic fallback"]
+        REP["Grounded cited research report"]
     end
 
-    subgraph G["Gold - Analytical metrics"]
-        direction LR
-        G1["market_metrics ✅"]
-        G2["fundamental_metrics ✅"]
+    subgraph OBS["Observability & Evaluation ✅"]
+        direction TB
+        TR["MLflow traces<br/>TOOL + RETRIEVER + CHAT_MODEL + AGENT spans"]
+        EV["MLflow GenAI evaluation<br/>code scorers + semantic judges + E1–E6"]
+        CI["Credential-free CI<br/>107 focused AI-eval tests + 482 total tests"]
     end
-    R["RAG retrieval layer<br/>research_documents + research_chunks ✅ live<br/>managed embeddings + AI Search vector index ✅ live"]
 
-    A1 --> B1 --> S1 --> G1
-    A2 --> B2 --> S2 --> R
-    E1 --> B3 --> S3 --> G2
-    E2 --> B4 --> S4 --> R
+    subgraph APP["Milestone 3 — Application Delivery"]
+        UI["Private Databricks app<br/>stock/period selection + charts<br/>cited report + follow-up chat"]
+    end
 
-    G1 --> M["Market Analyst<br/>GPT OSS 20B"]
-    G2 --> M
-    R --> C["Company Researcher<br/>GPT OSS 20B"]
-    M --> P["Deterministic LangGraph Supervisor"]
-    C --> P
-    P --> F["GPT OSS 120B terminal synthesis<br/>+ deterministic report validation"]
-    F --> U["Dashboard, cited report, and follow-up chat"]
+    A1 --> B
+    A2 --> B
+    E1 --> B
+    E2 --> B
+
+    B --> S
+    S --> G
+    S --> R
+
+    G --> CT --> MA
+    R --> VS --> CR
+
+    MA --> SUP
+    CR --> SUP
+    SUP --> SYN --> VAL --> REP
+
+    CT -. safe spans .-> TR
+    VS -. retriever spans .-> TR
+    MA -. model spans .-> TR
+    CR -. model spans .-> TR
+    SUP -. orchestration spans .-> TR
+    SYN -. synthesis spans .-> TR
+    REP -. evaluated output .-> EV
+    TR --> EV
+    CI -. regression gate .-> EV
+
+    REP --> UI
 ```
-
 Gold is intentionally **not** a one-to-one mirror of Silver. Structured price and fundamental data feed analytical Gold tables, while validated news and filing text primarily become retrieval/indexing assets for the AI layer.
 
 ## Expected output
