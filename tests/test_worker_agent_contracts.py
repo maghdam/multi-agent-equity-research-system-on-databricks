@@ -562,7 +562,7 @@ class WorkerAgentRunnerTests(unittest.TestCase):
         )
         self.assertEqual(
             captured["payload"]["model"],
-            "databricks-gpt-oss-20b",
+            "system.ai.gpt-oss-20b",
         )
         self.assertEqual(
             captured["profile"],
