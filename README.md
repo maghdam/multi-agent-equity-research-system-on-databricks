@@ -80,7 +80,7 @@ flowchart TB
     end
 
     subgraph APP["Milestone 3 — Application Delivery"]
-        UI["Private Databricks app<br/>stock/period selection + charts<br/>cited report + follow-up chat"]
+        UI["Databricks app<br/>stock/period selection + charts<br/>cited report + follow-up chat"]
     end
 
     A1 --> B
