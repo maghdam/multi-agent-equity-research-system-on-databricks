@@ -101,6 +101,22 @@ EQUITY_RESEARCH_GUIDELINES: tuple[tuple[str, str], ...] = (
 )
 
 
+def require_managed_evaluation_dataset_runtime() -> None:
+    """Fail fast when Databricks managed-dataset support is unavailable."""
+
+    try:
+        import databricks.agents.datasets  # noqa: F401
+    except ImportError as exc:
+        raise RuntimeError(
+            "Managed Databricks MLflow Evaluation Datasets require the optional "
+            "databricks-agents runtime. Install "
+            "requirements-evaluation-dataset.txt. On Python 3.14 platforms "
+            "without a whenever==0.7.3 wheel, set "
+            "WHENEVER_NO_BUILD_RUST_EXT=1 while installing so the supported "
+            "pure-Python fallback is used."
+        ) from exc
+
+
 def summarize_trace_assessments(
     assessments: Sequence[Any],
 ) -> list[dict[str, Any]]:
