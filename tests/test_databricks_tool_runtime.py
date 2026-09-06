@@ -348,7 +348,7 @@ class DatabricksCliRuntimeTests(unittest.TestCase):
 
         response = query_chat_completions_via_cli(
             payload={
-                "model": "databricks-gpt-oss-20b",
+                "model": "system.ai.gpt-oss-20b",
                 "messages": [
                     {
                         "role": "user",
@@ -382,7 +382,7 @@ class DatabricksCliRuntimeTests(unittest.TestCase):
         ):
             query_chat_completions_via_cli(
                 payload={
-                    "model": "databricks-gpt-oss-20b",
+                    "model": "system.ai.gpt-oss-20b",
                     "messages": [],
                     "stream": True,
                 }
