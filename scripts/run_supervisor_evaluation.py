@@ -21,10 +21,16 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from equity_research.config import load_equities  # noqa: E402
+from equity_research.controlled_evaluation_fixtures import (  # noqa: E402
+    e4_company_worker,
+    e4_market_worker,
+    e4_report_synthesizer,
+)
 from equity_research.mlflow_evaluation import (  # noqa: E402
     build_evaluation_scorers,
     build_live_evaluation_data,
     build_scope_rejection_scorers,
+    build_structured_degradation_scorers,
     require_managed_evaluation_dataset_runtime,
     serialize_scope_rejection_for_evaluation,
     serialize_supervisor_report_for_evaluation,
@@ -276,25 +282,38 @@ def main() -> None:
             for case in case_ids
         )
 
-        if "E3" in normalized_case_ids and normalized_case_ids != ("E3",):
+        controlled_cases = {
+            case_id
+            for case_id in normalized_case_ids
+            if case_id in {
+                "E3",
+                "E4",
+            }
+        }
+        if controlled_cases and len(normalized_case_ids) != 1:
             raise ValueError(
-                "E3 must be evaluated separately because it uses the "
-                "pre-tool scope-rejection scorer contract."
+                "Controlled failure cases E3 and E4 must be evaluated "
+                "separately from report cases."
             )
 
-        evaluation_kind = (
-            "scope_rejection"
-            if normalized_case_ids == ("E3",)
-            else "report"
-        )
+        if normalized_case_ids == ("E3",):
+            evaluation_kind = "scope_rejection"
+        elif normalized_case_ids == ("E4",):
+            evaluation_kind = "structured_degradation"
+        else:
+            evaluation_kind = "report"
 
         if (
-            evaluation_kind == "scope_rejection"
+            evaluation_kind
+            in {
+                "scope_rejection",
+                "structured_degradation",
+            }
             and args.include_llm_judges
         ):
             raise ValueError(
-                "E3 is a deterministic pre-tool rejection case and must not "
-                "run LLM judges."
+                "Controlled E3/E4 failure cases are deterministic and must "
+                "not run LLM judges."
             )
 
         data = build_live_evaluation_data(
@@ -372,10 +391,17 @@ def main() -> None:
             downstream_calls[
                 "market_worker"
             ] += 1
+
+            if evaluation_kind == "structured_degradation":
+                return e4_market_worker(
+                    request=request
+                )
+
             if workers is None:
                 raise RuntimeError(
                     "E3 scope rejection reached the Market Analyst boundary."
                 )
+
             return workers.market_worker(
                 request=request
             )
@@ -384,10 +410,18 @@ def main() -> None:
             downstream_calls[
                 "company_worker"
             ] += 1
+
+            if evaluation_kind == "structured_degradation":
+                return e4_company_worker(
+                    request=request,
+                    topic=topic,
+                )
+
             if workers is None:
                 raise RuntimeError(
                     "E3 scope rejection reached the Company Researcher boundary."
                 )
+
             return workers.company_worker(
                 request=request,
                 topic=topic,
@@ -397,10 +431,17 @@ def main() -> None:
             downstream_calls[
                 "report_synthesizer"
             ] += 1
+
             if evaluation_kind == "scope_rejection":
                 raise RuntimeError(
                     "E3 scope rejection reached final report synthesis."
                 )
+
+            if evaluation_kind == "structured_degradation":
+                return e4_report_synthesizer(
+                    state=state
+                )
+
             return run_supervisor_report_synthesis(
                 state=state,
                 profile=args.profile,
@@ -478,6 +519,62 @@ def main() -> None:
                         "E3 unexpectedly completed the research graph."
                     )
 
+            if evaluation_kind == "structured_degradation":
+                with mlflow.start_span(
+                    name="controlled_evaluation_fixture_e4",
+                    span_type=SpanType.AGENT,
+                ) as fixture_span:
+                    fixture_span.set_inputs(
+                        {
+                            "case_id": "E4",
+                            "symbols": [
+                                symbol.strip().upper()
+                                for symbol in requested_symbols
+                            ],
+                            "fixture": "stale_msft_market_metrics",
+                        }
+                    )
+                    fixture_span.set_attributes(
+                        {
+                            "equity_research.component": (
+                                "controlled_evaluation_fixture"
+                            ),
+                            "equity_research.evaluation_case": "E4",
+                            "equity_research.fixture_type": (
+                                "stale_structured_input"
+                            ),
+                        }
+                    )
+                    result = run_supervisor_research_graph(
+                        request_text=request_text,
+                        requested_symbols=tuple(
+                            requested_symbols
+                        ),
+                        market_worker=counted_market_worker,
+                        company_worker=counted_company_worker,
+                        report_synthesizer=counted_report_synthesizer,
+                        equities=equities,
+                    )
+                    output = serialize_supervisor_report_for_evaluation(
+                        result.report
+                    )
+                    fixture_span.set_outputs(
+                        {
+                            "status": output["status"],
+                            "synthesis_mode": output["synthesis_mode"],
+                            "market_worker_calls": downstream_calls[
+                                "market_worker"
+                            ],
+                            "company_worker_calls": downstream_calls[
+                                "company_worker"
+                            ],
+                            "report_synthesizer_calls": downstream_calls[
+                                "report_synthesizer"
+                            ],
+                        }
+                    )
+                    return output
+
             result = run_supervisor_research_graph(
                 request_text=request_text,
                 requested_symbols=tuple(
@@ -507,6 +604,8 @@ def main() -> None:
 
     if evaluation_kind == "scope_rejection":
         scorers = build_scope_rejection_scorers()
+    elif evaluation_kind == "structured_degradation":
+        scorers = build_structured_degradation_scorers()
     else:
         scorers = build_evaluation_scorers(
             include_llm_judges=args.include_llm_judges,
@@ -514,9 +613,12 @@ def main() -> None:
         )
 
     if args.llm_judge is not None:
-        if evaluation_kind == "scope_rejection":
+        if evaluation_kind in {
+            "scope_rejection",
+            "structured_degradation",
+        }:
             raise ValueError(
-                "--llm-judge is not applicable to deterministic E3."
+                "--llm-judge is not applicable to deterministic E3/E4."
             )
 
         if not args.include_llm_judges:
