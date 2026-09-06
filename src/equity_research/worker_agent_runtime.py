@@ -6,6 +6,7 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Any, Callable
 
+from equity_research.agent_contracts import AgentContractError
 from equity_research.company_researcher import (
     CompanyResearcherResult,
     ResearchTopic,
@@ -29,6 +30,7 @@ from equity_research.structured_data_tools import (
 from equity_research.worker_agent_prompts import (
     build_company_researcher_model_request,
     build_market_analyst_model_request,
+    build_market_analyst_repair_request,
 )
 
 
@@ -131,13 +133,34 @@ def run_market_analyst(
         response
     )
 
-    return validate_market_analyst_output(
-        raw_output,
-        requested_symbols=requested_symbols,
-        market_results=market_results,
-        fundamental_results=fundamental_results,
-        equities=equities,
-    )
+    try:
+        return validate_market_analyst_output(
+            raw_output,
+            requested_symbols=requested_symbols,
+            market_results=market_results,
+            fundamental_results=fundamental_results,
+            equities=equities,
+        )
+    except AgentContractError as exc:
+        repair_payload = build_market_analyst_repair_request(
+            context,
+            validation_error=str(exc),
+        )
+        repair_response = model_query(
+            payload=repair_payload,
+            profile=profile,
+        )
+        repaired_output = parse_structured_chat_response(
+            repair_response
+        )
+
+        return validate_market_analyst_output(
+            repaired_output,
+            requested_symbols=requested_symbols,
+            market_results=market_results,
+            fundamental_results=fundamental_results,
+            equities=equities,
+        )
 
 
 def run_company_researcher(
