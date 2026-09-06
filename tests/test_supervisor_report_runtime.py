@@ -388,6 +388,20 @@ class SupervisorReportPromptTests(unittest.TestCase):
             "Regenerate the entire report",
             repair_message,
         )
+        self.assertIn(
+            "proactively avoid every guarded relation term",
+            repair_message,
+        )
+        for guarded_term in (
+            "higher",
+            "strong",
+            "better",
+            "outperformed",
+        ):
+            self.assertIn(
+                guarded_term,
+                repair_message,
+            )
 
     def test_repair_request_rejects_blank_validation_error(self) -> None:
         with self.assertRaisesRegex(
