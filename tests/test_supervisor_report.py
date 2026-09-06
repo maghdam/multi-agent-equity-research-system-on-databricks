@@ -772,7 +772,7 @@ class SupervisorReportValidationTests(unittest.TestCase):
         comparative["source_finding_ids"] = [
             source_id
             for source_id in comparative["source_finding_ids"]
-            if source_id != "recent_developments:MSFT:recent_developments"
+            if not source_id.startswith("recent_developments:")
         ]
         output["limitations"] = [
             "MSFT recent developments are unavailable because evidence is "
@@ -832,7 +832,7 @@ class SupervisorReportValidationTests(unittest.TestCase):
         output["sections"][-1]["source_finding_ids"] = [
             source_id
             for source_id in output["sections"][-1]["source_finding_ids"]
-            if source_id != "recent_developments:MSFT:recent_developments"
+            if not source_id.startswith("recent_developments:")
         ]
         output["limitations"] = [
             "MSFT recent developments are unavailable.",
@@ -857,7 +857,7 @@ class SupervisorReportValidationTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             SupervisorReportContractError,
-            "must inherit source_finding_ids",
+            "must inherit every source_finding_id",
         ):
             validate_supervisor_report_output(
                 output,
@@ -918,7 +918,7 @@ class SupervisorReportValidationTests(unittest.TestCase):
                 "recent_developments:AAPL:recent_developments",
             ),
         )
-        self.assertIn(
+        self.assertNotIn(
             "recent_developments:AAPL:recent_developments",
             comparative.source_finding_ids,
         )
