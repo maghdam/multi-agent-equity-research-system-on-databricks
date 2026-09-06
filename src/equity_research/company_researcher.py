@@ -372,6 +372,14 @@ def _validate_evidence_type(
             "Company-disclosed risk findings may cite only filing evidence."
         )
 
+    if (
+        characterization == "risk_context"
+        and "news" not in source_types
+    ):
+        raise AgentContractError(
+            "Risk-context findings require at least one news evidence item."
+        )
+
 
 def _validate_evidence_scope(
     evidence: Sequence[EvidenceRecord],
