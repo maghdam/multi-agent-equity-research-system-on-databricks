@@ -734,6 +734,64 @@ class CompanyResearcherContractTests(unittest.TestCase):
                 equities=EQUITIES,
             )
 
+    def test_risk_context_requires_news_evidence(self) -> None:
+        filing = _evidence(
+            "b" * 64,
+            source_type="filing",
+        )
+
+        with self.assertRaisesRegex(
+            AgentContractError,
+            "require at least one news evidence item",
+        ):
+            validate_company_researcher_output(
+                {
+                    "findings": [
+                        {
+                            "finding_id": "R1",
+                            "topic": "principal_risks",
+                            "characterization": "risk_context",
+                            "symbols": ["AAPL"],
+                            "statement": "Filing-only context was misclassified.",
+                            "evidence_ids": ["b" * 64],
+                        }
+                    ],
+                    "insufficient_evidence": None,
+                },
+                topic="principal_risks",
+                requested_symbols=("AAPL",),
+                evidence=(filing,),
+                equities=EQUITIES,
+            )
+
+    def test_risk_context_accepts_news_evidence(self) -> None:
+        news = _evidence("a" * 64)
+
+        result = validate_company_researcher_output(
+            {
+                "findings": [
+                    {
+                        "finding_id": "R1",
+                        "topic": "principal_risks",
+                        "characterization": "risk_context",
+                        "symbols": ["AAPL"],
+                        "statement": "Current news provides risk context.",
+                        "evidence_ids": ["a" * 64],
+                    }
+                ],
+                "insufficient_evidence": None,
+            },
+            topic="principal_risks",
+            requested_symbols=("AAPL",),
+            evidence=(news,),
+            equities=EQUITIES,
+        )
+
+        self.assertEqual(
+            result.findings[0].characterization,
+            "risk_context",
+        )
+
     def test_company_disclosed_risk_requires_filing_evidence(self) -> None:
         news = _evidence("a" * 64)
 
