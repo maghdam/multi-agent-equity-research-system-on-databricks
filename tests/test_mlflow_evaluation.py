@@ -322,6 +322,38 @@ class MlflowAssessmentSummaryTests(unittest.TestCase):
             "insufficient_retrieval_evidence",
         )
 
+    def test_e5_zero_result_retrieval_span_is_summarized(
+        self,
+    ) -> None:
+        attributes = {
+            "mlflow.spanType": "RETRIEVER",
+            "equity_research.component": "controlled_evaluation_retrieval",
+            "equity_research.evaluation_case": "E5",
+            "equity_research.fixture_type": "insufficient_retrieval_evidence",
+            "equity_research.retrieval_result_count": 0,
+        }
+        span = SimpleNamespace(
+            name="controlled_evaluation_retrieval_e5_recent_developments",
+            get_attribute=lambda key: attributes.get(key),
+        )
+
+        summaries = summarize_observability_spans(
+            [span]
+        )
+
+        self.assertEqual(
+            summaries[0]["span_type"],
+            "RETRIEVER",
+        )
+        self.assertEqual(
+            summaries[0]["evaluation_case"],
+            "E5",
+        )
+        self.assertEqual(
+            summaries[0]["retrieval_result_count"],
+            0,
+        )
+
     def test_observability_span_summary_is_whitelisted_and_privacy_safe(
         self,
     ) -> None:
