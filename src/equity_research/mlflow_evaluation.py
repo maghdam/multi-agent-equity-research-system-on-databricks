@@ -107,38 +107,40 @@ def summarize_trace_assessments(
     summaries: list[dict[str, Any]] = []
 
     for assessment in assessments:
-        name = getattr(
+        name = _assessment_field(
             assessment,
             "name",
-            None,
         )
 
         if not isinstance(name, str) or not name.strip():
             continue
 
-        value = getattr(
+        value = _assessment_field(
             assessment,
             "value",
-            None,
         )
-        rationale = getattr(
+        rationale = _assessment_field(
             assessment,
             "rationale",
-            None,
         )
-        error = getattr(
+        error = _assessment_field(
             assessment,
             "error",
-            None,
         )
 
         error_message = None
         if error is not None:
-            error_message = getattr(
-                error,
-                "error_message",
-                None,
-            )
+            if isinstance(error, Mapping):
+                error_message = error.get(
+                    "error_message"
+                )
+            else:
+                error_message = getattr(
+                    error,
+                    "error_message",
+                    None,
+                )
+
             if not isinstance(
                 error_message,
                 str,
@@ -162,6 +164,22 @@ def summarize_trace_assessments(
         )
 
     return summaries
+
+
+def _assessment_field(
+    assessment: Any,
+    field: str,
+) -> Any:
+    if isinstance(assessment, Mapping):
+        return assessment.get(
+            field
+        )
+
+    return getattr(
+        assessment,
+        field,
+        None,
+    )
 
 
 def build_live_evaluation_data(
