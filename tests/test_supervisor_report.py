@@ -27,6 +27,7 @@ from equity_research.supervisor_contracts import (  # noqa: E402
 )
 from equity_research.supervisor_report import (  # noqa: E402
     SupervisorReportContractError,
+    build_deterministic_supervisor_report,
     build_supervisor_report_context,
     validate_supervisor_report_output,
 )
@@ -733,6 +734,75 @@ class SupervisorReportValidationTests(unittest.TestCase):
                 output,
                 state=_state(("AAPL", "MSFT")),
             )
+
+    def test_deterministic_fallback_preserves_degraded_comparison_provenance(
+        self,
+    ) -> None:
+        limitation = AgentLimitation(
+            agent="company_researcher",
+            symbol="MSFT",
+            dimension="recent_developments",
+            reason_code="insufficient_evidence",
+            message="No company-specific MSFT developments were found.",
+        )
+        aapl_recent = _company_result(
+            topic="recent_developments",
+            symbols=("AAPL",),
+        )
+        state = _state(
+            ("AAPL", "MSFT"),
+            recent_result=CompanyResearcherResult(
+                findings=aapl_recent.findings,
+                limitations=(limitation,),
+            ),
+        )
+
+        report = build_deterministic_supervisor_report(
+            state
+        )
+
+        self.assertEqual(
+            report.status,
+            "degraded",
+        )
+        self.assertEqual(
+            report.synthesis_mode,
+            "deterministic_fallback",
+        )
+        recent = next(
+            section
+            for section in report.sections
+            if section.section == "recent_developments"
+        )
+        comparative = next(
+            section
+            for section in report.sections
+            if section.section == "comparative_assessment"
+        )
+        self.assertEqual(
+            recent.status,
+            "degraded",
+        )
+        self.assertEqual(
+            recent.source_finding_ids,
+            (
+                "recent_developments:AAPL:recent_developments",
+            ),
+        )
+        self.assertIn(
+            "recent_developments:AAPL:recent_developments",
+            comparative.source_finding_ids,
+        )
+        self.assertIn(
+            "a" * 64,
+            {
+                citation.evidence_id
+                for citation in report.evidence
+            },
+        )
+        self.assertTrue(
+            report.limitations
+        )
 
     def test_rejects_unbacked_qualitative_assessment(self) -> None:
         output = _comparison_output()
