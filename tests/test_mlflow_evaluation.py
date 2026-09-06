@@ -19,10 +19,12 @@ from equity_research.mlflow_evaluation import (  # noqa: E402
     build_live_evaluation_data,
     build_narrative_trace_grounding_judge,
     build_evaluation_scorers,
+    build_evidence_degradation_scorers,
     build_llm_judges,
     build_scope_rejection_scorers,
     build_structured_degradation_scorers,
     evidence_count,
+    expected_evidence_degradation,
     expected_request_mode,
     expected_scope_rejection,
     expected_structured_degradation,
@@ -30,6 +32,7 @@ from equity_research.mlflow_evaluation import (  # noqa: E402
     incomplete_dimension_excluded_from_comparison,
     no_downstream_execution,
     no_stale_metric_substitution,
+    no_unsupported_narrative_substitution,
     report_section_grounding_contract,
     report_status,
     require_managed_evaluation_dataset_runtime,
@@ -38,6 +41,7 @@ from equity_research.mlflow_evaluation import (  # noqa: E402
     serialize_supervisor_report_for_evaluation,
     summarize_observability_spans,
     summarize_trace_assessments,
+    supported_narrative_evidence_preserved,
     supported_universe_disclosure,
     synthesis_mode,
 )
@@ -291,6 +295,33 @@ class MlflowAssessmentSummaryTests(unittest.TestCase):
             "stale_structured_input",
         )
 
+    def test_e5_fixture_span_is_in_observability_summary(
+        self,
+    ) -> None:
+        attributes = {
+            "mlflow.spanType": "AGENT",
+            "equity_research.component": "controlled_evaluation_fixture",
+            "equity_research.evaluation_case": "E5",
+            "equity_research.fixture_type": "insufficient_retrieval_evidence",
+        }
+        span = SimpleNamespace(
+            name="controlled_evaluation_fixture_e5",
+            get_attribute=lambda key: attributes.get(key),
+        )
+
+        summaries = summarize_observability_spans(
+            [span]
+        )
+
+        self.assertEqual(
+            summaries[0]["evaluation_case"],
+            "E5",
+        )
+        self.assertEqual(
+            summaries[0]["fixture_type"],
+            "insufficient_retrieval_evidence",
+        )
+
     def test_observability_span_summary_is_whitelisted_and_privacy_safe(
         self,
     ) -> None:
@@ -355,14 +386,14 @@ class MlflowAssessmentSummaryTests(unittest.TestCase):
 
 
 class MlflowEvaluationCaseTests(unittest.TestCase):
-    def test_builds_frozen_e1_e2_e3_and_e4_rows(self) -> None:
+    def test_builds_frozen_e1_e2_e3_e4_and_e5_rows(self) -> None:
         rows = build_live_evaluation_data(
-            ("E1", "E2", "E3", "E4")
+            ("E1", "E2", "E3", "E4", "E5")
         )
 
         self.assertEqual(
             len(rows),
-            4,
+            5,
         )
         self.assertEqual(
             rows[0]["inputs"]["requested_symbols"],
@@ -429,14 +460,34 @@ class MlflowEvaluationCaseTests(unittest.TestCase):
             rows[3]["expectations"]["expected_limit_reason"],
             "stale",
         )
+        self.assertEqual(
+            rows[4]["inputs"]["requested_symbols"],
+            ["AAPL"],
+        )
+        self.assertEqual(
+            rows[4]["tags"]["category"],
+            "insufficient_retrieval_evidence",
+        )
+        self.assertEqual(
+            rows[4]["expectations"]["expected_status"],
+            "degraded",
+        )
+        self.assertEqual(
+            rows[4]["expectations"]["expected_unavailable_section"],
+            "recent_developments",
+        )
+        self.assertEqual(
+            rows[4]["expectations"]["expected_limit_reason"],
+            "insufficient_evidence",
+        )
 
     def test_rejects_unsupported_or_duplicate_live_case_ids(self) -> None:
         with self.assertRaisesRegex(
             ValueError,
-            "Supported live cases are E1, E2, E3, and E4",
+            "Supported live cases are E1, E2, E3, E4, and E5",
         ):
             build_live_evaluation_data(
-                ("E5",)
+                ("E6",)
             )
 
         with self.assertRaisesRegex(
@@ -699,6 +750,133 @@ class MlflowStructuredDegradationTests(unittest.TestCase):
 
         self.assertFalse(
             incomplete_dimension_excluded_from_comparison(
+                outputs=outputs
+            )
+        )
+
+
+class MlflowEvidenceDegradationTests(unittest.TestCase):
+    def test_e5_scorers_require_explicit_unavailable_narrative_gap(
+        self,
+    ) -> None:
+        outputs = {
+            "mode": "single_company",
+            "symbols": ["AAPL"],
+            "status": "degraded",
+            "synthesis_mode": "deterministic_fallback",
+            "report_text": "Controlled E5 degraded fixture.",
+            "sections": [
+                {
+                    "section": "market_performance",
+                    "status": "available",
+                    "text": "AAPL market metrics remain available.",
+                    "source_finding_ids": [
+                        "market_analysis:market_AAPL"
+                    ],
+                },
+                {
+                    "section": "fundamental_performance",
+                    "status": "available",
+                    "text": "AAPL fundamentals remain available.",
+                    "source_finding_ids": [
+                        "market_analysis:fundamental_AAPL"
+                    ],
+                },
+                {
+                    "section": "recent_developments",
+                    "status": "unavailable",
+                    "text": (
+                        "No grounded findings are available for this section "
+                        "under the current Supervisor state."
+                    ),
+                    "source_finding_ids": [],
+                },
+                {
+                    "section": "principal_risks",
+                    "status": "available",
+                    "text": "AAPL principal risk remains supported.",
+                    "source_finding_ids": [
+                        "principal_risks:AAPL:principal_risks"
+                    ],
+                },
+            ],
+            "limitations": [
+                (
+                    "company_researcher recent_developments: No sufficiently "
+                    "relevant controlled news evidence was found for AAPL "
+                    "recent developments. (insufficient_evidence)."
+                )
+            ],
+            "evidence_ids": ["e" * 64],
+            "evidence_count": 1,
+        }
+        expectations = build_live_evaluation_data(
+            ("E5",)
+        )[0]["expectations"]
+
+        self.assertTrue(
+            expected_evidence_degradation(
+                outputs=outputs,
+                expectations=expectations,
+            )
+        )
+        self.assertTrue(
+            no_unsupported_narrative_substitution(
+                outputs=outputs
+            )
+        )
+        self.assertTrue(
+            supported_narrative_evidence_preserved(
+                outputs=outputs,
+                expectations=expectations,
+            )
+        )
+        self.assertEqual(
+            [
+                scorer.name
+                for scorer in build_evidence_degradation_scorers()
+            ][-3:],
+            [
+                "expected_evidence_degradation",
+                "no_unsupported_narrative_substitution",
+                "supported_narrative_evidence_preserved",
+            ],
+        )
+
+    def test_e5_rejects_substituted_recent_development_claim(
+        self,
+    ) -> None:
+        outputs = {
+            "sections": [
+                {
+                    "section": "market_performance",
+                    "status": "available",
+                    "text": "Market.",
+                    "source_finding_ids": ["market_analysis:market_AAPL"],
+                },
+                {
+                    "section": "fundamental_performance",
+                    "status": "available",
+                    "text": "Fundamental.",
+                    "source_finding_ids": ["market_analysis:fundamental_AAPL"],
+                },
+                {
+                    "section": "recent_developments",
+                    "status": "available",
+                    "text": "Unsupported development.",
+                    "source_finding_ids": ["recent_developments:invented"],
+                },
+                {
+                    "section": "principal_risks",
+                    "status": "available",
+                    "text": "Risk.",
+                    "source_finding_ids": ["principal_risks:AAPL:principal_risks"],
+                },
+            ]
+        }
+
+        self.assertFalse(
+            no_unsupported_narrative_substitution(
                 outputs=outputs
             )
         )
