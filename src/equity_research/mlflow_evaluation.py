@@ -1861,9 +1861,16 @@ def _retrieval_routes_for_sufficiency(
                         "id": evidence_id.strip(),
                         "page_content": page_content.strip(),
                         "metadata": (
-                            dict(
-                                metadata
-                            )
+                            {
+                                key: metadata[key]
+                                for key in (
+                                    "source_type",
+                                    "configured_symbols",
+                                    "evidence_date",
+                                    "retrieval_rank",
+                                )
+                                if key in metadata
+                            }
                             if isinstance(
                                 metadata,
                                 Mapping,
@@ -1897,7 +1904,7 @@ def build_llm_judges(
     *,
     model: str = "databricks:/databricks-gpt-oss-120b",
 ) -> list[Any]:
-    """Return semantic Databricks judges for report-level quality."""
+    """Return semantic Databricks judges for report and retrieval quality."""
 
     if not isinstance(model, str) or not model.strip():
         raise ValueError(
