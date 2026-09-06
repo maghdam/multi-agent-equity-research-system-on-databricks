@@ -551,18 +551,12 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
                 ("AAPL",)
             )
         )
-        company_agent_runner = Mock(
-            side_effect=[
-                _company_agent_result(
-                    "recent_developments",
-                    ("AAPL",),
-                ),
-                _company_agent_result(
-                    "principal_risks",
-                    ("AAPL",),
-                ),
-            ]
-        )
+        def company_agent_runner(**kwargs):
+            return _company_agent_result(
+                kwargs["topic"],
+                ("AAPL",),
+            )
+
         workers = DatabricksSupervisorWorkers(
             config=self.config,
             equities=EQUITIES,
@@ -573,10 +567,7 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
                 ]
             ),
             vector_query=Mock(
-                side_effect=[
-                    {"kind": "news"},
-                    {"kind": "filing"},
-                ]
+                return_value={"kind": "retrieval"}
             ),
             market_agent_runner=market_agent_runner,
             company_agent_runner=company_agent_runner,
@@ -589,6 +580,26 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
                 tzinfo=timezone.utc,
             ),
         )
+
+        def parse_evidence_by_source(
+            response,
+            *,
+            requested_symbols,
+            expected_source_type,
+            equities,
+        ):
+            del response, equities
+            return (
+                _evidence(
+                    (
+                        "e" * 64
+                        if expected_source_type == "news"
+                        else "f" * 64
+                    ),
+                    symbol=requested_symbols[0],
+                    source_type=expected_source_type,
+                ),
+            )
 
         with (
             patch(
@@ -614,22 +625,7 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
             patch(
                 "equity_research.supervisor_worker_runtime."
                 "parse_retrieval_response",
-                side_effect=[
-                    (
-                        _evidence(
-                            "e" * 64,
-                            symbol="AAPL",
-                            source_type="news",
-                        ),
-                    ),
-                    (
-                        _evidence(
-                            "f" * 64,
-                            symbol="AAPL",
-                            source_type="filing",
-                        ),
-                    ),
-                ],
+                side_effect=parse_evidence_by_source,
             ),
         ):
             state = run_supervisor_graph(
