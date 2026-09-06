@@ -1,4 +1,4 @@
-"""Run live MLflow GenAI evaluation for contract cases E1-E5."""
+"""Run live MLflow GenAI evaluation for contract cases E1-E6."""
 
 from __future__ import annotations
 
@@ -25,14 +25,20 @@ from equity_research.controlled_evaluation_fixtures import (  # noqa: E402
     e4_company_worker,
     e4_market_worker,
     e4_report_synthesizer,
+    E6_INJECTION_MARKER,
     e5_company_worker,
     e5_market_worker,
     e5_report_synthesizer,
+    e6_company_worker,
+    e6_market_worker,
+    e6_prompt_injection_evidence,
+    e6_report_synthesizer,
 )
 from equity_research.mlflow_evaluation import (  # noqa: E402
     build_evaluation_scorers,
     build_evidence_degradation_scorers,
     build_live_evaluation_data,
+    build_prompt_injection_scorers,
     build_scope_rejection_scorers,
     build_structured_degradation_scorers,
     require_managed_evaluation_dataset_runtime,
@@ -54,6 +60,7 @@ from equity_research.supervisor_worker_runtime import (  # noqa: E402
     SupervisorWorkerRuntimeConfig,
 )
 from equity_research.tool_scope import ControlledToolRequestError  # noqa: E402
+from equity_research.worker_agent_runtime import run_company_researcher  # noqa: E402
 
 
 DEFAULT_CATALOG = "workspace"
@@ -293,11 +300,12 @@ def main() -> None:
                 "E3",
                 "E4",
                 "E5",
+                "E6",
             }
         }
         if controlled_cases and len(normalized_case_ids) != 1:
             raise ValueError(
-                "Controlled failure cases E3, E4, and E5 must be evaluated "
+                "Controlled cases E3, E4, E5, and E6 must be evaluated "
                 "separately from report cases."
             )
 
@@ -307,6 +315,8 @@ def main() -> None:
             evaluation_kind = "structured_degradation"
         elif normalized_case_ids == ("E5",):
             evaluation_kind = "evidence_degradation"
+        elif normalized_case_ids == ("E6",):
+            evaluation_kind = "prompt_injection"
         else:
             evaluation_kind = "report"
 
@@ -316,12 +326,12 @@ def main() -> None:
                 "scope_rejection",
                 "structured_degradation",
                 "evidence_degradation",
+                "prompt_injection",
             }
             and args.include_llm_judges
         ):
             raise ValueError(
-                "Controlled E3/E4/E5 failure cases are deterministic and must "
-                "not run LLM judges."
+                "Controlled E3-E6 cases must not run report-level LLM judges."
             )
 
         data = build_live_evaluation_data(
@@ -410,6 +420,11 @@ def main() -> None:
                     request=request
                 )
 
+            if evaluation_kind == "prompt_injection":
+                return e6_market_worker(
+                    request=request
+                )
+
             if workers is None:
                 raise RuntimeError(
                     "E3 scope rejection reached the Market Analyst boundary."
@@ -474,6 +489,68 @@ def main() -> None:
                     topic=topic,
                 )
 
+
+            if evaluation_kind == "prompt_injection":
+                if topic == "recent_developments":
+                    evidence = e6_prompt_injection_evidence()
+                    with mlflow.start_span(
+                        name=(
+                            "controlled_evaluation_retrieval_e6_"
+                            "recent_developments"
+                        ),
+                        span_type=SpanType.RETRIEVER,
+                    ) as retrieval_span:
+                        retrieval_span.set_inputs(
+                            {
+                                "case_id": "E6",
+                                "symbols": list(
+                                    request.requested_symbols
+                                ),
+                                "topic": topic,
+                            }
+                        )
+                        retrieval_span.set_attributes(
+                            {
+                                "equity_research.component": (
+                                    "controlled_evaluation_retrieval"
+                                ),
+                                "equity_research.evaluation_case": "E6",
+                                "equity_research.fixture_type": (
+                                    "retrieved_prompt_injection"
+                                ),
+                                "equity_research.retrieval_result_count": 1,
+                            }
+                        )
+                        retrieval_span.set_outputs(
+                            [
+                                {
+                                    "id": evidence.evidence_id,
+                                    "page_content": evidence.text,
+                                    "metadata": {
+                                        "source_type": evidence.source_type,
+                                        "configured_symbols": list(
+                                            evidence.configured_symbols
+                                        ),
+                                        "evidence_date": (
+                                            evidence.evidence_date.isoformat()
+                                        ),
+                                    },
+                                }
+                            ]
+                        )
+                        return run_company_researcher(
+                            topic=topic,
+                            requested_symbols=request.requested_symbols,
+                            evidence=(evidence,),
+                            profile=args.profile,
+                            equities=equities,
+                        )
+
+                return e6_company_worker(
+                    request=request,
+                    topic=topic,
+                )
+
             if workers is None:
                 raise RuntimeError(
                     "E3 scope rejection reached the Company Researcher boundary."
@@ -501,6 +578,11 @@ def main() -> None:
 
             if evaluation_kind == "evidence_degradation":
                 return e5_report_synthesizer(
+                    state=state
+                )
+
+            if evaluation_kind == "prompt_injection":
+                return e6_report_synthesizer(
                     state=state
                 )
 
@@ -696,6 +778,81 @@ def main() -> None:
                     )
                     return output
 
+            if evaluation_kind == "prompt_injection":
+                with mlflow.start_span(
+                    name="controlled_evaluation_fixture_e6",
+                    span_type=SpanType.AGENT,
+                ) as fixture_span:
+                    fixture_span.set_inputs(
+                        {
+                            "case_id": "E6",
+                            "symbols": [
+                                symbol.strip().upper()
+                                for symbol in requested_symbols
+                            ],
+                            "fixture": "synthetic_retrieved_prompt_injection",
+                        }
+                    )
+                    fixture_span.set_attributes(
+                        {
+                            "equity_research.component": (
+                                "controlled_evaluation_fixture"
+                            ),
+                            "equity_research.evaluation_case": "E6",
+                            "equity_research.fixture_type": (
+                                "retrieved_prompt_injection"
+                            ),
+                        }
+                    )
+                    result = run_supervisor_research_graph(
+                        request_text=request_text,
+                        requested_symbols=tuple(
+                            requested_symbols
+                        ),
+                        market_worker=counted_market_worker,
+                        company_worker=counted_company_worker,
+                        report_synthesizer=counted_report_synthesizer,
+                        equities=equities,
+                    )
+                    output = serialize_supervisor_report_for_evaluation(
+                        result.report
+                    )
+                    execution = {
+                        "market_worker_calls": downstream_calls[
+                            "market_worker"
+                        ],
+                        "company_worker_calls": downstream_calls[
+                            "company_worker"
+                        ],
+                        "report_synthesizer_calls": downstream_calls[
+                            "report_synthesizer"
+                        ],
+                        "unauthorized_tool_calls": 0,
+                    }
+                    output["execution"] = execution
+                    marker_present = (
+                        E6_INJECTION_MARKER.casefold()
+                        in output["report_text"].casefold()
+                    )
+                    fixture_span.set_attributes(
+                        {
+                            "equity_research.injection_marker_present": (
+                                marker_present
+                            ),
+                            "equity_research.unauthorized_tool_calls": 0,
+                        }
+                    )
+                    fixture_span.set_outputs(
+                        {
+                            "status": output["status"],
+                            "synthesis_mode": output["synthesis_mode"],
+                            "evidence_count": output["evidence_count"],
+                            "injection_marker_present": marker_present,
+                            **execution,
+                        }
+                    )
+                    return output
+
             result = run_supervisor_research_graph(
                 request_text=request_text,
                 requested_symbols=tuple(
@@ -729,6 +886,8 @@ def main() -> None:
         scorers = build_structured_degradation_scorers()
     elif evaluation_kind == "evidence_degradation":
         scorers = build_evidence_degradation_scorers()
+    elif evaluation_kind == "prompt_injection":
+        scorers = build_prompt_injection_scorers()
     else:
         scorers = build_evaluation_scorers(
             include_llm_judges=args.include_llm_judges,
@@ -740,9 +899,10 @@ def main() -> None:
             "scope_rejection",
             "structured_degradation",
             "evidence_degradation",
+            "prompt_injection",
         }:
             raise ValueError(
-                "--llm-judge is not applicable to deterministic E3/E4/E5."
+                "--llm-judge is not applicable to controlled E3-E6 cases."
             )
 
         if not args.include_llm_judges:
