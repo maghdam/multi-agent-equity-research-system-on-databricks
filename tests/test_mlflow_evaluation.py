@@ -132,6 +132,32 @@ class MlflowAssessmentSummaryTests(unittest.TestCase):
             ],
         )
 
+    def test_summarizes_serialized_mapping_assessment(self) -> None:
+        summaries = summarize_trace_assessments(
+            [
+                {
+                    "name": "guideline_evidence_grounded_narrative",
+                    "value": False,
+                    "rationale": "Serialized rationale.",
+                    "error": {
+                        "error_message": "Serialized error."
+                    },
+                }
+            ]
+        )
+
+        self.assertEqual(
+            summaries,
+            [
+                {
+                    "name": "guideline_evidence_grounded_narrative",
+                    "value": False,
+                    "rationale": "Serialized rationale.",
+                    "error": "Serialized error.",
+                }
+            ],
+        )
+
     def test_summarizes_assessment_error_message(self) -> None:
         assessments = [
             SimpleNamespace(
