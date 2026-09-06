@@ -91,6 +91,79 @@ EQUITY_RESEARCH_GUIDELINES: tuple[tuple[str, str], ...] = (
 )
 
 
+def summarize_trace_assessments(
+    assessments: Sequence[Any],
+) -> list[dict[str, Any]]:
+    """Return privacy-safe assessment summaries for evaluation diagnostics."""
+
+    if isinstance(
+        assessments,
+        (str, bytes),
+    ):
+        raise ValueError(
+            "assessments must be a sequence of MLflow assessment objects."
+        )
+
+    summaries: list[dict[str, Any]] = []
+
+    for assessment in assessments:
+        name = getattr(
+            assessment,
+            "name",
+            None,
+        )
+
+        if not isinstance(name, str) or not name.strip():
+            continue
+
+        value = getattr(
+            assessment,
+            "value",
+            None,
+        )
+        rationale = getattr(
+            assessment,
+            "rationale",
+            None,
+        )
+        error = getattr(
+            assessment,
+            "error",
+            None,
+        )
+
+        error_message = None
+        if error is not None:
+            error_message = getattr(
+                error,
+                "error_message",
+                None,
+            )
+            if not isinstance(
+                error_message,
+                str,
+            ):
+                error_message = str(
+                    error
+                )
+
+        summaries.append(
+            {
+                "name": name.strip(),
+                "value": value,
+                "rationale": (
+                    rationale.strip()
+                    if isinstance(rationale, str)
+                    and rationale.strip()
+                    else None
+                ),
+                "error": error_message,
+            }
+        )
+
+    return summaries
+
+
 def build_live_evaluation_data(
     case_ids: Sequence[str],
 ) -> list[dict[str, Any]]:
