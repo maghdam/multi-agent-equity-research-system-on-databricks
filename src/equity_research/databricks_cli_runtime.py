@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import tempfile
 import time
@@ -10,6 +11,12 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Callable
 
+
+QUALIFIED_INDEX_PATTERN = re.compile(
+    r"[A-Za-z_][A-Za-z0-9_]*"
+    r"\.[A-Za-z_][A-Za-z0-9_]*"
+    r"\.[A-Za-z_][A-Za-z0-9_]*"
+)
 
 TERMINAL_SQL_STATES = frozenset(
     {
