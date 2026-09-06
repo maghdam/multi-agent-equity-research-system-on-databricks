@@ -100,26 +100,23 @@ def main() -> None:
             experiment_id.strip()
         ],
         run_id=run_id,
-        return_type="pandas",
+        return_type="list",
         include_spans=False,
     )
 
     printed = 0
+    available_names: set[str] = set()
 
-    for _, row in traces.iterrows():
-        assessments = row.get(
-            "assessments"
-        )
-
-        if not isinstance(
-            assessments,
-            list,
-        ):
-            continue
+    for trace in traces:
+        assessments = trace.search_assessments()
 
         for summary in summarize_trace_assessments(
             assessments
         ):
+            available_names.add(
+                summary["name"]
+            )
+
             if (
                 prefix is not None
                 and not summary["name"].startswith(
@@ -150,10 +147,17 @@ def main() -> None:
 
             printed += 1
 
+    if printed == 0 and available_names:
+        print(
+            "AVAILABLE_ASSESSMENTS"
+            f"; names={','.join(sorted(available_names))}"
+        )
+
     print(
         "MLFLOW_EVALUATION_INSPECTION=PASSED"
         f"; run_id={run_id}"
         f"; experiment_id={experiment_id}"
+        f"; traces={len(traces)}"
         f"; assessments={printed}"
     )
 
