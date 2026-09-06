@@ -13,6 +13,11 @@ from equity_research.supervisor_contracts import SupervisorState
 
 
 ReportSectionStatus = Literal["available", "degraded", "unavailable"]
+ReportSynthesisMode = Literal[
+    "model",
+    "repaired_model",
+    "deterministic_fallback",
+]
 ReportSectionName = Literal[
     "market_performance",
     "fundamental_performance",
@@ -67,6 +72,7 @@ class SupervisorReport:
     sections: tuple[ReportSection, ...]
     limitations: tuple[str, ...]
     evidence: tuple[EvidenceCitation, ...]
+    synthesis_mode: ReportSynthesisMode = "model"
 
 
 RELATION_TERMS = (
@@ -152,6 +158,206 @@ def build_supervisor_report_context(
             for failure in state.failures
         ],
     }
+
+
+def build_deterministic_supervisor_report(
+    state: SupervisorState,
+) -> SupervisorReport:
+    """Build a contract-valid report without another model call."""
+
+    if not isinstance(state, SupervisorState):
+        raise SupervisorReportContractError(
+            "state must be SupervisorState."
+        )
+
+    source_findings = {
+        item.source_finding_id: item
+        for item in _source_findings(state)
+    }
+    raw_sections: list[dict[str, Any]] = []
+
+    for section in REQUIRED_BASE_SECTIONS:
+        source_ids = _available_source_ids_for_section(
+            section=section,
+            source_findings=source_findings,
+        )
+        has_issue = _section_issue_supported(
+            section=section,
+            state=state,
+        )
+        raw_sections.append(
+            _deterministic_section(
+                section=section,
+                source_ids=source_ids,
+                source_findings=source_findings,
+                has_issue=has_issue,
+            )
+        )
+
+    if state.request.mode == "comparison":
+        inherited_ids = tuple(
+            source_id
+            for raw_section in raw_sections
+            if raw_section["status"] in {"available", "degraded"}
+            for source_id in raw_section["source_finding_ids"]
+        )
+        inherited_ids = tuple(
+            dict.fromkeys(
+                inherited_ids
+            )
+        )
+        comparison_has_issue = _section_issue_supported(
+            section="comparative_assessment",
+            state=state,
+        )
+        comparison_text = _deterministic_comparison_text(
+            raw_sections
+        )
+        raw_sections.append(
+            {
+                "section": "comparative_assessment",
+                "status": _deterministic_section_status(
+                    has_sources=bool(inherited_ids),
+                    has_issue=comparison_has_issue,
+                ),
+                "text": comparison_text,
+                "source_finding_ids": list(
+                    inherited_ids
+                ),
+            }
+        )
+
+    raw_output = {
+        "sections": raw_sections,
+        "limitations": list(
+            _deterministic_report_limitations(
+                state
+            )
+        ),
+    }
+    report = validate_supervisor_report_output(
+        raw_output,
+        state=state,
+    )
+
+    return SupervisorReport(
+        mode=report.mode,
+        symbols=report.symbols,
+        status=report.status,
+        sections=report.sections,
+        limitations=report.limitations,
+        evidence=report.evidence,
+        synthesis_mode="deterministic_fallback",
+    )
+
+
+def _deterministic_section(
+    *,
+    section: ReportSectionName,
+    source_ids: Sequence[str],
+    source_findings: Mapping[str, ReportSourceFinding],
+    has_issue: bool,
+) -> dict[str, Any]:
+    status = _deterministic_section_status(
+        has_sources=bool(source_ids),
+        has_issue=has_issue,
+    )
+
+    if source_ids:
+        text = " ".join(
+            source_findings[source_id].statement
+            for source_id in source_ids
+        )
+
+        if has_issue:
+            text = (
+                f"{text} Coverage is incomplete for part of the "
+                "requested scope."
+            )
+    else:
+        text = (
+            "No grounded findings are available for this section under "
+            "the current Supervisor state."
+        )
+
+    return {
+        "section": section,
+        "status": status,
+        "text": text,
+        "source_finding_ids": list(
+            source_ids
+        ),
+    }
+
+
+def _deterministic_section_status(
+    *,
+    has_sources: bool,
+    has_issue: bool,
+) -> ReportSectionStatus:
+    if has_sources and has_issue:
+        return "degraded"
+
+    if has_sources:
+        return "available"
+
+    if has_issue:
+        return "unavailable"
+
+    raise SupervisorReportContractError(
+        "Deterministic report rendering found no grounded source findings "
+        "and no matching Supervisor limitation or failure."
+    )
+
+
+def _deterministic_comparison_text(
+    raw_sections: Sequence[Mapping[str, Any]],
+) -> str:
+    labels = {
+        "market_performance": "Market performance",
+        "fundamental_performance": "Fundamental performance",
+        "recent_developments": "Recent developments",
+        "principal_risks": "Principal risks",
+    }
+    parts = []
+
+    for raw_section in raw_sections:
+        section = raw_section["section"]
+        text = raw_section["text"]
+        parts.append(
+            f"{labels[section]}: {text}"
+        )
+
+    return " ".join(parts)
+
+
+def _deterministic_report_limitations(
+    state: SupervisorState,
+) -> tuple[str, ...]:
+    values: list[str] = []
+
+    for limitation in state.limitations:
+        symbol = (
+            f" {limitation.symbol}"
+            if limitation.symbol is not None
+            else ""
+        )
+        values.append(
+            f"{limitation.agent}{symbol} {limitation.dimension}: "
+            f"{limitation.message} ({limitation.reason_code})."
+        )
+
+    for failure in state.failures:
+        values.append(
+            f"{failure.route_id}: {failure.message} "
+            f"({failure.reason_code})."
+        )
+
+    return tuple(
+        dict.fromkeys(
+            values
+        )
+    )
 
 
 def validate_supervisor_report_output(
