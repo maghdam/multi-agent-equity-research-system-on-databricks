@@ -18,7 +18,6 @@ from equity_research.databricks_cli_runtime import (
 )
 from equity_research.market_analyst import MarketAnalystResult
 from equity_research.retrieval_tools import (
-    EvidenceRecord,
     MAX_RETRIEVAL_RESULTS,
     build_retrieval_query_payload,
     parse_retrieval_response,
