@@ -72,6 +72,29 @@ class WorkerAgentPromptTests(unittest.TestCase):
         self.assertIn(prompt_like, user_message)
         self.assertIn('"untrusted_text"', user_message)
 
+    def test_company_researcher_prompt_excludes_finance_noise(self) -> None:
+        payload = build_company_researcher_model_request(
+            {
+                "topic": "recent_developments",
+                "requested_symbols": ["MSFT"],
+                "evidence": [],
+            }
+        )
+
+        system_message = payload["messages"][0]["content"]
+
+        for phrase in (
+            "Rule 10b5-1",
+            "13F",
+            "institutional",
+            "Golden Cross",
+            "technical-analysis",
+        ):
+            self.assertIn(
+                phrase,
+                system_message,
+            )
+
     def test_request_serializes_context_as_valid_json(self) -> None:
         payload = build_market_analyst_model_request(
             {
