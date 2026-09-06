@@ -208,7 +208,7 @@ class SupervisorRequestPlanTests(unittest.TestCase):
     def test_rejects_unsupported_symbol_before_plan(self) -> None:
         with self.assertRaisesRegex(
             ControlledToolRequestError,
-            "Unsupported requested symbols",
+            "Unsupported symbol\\(s\\): NVDA.*Supported symbols: AAPL, MSFT",
         ):
             build_supervisor_plan(
                 request_text="Compare AAPL and NVDA.",
