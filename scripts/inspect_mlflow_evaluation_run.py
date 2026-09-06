@@ -188,6 +188,9 @@ def main() -> None:
                     "repair_count",
                     "synthesis_mode",
                     "report_status",
+                    "request_mode",
+                    "rejection_reason",
+                    "unsupported_symbol_count",
                     "token_usage",
                 ):
                     value = span_summary[
