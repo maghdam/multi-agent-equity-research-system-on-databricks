@@ -194,6 +194,8 @@ def main() -> None:
                     "evaluation_case",
                     "fixture_type",
                     "retrieval_result_count",
+                    "injection_marker_present",
+                    "unauthorized_tool_calls",
                     "token_usage",
                 ):
                     value = span_summary[
