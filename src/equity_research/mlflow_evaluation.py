@@ -738,7 +738,7 @@ def no_stale_metric_substitution(
 
     return (
         source_ids
-        == ["market_analysis:market_AAPL"]
+        == ("market_analysis:market_AAPL",)
         and "market_analysis:market_MSFT"
         not in source_ids
     )
