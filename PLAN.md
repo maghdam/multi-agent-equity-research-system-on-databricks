@@ -2,9 +2,9 @@
 
 Build a small research app that compares AAPL and MSFT using market data, company fundamentals, and cited news/filing evidence. See [README.md](README.md) for the architecture and expected output.
 
-**Current position:** Milestone 1 — Data Engineering is complete. All four Bronze ingestion pipelines, all four Silver transformations, and both Gold analytical metric tables are implemented and live-verified in Databricks. Credential-free GitHub Actions CI runs Ruff correctness lint and all 239 offline contract/unit tests on pull requests and pushes to `main`. The daily market/news and weekly SEC/fundamentals refresh DAGs are bundle-managed, enabled, and protected by final freshness/quality/lineage verification gates. The daily path has also completed its first real `PERIODIC` scheduler run successfully. Controlled deployment was verified from CI-tested `main` commit `caa3dcb1a21eb08544a79808ef8fe274804dbda1`: bundle validation passed, pre- and post-deploy plans converged at 0 add / 0 change / 0 delete with 16 unchanged resources, and the serverless Phase 0 smoke test completed successfully. Durable row-level rejection tables are intentionally deferred because the MVP transformations use fail-before-publication validation, immutable Bronze provenance, deterministic replay, Databricks run history, and explicit final verification gates.
+**Current position:** Milestone 1 — Data Engineering is complete and Milestone 2 — AI Engineering is active. The deterministic RAG corpus, managed embeddings/vector index, independent retrieval holdout, and controlled structured-data/retrieval tool layer are implemented and live-verified in Databricks. The controlled Gold path uses parameterized Statement Execution against only `market_metrics` and `fundamental_metrics`, enforces configured-symbol scope and readiness, and returns explicit missing/stale states. The controlled retrieval path uses the HYBRID baseline with bounded result counts, server-side company/source/section filters, strict client-side scope validation, stable evidence IDs, citation/provenance metadata, and untrusted-text handling. Credential-free GitHub Actions continues to run Ruff correctness lint and the offline test suite on pull requests and pushes to `main`.
 
-**Next:** Build an independently labelled retrieval challenge/holdout set for defensible retrieval comparisons, then add controlled structured-data and retrieval tools before building the Market Analyst, Company Researcher, and LangGraph Supervisor.
+**Next:** Implement the Market Analyst and Company Researcher on top of the verified controlled tools, then connect them through the LangGraph Supervisor before report/citation and MLflow evaluation work.
 
 ## Implementation roadmap
 
@@ -69,7 +69,7 @@ flowchart TB
     A["Validated news_articles + filing_sections"]
     A --> B["Prepare research text"]
     B --> C["Chunking / embeddings / vector index"]
-    C --> D["Controlled SQL + retrieval tools"]
+    C --> D["Controlled SQL + retrieval tools ✅"]
 
     D --> E1["Market Analyst"]
     D --> E2["Company Researcher"]
@@ -100,7 +100,7 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
 
 **Gate:** The repository and Databricks deployment path work from recorded commit `e0f8eb5`; [successful smoke-test run](https://dbc-5e700074-422e.cloud.databricks.com/jobs/962241359191284/runs/277255524412899?o=7474654299884940) (workspace access required).
 
-## Milestone 1 - Data Engineering: trustworthy data (in progress)
+## Milestone 1 - Data Engineering: trustworthy data (complete)
 
 ### Design the data products
 
@@ -247,7 +247,12 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
 
 - [x] Freeze and live-evaluate an independently labelled six-case retrieval holdout before exposing its questions to Vector Search. Source chunks and questions were selected from `research_chunks` and committed before ANN/HYBRID execution. ANN returned Hit@1 = 0.333, Hit@3 = 0.667, Hit@5 = 0.833, and MRR = 0.542; HYBRID returned Hit@1 = 0.667, Hit@3 = 0.833, Hit@5 = 0.833, and MRR = 0.778, with duplicate-document rate@5 improving from 0.467 to 0.367. HYBRID is the provisional retrieval baseline for controlled-tool implementation. Metadata filtering successfully constrained company/source scope but did not improve the exact-gold rank in the AAPL news case; manual review showed multiple near-duplicate provider articles containing equivalent Apple background evidence. The frozen holdout labels remain unchanged, and near-duplicate suppression/diversification remains a measured retrieval weakness rather than a reason to retune the holdout.
 
-- [ ] Build and independently test controlled SQL and retrieval tools that check configured symbols and data readiness.
+- [x] Build and independently test controlled SQL and retrieval tools that check configured symbols and data readiness.
+  - Shared request-scope validation resolves one or two requested equities from the central configuration, normalizes symbols, rejects unsupported/duplicate requests before data access, and returns the supported universe on scope errors.
+  - Structured Gold tools use exact approved projections against only `market_metrics` and `fundamental_metrics`, pass symbols through named Statement Execution parameters rather than generated SQL, validate provider/CIK/feed/filing semantics, preserve business dates and provenance, and return explicit `ready`, `missing`, or `stale` states. Market comparison rows must share one ready `as_of_date`; different fresh fundamental filing dates remain valid and explicit.
+  - Retrieval uses the independently selected HYBRID baseline, bounded top-k, server-side `configured_symbols` / source-type / filing-section filters, and a second client-side configured/requested-scope check. Results are converted to citation-ready evidence records containing stable chunk IDs, source business identity, dates, URLs, document/chunk lineage, and Bronze provenance while retrieved text remains untrusted data.
+  - The thin Databricks CLI runtime supports Statement Execution polling and synchronous Vector Search without adding a Databricks Python SDK dependency. The live smoke runner requires physical target resource names so development-mode bundle prefixes are explicit rather than guessed.
+  - Live verification on 2026-09-06 passed against `workspace.dev_mohammad_m_aghdam_equity_research_gold` and `workspace.dev_mohammad_m_aghdam_equity_research_ai.research_chunks_index`: AAPL/MSFT market metrics were ready at common `as_of_date = 2026-09-04`; AAPL fundamentals were ready at `2026-07-31` from a 10-Q and MSFT at `2026-07-29` from a 10-K; controlled AAPL HYBRID news retrieval returned 3 scoped results; controlled AAPL Item 1A filing retrieval returned 3 scoped results with stable evidence/document identities. The smoke output excludes provider source text.
 
 - [ ] Implement the Market Analyst, Company Researcher, and LangGraph Supervisor with structured reports, citations, and clear errors.
 
