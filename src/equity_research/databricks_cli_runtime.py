@@ -42,7 +42,11 @@ def execute_statement_via_cli(
 ) -> dict[str, Any]:
     """Execute a Statement Execution request and poll until terminal."""
 
-    if isinstance(max_polls, bool) or not isinstance(max_polls, int) or max_polls < 0:
+    if (
+        isinstance(max_polls, bool)
+        or not isinstance(max_polls, int)
+        or max_polls < 0
+    ):
         raise ControlledToolExecutionError(
             "max_polls must be a nonnegative integer."
         )
@@ -110,7 +114,7 @@ def query_vector_index_via_cli(
         "index_name",
     )
 
-    if "/" in normalized_index or "\" in normalized_index:
+    if not QUALIFIED_INDEX_PATTERN.fullmatch(normalized_index):
         raise ControlledToolExecutionError(
             "index_name must be a fully qualified Databricks identifier."
         )
