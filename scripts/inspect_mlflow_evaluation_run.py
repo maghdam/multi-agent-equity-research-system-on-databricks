@@ -82,7 +82,23 @@ def main() -> None:
         else None
     )
 
+    run = mlflow.get_run(
+        run_id
+    )
+    experiment_id = run.info.experiment_id
+
+    if (
+        not isinstance(experiment_id, str)
+        or not experiment_id.strip()
+    ):
+        raise RuntimeError(
+            "MLflow evaluation run is missing its experiment ID."
+        )
+
     traces = mlflow.search_traces(
+        locations=[
+            experiment_id.strip()
+        ],
         run_id=run_id,
         return_type="pandas",
         include_spans=False,
@@ -137,6 +153,7 @@ def main() -> None:
     print(
         "MLFLOW_EVALUATION_INSPECTION=PASSED"
         f"; run_id={run_id}"
+        f"; experiment_id={experiment_id}"
         f"; assessments={printed}"
     )
 
