@@ -425,6 +425,10 @@ def summarize_trace_assessments(
             {
                 "name": name.strip(),
                 "value": value,
+                "span_id": _assessment_field(
+                    assessment,
+                    "span_id",
+                ),
                 "rationale": (
                     rationale.strip()
                     if isinstance(rationale, str)
