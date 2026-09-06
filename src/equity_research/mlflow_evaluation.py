@@ -84,6 +84,37 @@ LIVE_EVALUATION_CASES: dict[str, dict[str, Any]] = {
             "expected_supported_symbols": ["AAPL", "MSFT"],
         },
     },
+    "E4": {
+        "inputs": {
+            "request_text": (
+                "Compare AAPL and MSFT. Summarize market performance, "
+                "fundamentals, recent developments, and principal risks."
+            ),
+            "requested_symbols": ["AAPL", "MSFT"],
+        },
+        "tags": {
+            "case_id": "E4",
+            "category": "stale_structured_input",
+            "source": "ai_research_contract",
+        },
+        "expectations": {
+            "expected_mode": "comparison",
+            "expected_symbols": ["AAPL", "MSFT"],
+            "required_sections": [
+                "market_performance",
+                "fundamental_performance",
+                "recent_developments",
+                "principal_risks",
+                "comparative_assessment",
+            ],
+            "expected_status": "degraded",
+            "expected_degraded_section": "market_performance",
+            "expected_limited_symbol": "MSFT",
+            "expected_limited_dimension": "market",
+            "expected_limit_reason": "stale",
+            "expected_synthesis_mode": "deterministic_fallback",
+        },
+    },
 }
 
 
@@ -331,7 +362,7 @@ def _assessment_field(
 def build_live_evaluation_data(
     case_ids: Sequence[str],
 ) -> list[dict[str, Any]]:
-    """Build frozen E1-E3 live-evaluation rows from the AI research contract."""
+    """Build frozen E1-E4 evaluation rows from the AI research contract."""
 
     if isinstance(case_ids, (str, bytes)):
         raise ValueError(
@@ -362,7 +393,7 @@ def build_live_evaluation_data(
     if unknown:
         raise ValueError(
             "Unsupported live evaluation case IDs: "
-            f"{unknown}. Supported live cases are E1, E2, and E3."
+            f"{unknown}. Supported live cases are E1, E2, E3, and E4."
         )
 
     rows: list[dict[str, Any]] = []
@@ -599,6 +630,152 @@ def build_scope_rejection_scorers() -> list[Any]:
         expected_scope_rejection,
         supported_universe_disclosure,
         no_downstream_execution,
+    ]
+
+
+@scorer
+def expected_structured_degradation(
+    outputs: Mapping[str, Any] | None,
+    expectations: Mapping[str, Any] | None,
+) -> bool:
+    """Check E4 degraded status, section state, limitation, and fixture synthesis."""
+
+    if not isinstance(outputs, Mapping):
+        return False
+
+    if (
+        outputs.get("status")
+        != _required_expectation_text(
+            expectations,
+            "expected_status",
+        )
+        or outputs.get("synthesis_mode")
+        != _required_expectation_text(
+            expectations,
+            "expected_synthesis_mode",
+        )
+    ):
+        return False
+
+    sections = _required_sections(
+        outputs
+    )
+    target_section = _required_expectation_text(
+        expectations,
+        "expected_degraded_section",
+    )
+    matches = [
+        section
+        for section in sections
+        if section["section"] == target_section
+    ]
+
+    if (
+        len(matches) != 1
+        or matches[0]["status"] != "degraded"
+    ):
+        return False
+
+    limitations = outputs.get(
+        "limitations"
+    )
+    if not isinstance(limitations, list):
+        return False
+
+    limited_symbol = _required_expectation_text(
+        expectations,
+        "expected_limited_symbol",
+    )
+    limited_dimension = _required_expectation_text(
+        expectations,
+        "expected_limited_dimension",
+    )
+    reason = _required_expectation_text(
+        expectations,
+        "expected_limit_reason",
+    )
+
+    return any(
+        isinstance(value, str)
+        and limited_symbol in value
+        and limited_dimension in value
+        and f"({reason})" in value
+        for value in limitations
+    )
+
+
+@scorer
+def no_stale_metric_substitution(
+    outputs: Mapping[str, Any] | None,
+) -> bool:
+    """Check E4 does not fabricate an MSFT market finding for stale Gold data."""
+
+    sections = _required_sections(
+        outputs
+    )
+    market = next(
+        (
+            section
+            for section in sections
+            if section["section"] == "market_performance"
+        ),
+        None,
+    )
+
+    if market is None:
+        return False
+
+    source_ids = market[
+        "source_finding_ids"
+    ]
+
+    return (
+        source_ids
+        == ["market_analysis:market_AAPL"]
+        and "market_analysis:market_MSFT"
+        not in source_ids
+    )
+
+
+@scorer
+def incomplete_dimension_excluded_from_comparison(
+    outputs: Mapping[str, Any] | None,
+) -> bool:
+    """Check E4 comparative assessment excludes the incomplete market dimension."""
+
+    sections = _required_sections(
+        outputs
+    )
+    comparative = next(
+        (
+            section
+            for section in sections
+            if section["section"] == "comparative_assessment"
+        ),
+        None,
+    )
+
+    if comparative is None:
+        return False
+
+    return all(
+        not source_id.startswith(
+            "market_analysis:market_"
+        )
+        for source_id in comparative[
+            "source_finding_ids"
+        ]
+    )
+
+
+def build_structured_degradation_scorers() -> list[Any]:
+    """Return deterministic report + E4 stale-structured-input scorers."""
+
+    return [
+        *build_code_scorers(),
+        expected_structured_degradation,
+        no_stale_metric_substitution,
+        incomplete_dimension_excluded_from_comparison,
     ]
 
 
