@@ -5,7 +5,7 @@ import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -15,9 +15,11 @@ from equity_research.mlflow_evaluation import (  # noqa: E402
     EQUITY_RESEARCH_GUIDELINES,
     build_code_scorers,
     _narrative_grounding_payload,
+    _retrieval_routes_for_sufficiency,
     _run_grounding_guidelines_with_parse_retry,
     build_live_evaluation_data,
     build_narrative_trace_grounding_judge,
+    build_trace_aware_retrieval_sufficiency_judge,
     build_evaluation_scorers,
     build_evidence_degradation_scorers,
     build_llm_judges,
@@ -210,6 +212,29 @@ class MlflowAssessmentSummaryTests(unittest.TestCase):
                     "error": "Serialized error.",
                 }
             ],
+        )
+
+    def test_retrieval_relevance_rationale_is_hidden_from_safe_summary(
+        self,
+    ) -> None:
+        secret = "provider-source fragment must not print"
+        summaries = summarize_trace_assessments(
+            [
+                SimpleNamespace(
+                    name="retrieval_relevance",
+                    value=True,
+                    rationale=secret,
+                    error=None,
+                )
+            ]
+        )
+
+        self.assertIsNone(
+            summaries[0]["rationale"],
+        )
+        self.assertNotIn(
+            secret,
+            str(summaries),
         )
 
     def test_summarizes_assessment_error_message(self) -> None:
@@ -1255,6 +1280,8 @@ class MlflowJudgeConfigurationTests(unittest.TestCase):
             [judge.name for judge in judges],
             [
                 "relevance_to_query",
+                "retrieval_relevance",
+                "retrieval_trace_sufficiency",
                 "safety",
                 "narrative_trace_groundedness",
                 "guideline_no_investment_recommendation",
@@ -1278,6 +1305,160 @@ class MlflowJudgeConfigurationTests(unittest.TestCase):
         self.assertGreaterEqual(
             len(EQUITY_RESEARCH_GUIDELINES),
             5,
+        )
+
+    def test_builds_trace_aware_retrieval_sufficiency_judge(self) -> None:
+        judge = build_trace_aware_retrieval_sufficiency_judge(
+            model="databricks:/databricks-gpt-oss-120b"
+        )
+
+        self.assertEqual(
+            judge.name,
+            "retrieval_trace_sufficiency",
+        )
+
+    def test_retrieval_sufficiency_extracts_route_specific_filtered_spans(
+        self,
+    ) -> None:
+        trace = Mock()
+        trace.search_spans.return_value = [
+            SimpleNamespace(
+                inputs={
+                    "query": "AAPL developments",
+                    "symbol": "AAPL",
+                    "topic": "recent_developments",
+                    "source_type": "news",
+                },
+                outputs=[
+                    {
+                        "id": "a" * 64,
+                        "page_content": "Apple announced a product update.",
+                        "metadata": {
+                            "source_type": "news",
+                        },
+                    }
+                ],
+            ),
+            SimpleNamespace(
+                inputs={
+                    "query": "AAPL risks",
+                    "symbol": "AAPL",
+                    "topic": "principal_risks",
+                    "source_type": "filing",
+                },
+                outputs=[],
+            ),
+        ]
+
+        routes = _retrieval_routes_for_sufficiency(
+            trace
+        )
+
+        self.assertEqual(
+            [
+                (
+                    route["symbol"],
+                    route["topic"],
+                    len(route["documents"]),
+                )
+                for route in routes
+            ],
+            [
+                (
+                    "AAPL",
+                    "recent_developments",
+                    1,
+                ),
+                (
+                    "AAPL",
+                    "principal_risks",
+                    0,
+                ),
+            ],
+        )
+        trace.search_spans.assert_called_once_with(
+            span_type="RETRIEVER"
+        )
+
+    def test_retrieval_sufficiency_reports_partial_rate_for_empty_route(
+        self,
+    ) -> None:
+        inner = Mock(
+            return_value=SimpleNamespace(
+                value="yes",
+                rationale="source-specific rationale",
+            )
+        )
+
+        with patch(
+            "equity_research.mlflow_evaluation.Guidelines",
+            return_value=inner,
+        ):
+            judge = build_trace_aware_retrieval_sufficiency_judge(
+                model="databricks:/databricks-gpt-oss-120b"
+            )
+
+        trace = Mock()
+        trace.search_spans.return_value = [
+            SimpleNamespace(
+                inputs={
+                    "query": "AAPL developments",
+                    "symbol": "AAPL",
+                    "topic": "recent_developments",
+                    "source_type": "news",
+                },
+                outputs=[
+                    {
+                        "id": "a" * 64,
+                        "page_content": "Apple announced a product update.",
+                        "metadata": {
+                            "source_type": "news",
+                        },
+                    }
+                ],
+            ),
+            SimpleNamespace(
+                inputs={
+                    "query": "MSFT developments",
+                    "symbol": "MSFT",
+                    "topic": "recent_developments",
+                    "source_type": "news",
+                },
+                outputs=[],
+            ),
+        ]
+
+        feedbacks = judge(
+            trace=trace
+        )
+        by_name = {
+            feedback.name: feedback
+            for feedback in feedbacks
+        }
+
+        self.assertEqual(
+            by_name["retrieval_trace_sufficiency"].value,
+            0.5,
+        )
+        self.assertEqual(
+            by_name["retrieval_empty_route_count"].value,
+            1,
+        )
+        self.assertIn(
+            "AAPL:recent_developments=sufficient",
+            by_name["retrieval_trace_sufficiency"].rationale,
+        )
+        self.assertIn(
+            "MSFT:recent_developments=insufficient",
+            by_name["retrieval_trace_sufficiency"].rationale,
+        )
+        self.assertNotIn(
+            "source-specific rationale",
+            by_name["retrieval_trace_sufficiency"].rationale,
+        )
+        self.assertEqual(
+            inner.call_count,
+            1,
         )
 
     def test_builds_trace_aware_narrative_grounding_judge(self) -> None:
@@ -1440,7 +1621,7 @@ class MlflowJudgeConfigurationTests(unittest.TestCase):
         )
         self.assertEqual(
             len(combined),
-            15,
+            17,
         )
 
     def test_rejects_blank_judge_model(self) -> None:
