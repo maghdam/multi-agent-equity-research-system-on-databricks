@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import mlflow
+from mlflow.genai.datasets import get_dataset
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -76,8 +77,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--case",
         nargs="+",
-        default=["E1"],
-        help="Live contract case IDs to evaluate. Supported: E1 E2.",
+        default=None,
+        help=(
+            "Repository-owned contract case IDs to evaluate when "
+            "--dataset-name is omitted. Defaults to E1."
+        ),
+    )
+    parser.add_argument(
+        "--dataset-name",
+        default=None,
+        help=(
+            "Optional fully qualified Unity Catalog MLflow Evaluation Dataset. "
+            "When supplied, the managed dataset is evaluated directly."
+        ),
     )
     parser.add_argument(
         "--mlflow-experiment",
@@ -171,9 +183,36 @@ def main() -> None:
             result.report
         )
 
-    data = build_live_evaluation_data(
-        args.case
+    dataset_name = (
+        args.dataset_name.strip()
+        if isinstance(args.dataset_name, str)
+        and args.dataset_name.strip()
+        else None
     )
+
+    if dataset_name is not None:
+        data = get_dataset(
+            name=dataset_name
+        )
+        data_source = (
+            f"managed_dataset:{dataset_name}"
+        )
+        case_label = "managed"
+    else:
+        case_ids = (
+            args.case
+            if args.case is not None
+            else ["E1"]
+        )
+        data = build_live_evaluation_data(
+            case_ids
+        )
+        data_source = "repository_cases"
+        case_label = ",".join(
+            case.upper()
+            for case in case_ids
+        )
+
     scorers = build_evaluation_scorers(
         include_llm_judges=args.include_llm_judges,
         judge_model=args.judge_model,
@@ -183,7 +222,8 @@ def main() -> None:
         "MLFLOW_EVALUATION_START"
         f"; tracking_uri={tracking_uri}"
         f"; experiment={experiment_name}"
-        f"; cases={','.join(case.upper() for case in args.case)}"
+        f"; cases={case_label}"
+        f"; data_source={data_source}"
         f"; llm_judges={str(args.include_llm_judges).lower()}"
         f"; scorers={','.join(scorer.name for scorer in scorers)}"
     )
