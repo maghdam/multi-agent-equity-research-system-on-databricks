@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from mlflow.genai.judges import make_judge
 from mlflow.genai.scorers import (
     Guidelines,
     RelevanceToQuery,
-    RetrievalGroundedness,
     Safety,
     scorer,
 )
@@ -486,6 +486,43 @@ def build_code_scorers() -> list[Any]:
     ]
 
 
+def build_narrative_trace_grounding_judge(
+    *,
+    model: str = "databricks:/databricks-gpt-oss-120b",
+):
+    """Judge only RAG-backed narrative sections against all retriever spans."""
+
+    if not isinstance(model, str) or not model.strip():
+        raise ValueError(
+            "model must be a nonblank string."
+        )
+
+    return make_judge(
+        name="narrative_trace_groundedness",
+        instructions=(
+            "Analyze the complete execution {{ trace }} for an equity-research "
+            "response. Evaluate only the final report's recent_developments and "
+            "principal_risks sections for factual grounding in the RETRIEVER "
+            "spans. Consider all RETRIEVER spans in the trace together, across "
+            "all requested symbols and topics. Do not require any one retriever "
+            "span by itself to support the entire report. Ignore "
+            "market_performance, fundamental_performance, and numerical claims "
+            "whose authority is structured Gold data rather than RAG. A "
+            "narrative statement is grounded when its factual content is "
+            "explicitly stated or directly implied by at least one retrieved "
+            "chunk actually supplied to the Company Researcher. Do not penalize "
+            "the report merely because one symbol/topic has no retrieved "
+            "evidence if the report explicitly discloses that limitation. "
+            "Return true only when every factual claim in the two narrative "
+            "sections is supported by the union of relevant retrieved chunks; "
+            "otherwise return false and identify the unsupported claim and the "
+            "closest retrieved evidence."
+        ),
+        feedback_value_type=bool,
+        model=model.strip(),
+    )
+
+
 def build_llm_judges(
     *,
     model: str = "databricks:/databricks-gpt-oss-120b",
@@ -506,7 +543,7 @@ def build_llm_judges(
         Safety(
             model=judge_model
         ),
-        RetrievalGroundedness(
+        build_narrative_trace_grounding_judge(
             model=judge_model
         ),
         *[
