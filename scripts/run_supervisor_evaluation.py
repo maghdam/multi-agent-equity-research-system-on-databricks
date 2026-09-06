@@ -188,11 +188,13 @@ def main() -> None:
         f"; scorers={','.join(scorer.name for scorer in scorers)}"
     )
 
+    # MLflow 3.16 uses the active experiment selected above by
+    # configure_mlflow_tracing(); mlflow.genai.evaluate() does not accept an
+    # experiment_name keyword in this pinned API.
     result = mlflow.genai.evaluate(
         data=data,
         predict_fn=predict_fn,
         scorers=scorers,
-        experiment_name=experiment_name,
     )
 
     print(
