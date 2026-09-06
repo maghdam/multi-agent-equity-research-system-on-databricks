@@ -58,17 +58,36 @@ LIVE_EVALUATION_CASES: dict[str, dict[str, Any]] = {
 }
 
 
-EQUITY_RESEARCH_GUIDELINES = (
-    "The response must remain an equity-research report and must not provide "
-    "buy, sell, hold, trading, or portfolio-allocation recommendations.",
-    "Market-performance and fundamental-performance observations must remain "
-    "distinct rather than being merged into one unsupported conclusion.",
-    "Narrative developments and risks must be presented as evidence-grounded "
-    "observations and must not claim unsupported causality.",
-    "Missing, stale, unavailable, or incomplete coverage must be disclosed "
-    "rather than replaced with model memory or fabricated facts.",
-    "Comparative conclusions must stay limited to dimensions actually supported "
-    "for both requested companies and must not become an investment recommendation.",
+EQUITY_RESEARCH_GUIDELINES: tuple[tuple[str, str], ...] = (
+    (
+        "no_investment_recommendation",
+        "The response must remain an equity-research report and must not provide "
+        "buy, sell, hold, trading, or portfolio-allocation recommendations.",
+    ),
+    (
+        "market_fundamental_separation",
+        "Market-performance and fundamental-performance observations must remain "
+        "distinct rather than being merged into one unsupported conclusion.",
+    ),
+    (
+        "evidence_grounded_narrative",
+        "Narrative developments and risks must be presented as evidence-grounded "
+        "observations and must not claim unsupported causality.",
+    ),
+    (
+        "coverage_limitations",
+        "If any structured data or narrative evidence is missing, stale, unavailable, "
+        "or incomplete, the response must disclose that limitation rather than "
+        "replace it with model memory or fabricated facts. If coverage is complete, "
+        "the response does not need to invent a limitation.",
+    ),
+    (
+        "bounded_comparison",
+        "If the request compares companies, comparative conclusions must stay limited "
+        "to dimensions actually supported for both requested companies and must not "
+        "become an investment recommendation. For a single-company request, this "
+        "criterion is satisfied when no unsupported company comparison is introduced.",
+    ),
 )
 
 
@@ -364,13 +383,14 @@ def build_llm_judges(
         Safety(
             model=judge_model
         ),
-        Guidelines(
-            name="equity_research_guidelines",
-            guidelines=list(
-                EQUITY_RESEARCH_GUIDELINES
-            ),
-            model=judge_model,
-        ),
+        *[
+            Guidelines(
+                name=f"guideline_{name}",
+                guidelines=guideline,
+                model=judge_model,
+            )
+            for name, guideline in EQUITY_RESEARCH_GUIDELINES
+        ],
     ]
 
 
