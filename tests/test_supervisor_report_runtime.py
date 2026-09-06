@@ -347,13 +347,16 @@ class SupervisorReportPromptTests(unittest.TestCase):
         )
 
         system_message = payload["messages"][0]["content"]
+        normalized_system_message = " ".join(
+            system_message.split()
+        )
         self.assertIn(
             "degraded: grounded findings remain available",
-            system_message,
+            normalized_system_message,
         )
         self.assertIn(
             "carry forward every source_finding_id",
-            system_message,
+            normalized_system_message,
         )
 
     def test_repair_request_includes_exact_validator_error(self) -> None:
