@@ -615,6 +615,32 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
             ],
         )
 
+        query_texts = [
+            call.kwargs["payload"]["query_text"]
+            for call in vector_query.call_args_list
+        ]
+        self.assertIn(
+            "Apple Inc. (AAPL)",
+            query_texts[0],
+        )
+        self.assertNotIn(
+            "Microsoft Corporation",
+            query_texts[0],
+        )
+        self.assertIn(
+            "Microsoft Corporation (MSFT)",
+            query_texts[1],
+        )
+        self.assertNotIn(
+            "Apple Inc.",
+            query_texts[1],
+        )
+        for query_text in query_texts:
+            self.assertNotIn(
+                "Compare Apple and Microsoft.",
+                query_text,
+            )
+
     def test_company_retrieval_emits_controlled_mlflow_retriever_span(
         self,
     ) -> None:
