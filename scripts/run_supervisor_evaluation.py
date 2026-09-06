@@ -20,6 +20,7 @@ from equity_research.config import load_equities  # noqa: E402
 from equity_research.mlflow_evaluation import (  # noqa: E402
     build_evaluation_scorers,
     build_live_evaluation_data,
+    require_managed_evaluation_dataset_runtime,
     serialize_supervisor_report_for_evaluation,
 )
 from equity_research.mlflow_tracing import (  # noqa: E402
@@ -191,6 +192,7 @@ def main() -> None:
     )
 
     if dataset_name is not None:
+        require_managed_evaluation_dataset_runtime()
         data = get_dataset(
             name=dataset_name
         )
