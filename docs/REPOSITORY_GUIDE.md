@@ -82,7 +82,7 @@ Alpaca market/news + SEC company facts/filings
              regression / CI evidence
                        |
                        v
-            Milestone 3 private app
+            Milestone 3 Databricks app
       selection + charts + cited report
              + follow-up chat
 ```
@@ -1365,8 +1365,8 @@ Post-merge `main` CI also passed.
 
 ## 29. Milestone 3 application delivery
 
-The next component will turn the validated research graph into the private user-facing
-application.
+The next component will turn the validated research graph into the user-facing
+Databricks application.
 
 The first implementation slice will answer:
 
