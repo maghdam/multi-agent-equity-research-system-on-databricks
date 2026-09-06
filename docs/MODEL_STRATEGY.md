@@ -56,9 +56,9 @@ models are permanently optimal.
 | Task | Initial model | Endpoint | Important characteristics | Why this model |
 |---|---|---|---|---|
 | Document and query embeddings | GTE Large (En) | `databricks-gte-large-en` | English; 8192-token embedding window; 1024-dimensional vectors; embeddings are not normalized by the endpoint | Databricks-native retrieval model with a long input window and direct fit for English financial/news RAG |
-| Company Researcher | GPT OSS 20B | `databricks-gpt-oss-20b` | Text; 128K-token context; lightweight reasoning; up to 25K output tokens under current Databricks limits | Lower-cost/faster worker-agent baseline for retrieval-grounded synthesis and structured outputs |
-| Market Analyst | GPT OSS 20B | `databricks-gpt-oss-20b` | Text; 128K-token context; lightweight reasoning; up to 25K output tokens under current Databricks limits | Numerical values remain controlled by Gold/SQL tools, so the worker model mainly interprets tool results rather than calculating authoritative metrics itself |
-| Supervisor and final report synthesis | GPT OSS 120B | `databricks-gpt-oss-120b` | Text; 128K-token context; stronger reasoning; adjustable reasoning effort; up to 25K output tokens under current Databricks limits | Stronger reasoning model for cross-agent synthesis, conflict handling, citation checks, and final report assembly |
+| Company Researcher | GPT OSS 20B | `system.ai.gpt-oss-20b` | Text; 128K-token context; lightweight reasoning; up to 25K output tokens under current Databricks limits | Lower-cost/faster worker-agent baseline for retrieval-grounded synthesis and structured outputs |
+| Market Analyst | GPT OSS 20B | `system.ai.gpt-oss-20b` | Text; 128K-token context; lightweight reasoning; up to 25K output tokens under current Databricks limits | Numerical values remain controlled by Gold/SQL tools, so the worker model mainly interprets tool results rather than calculating authoritative metrics itself |
+| Supervisor and final report synthesis | GPT OSS 120B | `system.ai.gpt-oss-120b` | Text; 128K-token context; stronger reasoning; adjustable reasoning effort; up to 25K output tokens under current Databricks limits | Stronger reasoning model for cross-agent synthesis, conflict handling, citation checks, and final report assembly |
 | Reranking | None in v1 | — | Initial retrieval uses embedding similarity plus metadata filters | Avoid adding another model before baseline retrieval quality is measured |
 | GenAI quality evaluation | MLflow 3 built-in judges + code-based scorers | `mlflow.genai.evaluate()` | Retrieval relevance/groundedness/sufficiency, correctness, answer relevance, safety, guidelines, plus deterministic retrieval/tool metrics | Use LLM judges for semantic quality and code-based scorers for exact correctness; judge-model choice remains independently configurable |
 
@@ -332,7 +332,7 @@ counting logic. Character length alone is not a token-limit guarantee.
 ### Selected initial role
 
 ```text
-databricks-gpt-oss-20b
+system.ai.gpt-oss-20b
 ```
 
 GPT OSS 20B is the initial worker-agent model for both the Market Analyst and
@@ -373,12 +373,66 @@ recalculating authoritative financial metrics.
 Using the same worker model for both agents reduces implementation variables
 during the first evaluation cycle.
 
+### Implemented worker runtime and live gate
+
+The worker-agent runtime is intentionally framework-light before Supervisor
+construction. It uses the authenticated Databricks CLI to call the Unity
+Catalog model service through:
+
+```text
+/ai-gateway/mlflow/v1/chat/completions
+```
+
+with:
+
+```text
+model = system.ai.gpt-oss-20b
+temperature = 0
+reasoning_effort = low
+stream = false
+response_format = strict JSON schema
+```
+
+The model response is not trusted merely because structured output is
+requested. The application extracts only the final text block, ignores
+reasoning blocks, parses the JSON object, and then applies deterministic worker
+validators.
+
+For the Market Analyst, validation checks requested-company scope, ready-data
+coverage, metric dataset/dimension alignment, exact Gold as-of dates, and an
+allowlist of analytical metric fields. Stale or missing Gold rows are not
+exposed as usable values to the model.
+
+For the Company Researcher, validation checks requested-company scope, supplied
+evidence IDs, evidence coverage, source-type semantics, and explicit
+insufficient-evidence behavior. Retrieved text is passed under
+`untrusted_text`. Recent developments are restricted to company-specific
+events rather than generic investor/politician transactions or broad market
+commentary. Filing-only SEC Risk Factors findings are classified as
+`company_disclosed_risk`; `risk_context` requires at least one news evidence
+item.
+
+The 2026-09-06 AAPL live smoke gate passed after one bounded prompt refinement:
+
+- Market Analyst: two validated findings, one market and one fundamental, with
+  exact Gold metric references and no limitations;
+- Company Researcher / recent developments: one company-specific product
+  development with existing controlled evidence IDs and no irrelevant
+  politician stock-purchase item;
+- Company Researcher / principal risks: three SEC Item 1A findings, all
+  validated as `company_disclosed_risk` with existing controlled evidence
+  IDs;
+- provider article and filing text was not printed by the smoke runner.
+
+The corresponding final offline gate passed 21 focused worker-contract tests
+and 309 repository tests with Ruff clean.
+
 ## 6. Supervisor model: GPT OSS 120B
 
 ### Selected initial role
 
 ```text
-databricks-gpt-oss-120b
+system.ai.gpt-oss-120b
 ```
 
 Relevant characteristics:
@@ -740,7 +794,7 @@ Gold tools              RAG
 Therefore the initial Milestone 3 app-facing model is:
 
 ```text
-databricks-gpt-oss-120b
+system.ai.gpt-oss-120b
 ```
 
 The choice remains an evaluation baseline rather than a permanent requirement.
@@ -857,27 +911,29 @@ The project should distinguish three kinds of evaluation:
 
 ## 13. Current status
 
-As of the initial RAG foundation implementation:
+As of the worker-agent live verification on 2026-09-06:
 
 ```text
 research_documents                    implemented + offline tested + live persisted
 research_chunks                       implemented + offline tested + live persisted
-chunking production baseline          live verified at 2400 / 3200 / 300; evaluation still pending
-GTE embedding endpoint                available in workspace
-GPT OSS 20B endpoint                  available in workspace
-GPT OSS 120B endpoint                 available in workspace
-real-text embeddings                  blocked by permission gate
-vector index                          not yet implemented
-controlled retrieval tool             not yet implemented
-Market Analyst                        not yet implemented
-Company Researcher                    not yet implemented
+chunking production baseline          live verified at 2400 / 3200 / 300
+GTE embedding endpoint/index          live persisted + query verified
+private real-text processing          approved by recorded project permission gate
+controlled Gold tools                 implemented + offline tested + live verified
+controlled HYBRID retrieval tool      implemented + offline tested + live verified
+GPT OSS 20B model service             system.ai.gpt-oss-20b + live worker calls verified
+Market Analyst                        implemented + offline tested + live verified
+Company Researcher                    implemented + offline tested + live verified
+GPT OSS 120B Supervisor service       selected baseline; live Supervisor invocation pending
 LangGraph Supervisor                  not yet implemented
+structured report/citation validation pending
 MLflow agent/RAG evaluation           designed; implementation pending
 Milestone 3 app-facing chat model      GPT OSS 120B baseline selected for later evaluation
 multi-turn app evaluation              designed; implementation pending
 ```
 
-This status must be updated as each slice is implemented and live-verified.
+The next implementation slice is the LangGraph Supervisor over the verified
+worker-agent interfaces.
 
 ## References
 
