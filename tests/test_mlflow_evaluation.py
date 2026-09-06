@@ -21,11 +21,15 @@ from equity_research.mlflow_evaluation import (  # noqa: E402
     build_evaluation_scorers,
     build_llm_judges,
     build_scope_rejection_scorers,
+    build_structured_degradation_scorers,
     evidence_count,
     expected_request_mode,
     expected_scope_rejection,
+    expected_structured_degradation,
     expected_symbol_scope,
+    incomplete_dimension_excluded_from_comparison,
     no_downstream_execution,
+    no_stale_metric_substitution,
     report_section_grounding_contract,
     report_status,
     require_managed_evaluation_dataset_runtime,
@@ -260,6 +264,33 @@ class MlflowAssessmentSummaryTests(unittest.TestCase):
             1,
         )
 
+    def test_e4_fixture_span_is_in_observability_summary(
+        self,
+    ) -> None:
+        attributes = {
+            "mlflow.spanType": "AGENT",
+            "equity_research.component": "controlled_evaluation_fixture",
+            "equity_research.evaluation_case": "E4",
+            "equity_research.fixture_type": "stale_structured_input",
+        }
+        span = SimpleNamespace(
+            name="controlled_evaluation_fixture_e4",
+            get_attribute=lambda key: attributes.get(key),
+        )
+
+        summaries = summarize_observability_spans(
+            [span]
+        )
+
+        self.assertEqual(
+            summaries[0]["evaluation_case"],
+            "E4",
+        )
+        self.assertEqual(
+            summaries[0]["fixture_type"],
+            "stale_structured_input",
+        )
+
     def test_observability_span_summary_is_whitelisted_and_privacy_safe(
         self,
     ) -> None:
@@ -324,14 +355,14 @@ class MlflowAssessmentSummaryTests(unittest.TestCase):
 
 
 class MlflowEvaluationCaseTests(unittest.TestCase):
-    def test_builds_frozen_e1_e2_and_e3_rows(self) -> None:
+    def test_builds_frozen_e1_e2_e3_and_e4_rows(self) -> None:
         rows = build_live_evaluation_data(
-            ("E1", "E2", "E3")
+            ("E1", "E2", "E3", "E4")
         )
 
         self.assertEqual(
             len(rows),
-            3,
+            4,
         )
         self.assertEqual(
             rows[0]["inputs"]["requested_symbols"],
@@ -378,14 +409,34 @@ class MlflowEvaluationCaseTests(unittest.TestCase):
                 "expected_supported_symbols": ["AAPL", "MSFT"],
             },
         )
+        self.assertEqual(
+            rows[3]["inputs"]["requested_symbols"],
+            ["AAPL", "MSFT"],
+        )
+        self.assertEqual(
+            rows[3]["tags"]["category"],
+            "stale_structured_input",
+        )
+        self.assertEqual(
+            rows[3]["expectations"]["expected_status"],
+            "degraded",
+        )
+        self.assertEqual(
+            rows[3]["expectations"]["expected_degraded_section"],
+            "market_performance",
+        )
+        self.assertEqual(
+            rows[3]["expectations"]["expected_limit_reason"],
+            "stale",
+        )
 
     def test_rejects_unsupported_or_duplicate_live_case_ids(self) -> None:
         with self.assertRaisesRegex(
             ValueError,
-            "Supported live cases are E1, E2, and E3",
+            "Supported live cases are E1, E2, E3, and E4",
         ):
             build_live_evaluation_data(
-                ("E4",)
+                ("E5",)
             )
 
         with self.assertRaisesRegex(
@@ -499,6 +550,156 @@ class MlflowScopeRejectionTests(unittest.TestCase):
         self.assertFalse(
             no_downstream_execution(
                 outputs=output
+            )
+        )
+
+
+class MlflowStructuredDegradationTests(unittest.TestCase):
+    def test_e4_scorers_pass_controlled_degraded_report(self) -> None:
+        outputs = {
+            "mode": "comparison",
+            "symbols": ["AAPL", "MSFT"],
+            "status": "degraded",
+            "synthesis_mode": "deterministic_fallback",
+            "report_text": "Controlled degraded fixture.",
+            "sections": [
+                {
+                    "section": "market_performance",
+                    "status": "degraded",
+                    "text": (
+                        "AAPL market metrics remain available. "
+                        "Coverage is incomplete for part of the requested scope."
+                    ),
+                    "source_finding_ids": [
+                        "market_analysis:market_AAPL"
+                    ],
+                },
+                {
+                    "section": "fundamental_performance",
+                    "status": "available",
+                    "text": "Both fundamental findings remain available.",
+                    "source_finding_ids": [
+                        "market_analysis:fundamental_AAPL",
+                        "market_analysis:fundamental_MSFT",
+                    ],
+                },
+                {
+                    "section": "recent_developments",
+                    "status": "available",
+                    "text": "Controlled developments.",
+                    "source_finding_ids": [
+                        "recent_developments:AAPL:recent_developments",
+                        "recent_developments:MSFT:recent_developments",
+                    ],
+                },
+                {
+                    "section": "principal_risks",
+                    "status": "available",
+                    "text": "Controlled risks.",
+                    "source_finding_ids": [
+                        "principal_risks:AAPL:principal_risks",
+                        "principal_risks:MSFT:principal_risks",
+                    ],
+                },
+                {
+                    "section": "comparative_assessment",
+                    "status": "degraded",
+                    "text": "Comparison excludes incomplete market coverage.",
+                    "source_finding_ids": [
+                        "market_analysis:fundamental_AAPL",
+                        "market_analysis:fundamental_MSFT",
+                    ],
+                },
+            ],
+            "limitations": [
+                (
+                    "market_analyst MSFT market: MSFT market_metrics is outside "
+                    "the readiness window. (stale)."
+                )
+            ],
+            "evidence_ids": [],
+            "evidence_count": 0,
+        }
+        expectations = build_live_evaluation_data(
+            ("E4",)
+        )[0]["expectations"]
+
+        self.assertTrue(
+            expected_structured_degradation(
+                outputs=outputs,
+                expectations=expectations,
+            )
+        )
+        self.assertTrue(
+            no_stale_metric_substitution(
+                outputs=outputs
+            )
+        )
+        self.assertTrue(
+            incomplete_dimension_excluded_from_comparison(
+                outputs=outputs
+            )
+        )
+        self.assertEqual(
+            [
+                scorer.name
+                for scorer in build_structured_degradation_scorers()
+            ][-3:],
+            [
+                "expected_structured_degradation",
+                "no_stale_metric_substitution",
+                "incomplete_dimension_excluded_from_comparison",
+            ],
+        )
+
+    def test_e4_comparison_scorer_fails_if_market_source_is_reintroduced(
+        self,
+    ) -> None:
+        outputs = {
+            "sections": [
+                {
+                    "section": "market_performance",
+                    "status": "degraded",
+                    "text": "AAPL only.",
+                    "source_finding_ids": [
+                        "market_analysis:market_AAPL"
+                    ],
+                },
+                {
+                    "section": "fundamental_performance",
+                    "status": "available",
+                    "text": "Fundamentals.",
+                    "source_finding_ids": [
+                        "market_analysis:fundamental_AAPL",
+                        "market_analysis:fundamental_MSFT",
+                    ],
+                },
+                {
+                    "section": "recent_developments",
+                    "status": "available",
+                    "text": "Developments.",
+                    "source_finding_ids": ["recent_developments:x"],
+                },
+                {
+                    "section": "principal_risks",
+                    "status": "available",
+                    "text": "Risks.",
+                    "source_finding_ids": ["principal_risks:x"],
+                },
+                {
+                    "section": "comparative_assessment",
+                    "status": "degraded",
+                    "text": "Invalid market comparison.",
+                    "source_finding_ids": [
+                        "market_analysis:market_AAPL"
+                    ],
+                },
+            ]
+        }
+
+        self.assertFalse(
+            incomplete_dimension_excluded_from_comparison(
+                outputs=outputs
             )
         )
 
