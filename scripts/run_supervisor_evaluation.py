@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 import mlflow
+from mlflow.entities import SpanType
 from mlflow.genai.datasets import get_dataset
 
 
@@ -405,38 +406,91 @@ def main() -> None:
                 profile=args.profile,
             )
 
-        try:
-            result = run_supervisor_research_graph(
-                request_text=request_text,
-                requested_symbols=tuple(
-                    requested_symbols
-                ),
-                market_worker=counted_market_worker,
-                company_worker=counted_company_worker,
-                report_synthesizer=counted_report_synthesizer,
-                equities=equities,
-            )
-        except ControlledToolRequestError as exc:
-            if evaluation_kind != "scope_rejection":
-                raise
+        if evaluation_kind == "scope_rejection":
+            with mlflow.start_span(
+                name="supervisor_scope_validation",
+                span_type=SpanType.AGENT,
+            ) as scope_span:
+                scope_span.set_inputs(
+                    {
+                        "requested_symbols": [
+                            symbol.strip().upper()
+                            for symbol in requested_symbols
+                        ],
+                        "supported_symbols": sorted(
+                            equities
+                        ),
+                    }
+                )
+                scope_span.set_attributes(
+                    {
+                        "equity_research.component": "scope_validation",
+                        "equity_research.request_mode": "unsupported_scope",
+                    }
+                )
 
-            return serialize_scope_rejection_for_evaluation(
-                requested_symbols=requested_symbols,
-                supported_symbols=tuple(
-                    equities
-                ),
-                error=exc,
-                downstream_calls=downstream_calls,
-            )
-        else:
-            if evaluation_kind == "scope_rejection":
+                try:
+                    run_supervisor_research_graph(
+                        request_text=request_text,
+                        requested_symbols=tuple(
+                            requested_symbols
+                        ),
+                        market_worker=counted_market_worker,
+                        company_worker=counted_company_worker,
+                        report_synthesizer=counted_report_synthesizer,
+                        equities=equities,
+                    )
+                except ControlledToolRequestError as exc:
+                    output = serialize_scope_rejection_for_evaluation(
+                        requested_symbols=requested_symbols,
+                        supported_symbols=tuple(
+                            equities
+                        ),
+                        error=exc,
+                        downstream_calls=downstream_calls,
+                    )
+                    scope_span.set_attributes(
+                        {
+                            "equity_research.rejection_reason": (
+                                output["reason_code"]
+                            ),
+                            "equity_research.unsupported_symbol_count": len(
+                                output["unsupported_symbols"]
+                            ),
+                        }
+                    )
+                    scope_span.set_outputs(
+                        {
+                            "outcome": output["outcome"],
+                            "reason_code": output["reason_code"],
+                            "unsupported_symbols": output[
+                                "unsupported_symbols"
+                            ],
+                            "downstream_calls": output[
+                                "downstream_calls"
+                            ],
+                        }
+                    )
+                    return output
+
                 raise RuntimeError(
                     "E3 unexpectedly completed the research graph."
                 )
 
-            return serialize_supervisor_report_for_evaluation(
-                result.report
-            )
+        result = run_supervisor_research_graph(
+            request_text=request_text,
+            requested_symbols=tuple(
+                requested_symbols
+            ),
+            market_worker=counted_market_worker,
+            company_worker=counted_company_worker,
+            report_synthesizer=counted_report_synthesizer,
+            equities=equities,
+        )
+
+        return serialize_supervisor_report_for_evaluation(
+            result.report
+        )
         finally:
             elapsed = (
                 time.monotonic()
