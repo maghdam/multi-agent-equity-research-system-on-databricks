@@ -115,6 +115,36 @@ LIVE_EVALUATION_CASES: dict[str, dict[str, Any]] = {
             "expected_synthesis_mode": "deterministic_fallback",
         },
     },
+    "E5": {
+        "inputs": {
+            "request_text": (
+                "Research AAPL and summarize market performance, fundamentals, "
+                "recent developments, and principal risks."
+            ),
+            "requested_symbols": ["AAPL"],
+        },
+        "tags": {
+            "case_id": "E5",
+            "category": "insufficient_retrieval_evidence",
+            "source": "ai_research_contract",
+        },
+        "expectations": {
+            "expected_mode": "single_company",
+            "expected_symbols": ["AAPL"],
+            "required_sections": [
+                "market_performance",
+                "fundamental_performance",
+                "recent_developments",
+                "principal_risks",
+            ],
+            "expected_status": "degraded",
+            "expected_unavailable_section": "recent_developments",
+            "expected_limited_dimension": "recent_developments",
+            "expected_limit_reason": "insufficient_evidence",
+            "expected_synthesis_mode": "deterministic_fallback",
+            "expected_evidence_count": 1,
+        },
+    },
 }
 
 
@@ -369,7 +399,7 @@ def _assessment_field(
 def build_live_evaluation_data(
     case_ids: Sequence[str],
 ) -> list[dict[str, Any]]:
-    """Build frozen E1-E4 evaluation rows from the AI research contract."""
+    """Build frozen E1-E5 evaluation rows from the AI research contract."""
 
     if isinstance(case_ids, (str, bytes)):
         raise ValueError(
@@ -400,7 +430,7 @@ def build_live_evaluation_data(
     if unknown:
         raise ValueError(
             "Unsupported live evaluation case IDs: "
-            f"{unknown}. Supported live cases are E1, E2, E3, and E4."
+            f"{unknown}. Supported live cases are E1, E2, E3, E4, and E5."
         )
 
     rows: list[dict[str, Any]] = []
@@ -783,6 +813,146 @@ def build_structured_degradation_scorers() -> list[Any]:
         expected_structured_degradation,
         no_stale_metric_substitution,
         incomplete_dimension_excluded_from_comparison,
+    ]
+
+
+@scorer
+def expected_evidence_degradation(
+    outputs: Mapping[str, Any] | None,
+    expectations: Mapping[str, Any] | None,
+) -> bool:
+    """Check E5 degraded status, unavailable topic, and evidence limitation."""
+
+    if not isinstance(outputs, Mapping):
+        return False
+
+    if (
+        outputs.get("status")
+        != _required_expectation_text(
+            expectations,
+            "expected_status",
+        )
+        or outputs.get("synthesis_mode")
+        != _required_expectation_text(
+            expectations,
+            "expected_synthesis_mode",
+        )
+    ):
+        return False
+
+    sections = _required_sections(
+        outputs
+    )
+    target_section = _required_expectation_text(
+        expectations,
+        "expected_unavailable_section",
+    )
+    matches = [
+        section
+        for section in sections
+        if section["section"] == target_section
+    ]
+
+    if (
+        len(matches) != 1
+        or matches[0]["status"] != "unavailable"
+        or matches[0]["source_finding_ids"]
+    ):
+        return False
+
+    limitations = outputs.get(
+        "limitations"
+    )
+    if not isinstance(limitations, list):
+        return False
+
+    limited_dimension = _required_expectation_text(
+        expectations,
+        "expected_limited_dimension",
+    )
+    reason = _required_expectation_text(
+        expectations,
+        "expected_limit_reason",
+    )
+
+    return any(
+        isinstance(value, str)
+        and limited_dimension in value
+        and f"({reason})" in value
+        for value in limitations
+    )
+
+
+@scorer
+def no_unsupported_narrative_substitution(
+    outputs: Mapping[str, Any] | None,
+) -> bool:
+    """Check E5 does not publish a recent-development claim without evidence."""
+
+    sections = _required_sections(
+        outputs
+    )
+    recent = next(
+        (
+            section
+            for section in sections
+            if section["section"] == "recent_developments"
+        ),
+        None,
+    )
+
+    if recent is None:
+        return False
+
+    return (
+        recent["status"] == "unavailable"
+        and not recent["source_finding_ids"]
+    )
+
+
+@scorer
+def supported_narrative_evidence_preserved(
+    outputs: Mapping[str, Any] | None,
+    expectations: Mapping[str, Any] | None,
+) -> bool:
+    """Check E5 preserves the still-supported principal-risk evidence."""
+
+    if not isinstance(outputs, Mapping):
+        return False
+
+    sections = _required_sections(
+        outputs
+    )
+    risks = next(
+        (
+            section
+            for section in sections
+            if section["section"] == "principal_risks"
+        ),
+        None,
+    )
+    expected_count = expectations.get(
+        "expected_evidence_count"
+    ) if isinstance(expectations, Mapping) else None
+
+    return (
+        risks is not None
+        and risks["status"] == "available"
+        and bool(risks["source_finding_ids"])
+        and isinstance(expected_count, int)
+        and not isinstance(expected_count, bool)
+        and outputs.get("evidence_count") == expected_count
+    )
+
+
+def build_evidence_degradation_scorers() -> list[Any]:
+    """Return deterministic report + E5 insufficient-evidence scorers."""
+
+    return [
+        *build_code_scorers(),
+        expected_evidence_degradation,
+        no_unsupported_narrative_substitution,
+        supported_narrative_evidence_preserved,
     ]
 
 
