@@ -3,9 +3,10 @@
 import json
 import sys
 import unittest
+from contextlib import nullcontext
 from datetime import date
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -564,6 +565,113 @@ class SupervisorReportRuntimeTests(unittest.TestCase):
                 for section in report.sections
                 for source_id in section.source_finding_ids
             },
+        )
+
+    def test_synthesis_span_records_repair_and_repaired_model_outcome(
+        self,
+    ) -> None:
+        invalid = _single_report_output()
+        invalid["sections"][0]["source_finding_ids"] = [
+            "market_analysis:invented"
+        ]
+        valid = _single_report_output()
+        span = Mock()
+
+        with patch(
+            "equity_research.supervisor_report_runtime."
+            "optional_mlflow_span",
+            return_value=nullcontext(
+                span
+            ),
+        ):
+            report = run_supervisor_report_synthesis(
+                state=_state(),
+                model_query=Mock(
+                    side_effect=[
+                        _chat_response(invalid),
+                        _chat_response(valid),
+                    ]
+                ),
+            )
+
+        self.assertEqual(
+            report.synthesis_mode,
+            "repaired_model",
+        )
+        final_attributes = span.set_attributes.call_args_list[
+            -1
+        ].args[0]
+        self.assertEqual(
+            final_attributes,
+            {
+                "equity_research.repair_count": 1,
+                "equity_research.synthesis_mode": "repaired_model",
+                "equity_research.report_status": "ready",
+            },
+        )
+        span.set_outputs.assert_called_once_with(
+            {
+                "status": "ready",
+                "synthesis_mode": "repaired_model",
+                "section_count": 4,
+                "evidence_count": 1,
+                "repair_count": 1,
+            }
+        )
+
+    def test_synthesis_span_records_deterministic_fallback_outcome(
+        self,
+    ) -> None:
+        invalid = _single_report_output()
+        invalid["sections"][0]["source_finding_ids"] = [
+            "market_analysis:invented"
+        ]
+        span = Mock()
+
+        with patch(
+            "equity_research.supervisor_report_runtime."
+            "optional_mlflow_span",
+            return_value=nullcontext(
+                span
+            ),
+        ):
+            report = run_supervisor_report_synthesis(
+                state=_state(),
+                model_query=Mock(
+                    side_effect=[
+                        _chat_response(invalid),
+                        _chat_response(invalid),
+                    ]
+                ),
+            )
+
+        self.assertEqual(
+            report.synthesis_mode,
+            "deterministic_fallback",
+        )
+        final_attributes = span.set_attributes.call_args_list[
+            -1
+        ].args[0]
+        self.assertEqual(
+            final_attributes[
+                "equity_research.repair_count"
+            ],
+            1,
+        )
+        self.assertEqual(
+            final_attributes[
+                "equity_research.synthesis_mode"
+            ],
+            "deterministic_fallback",
+        )
+        output = span.set_outputs.call_args.args[0]
+        self.assertEqual(
+            output["repair_count"],
+            1,
+        )
+        self.assertEqual(
+            output["synthesis_mode"],
+            "deterministic_fallback",
         )
 
     def test_accepts_reasoning_plus_single_final_text_block(self) -> None:
