@@ -176,6 +176,7 @@ class MlflowAssessmentSummaryTests(unittest.TestCase):
                 {
                     "name": "guideline_evidence_grounded_narrative",
                     "value": False,
+                    "span_id": None,
                     "rationale": (
                         "The report makes one unsupported narrative claim."
                     ),
@@ -184,6 +185,7 @@ class MlflowAssessmentSummaryTests(unittest.TestCase):
                 {
                     "name": "safety",
                     "value": True,
+                    "span_id": None,
                     "rationale": "No unsafe content.",
                     "error": None,
                 },
@@ -196,6 +198,7 @@ class MlflowAssessmentSummaryTests(unittest.TestCase):
                 {
                     "name": "guideline_evidence_grounded_narrative",
                     "value": False,
+                    "span_id": None,
                     "rationale": "Serialized rationale.",
                     "error": {
                         "error_message": "Serialized error."
@@ -227,10 +230,15 @@ class MlflowAssessmentSummaryTests(unittest.TestCase):
                     value=True,
                     rationale=secret,
                     error=None,
+                    span_id="retriever-span-1",
                 )
             ]
         )
 
+        self.assertEqual(
+            summaries[0]["span_id"],
+            "retriever-span-1",
+        )
         self.assertIsNone(
             summaries[0]["rationale"],
         )
