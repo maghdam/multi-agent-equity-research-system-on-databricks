@@ -9,6 +9,7 @@ from mlflow.entities import Feedback, SpanType
 from mlflow.genai.scorers import (
     Guidelines,
     RelevanceToQuery,
+    RetrievalRelevance,
     Safety,
     scorer,
 )
@@ -1596,6 +1597,292 @@ def _run_grounding_guidelines_with_parse_retry(
         )
 
 
+def build_trace_aware_retrieval_sufficiency_judge(
+    *,
+    model: str = "databricks:/databricks-gpt-oss-120b",
+):
+    """Build route-aware retrieval sufficiency over filtered RETRIEVER spans."""
+
+    if not isinstance(model, str) or not model.strip():
+        raise ValueError(
+            "model must be a nonblank string."
+        )
+
+    judge_model = model.strip()
+    sufficiency_judge = Guidelines(
+        name="retrieval_route_sufficiency_inner",
+        guidelines=(
+            "Evaluate only the supplied retrieval route and retrieved_evidence. "
+            "Decide whether the evidence set is sufficient to support at least "
+            "one compliant factual finding for the exact company and topic. "
+            "Do not use model memory or outside knowledge. For "
+            "recent_developments, require a company-specific product, operations, "
+            "strategy, corporate-action, or legal/regulatory development; "
+            "investor transactions, analyst commentary, price targets, and "
+            "technical-analysis material are not sufficient. For principal_risks, "
+            "require evidence that directly supports a material company risk; "
+            "filing Risk Factors evidence is sufficient when it directly states "
+            "the risk. Judge the supplied evidence as a set, not the final report."
+        ),
+        model=judge_model,
+    )
+
+    @scorer(
+        name="retrieval_trace_sufficiency"
+    )
+    def retrieval_trace_sufficiency(
+        trace: Any,
+    ) -> list[Feedback]:
+        routes = _retrieval_routes_for_sufficiency(
+            trace
+        )
+        route_results: list[
+            tuple[str, str, bool]
+        ] = []
+        empty_route_count = 0
+
+        for route in routes:
+            symbol = route[
+                "symbol"
+            ]
+            topic = route[
+                "topic"
+            ]
+            documents = route[
+                "documents"
+            ]
+
+            if not documents:
+                empty_route_count += 1
+                route_results.append(
+                    (
+                        symbol,
+                        topic,
+                        False,
+                    )
+                )
+                continue
+
+            feedback = _run_grounding_guidelines_with_parse_retry(
+                sufficiency_judge,
+                inputs={
+                    "retrieval_query": route[
+                        "query"
+                    ],
+                    "symbol": symbol,
+                    "topic": topic,
+                    "source_type": route[
+                        "source_type"
+                    ],
+                },
+                outputs={
+                    "retrieved_evidence": documents,
+                },
+            )
+            normalized = str(
+                feedback.value
+            ).strip().lower()
+
+            if normalized not in {
+                "yes",
+                "no",
+            }:
+                raise ValueError(
+                    "Retrieval sufficiency judge returned an unsupported "
+                    f"value: {feedback.value!r}."
+                )
+
+            route_results.append(
+                (
+                    symbol,
+                    topic,
+                    normalized == "yes",
+                )
+            )
+
+        sufficient_count = sum(
+            result
+            for _, _, result in route_results
+        )
+        route_count = len(
+            route_results
+        )
+        sufficiency_rate = (
+            sufficient_count
+            / route_count
+        )
+        safe_route_summary = ", ".join(
+            (
+                f"{symbol}:{topic}="
+                f"{'sufficient' if result else 'insufficient'}"
+            )
+            for symbol, topic, result in route_results
+        )
+
+        return [
+            Feedback(
+                name="retrieval_trace_sufficiency",
+                value=sufficiency_rate,
+                rationale=(
+                    "Route-level retrieval sufficiency over filtered evidence: "
+                    f"{safe_route_summary}."
+                ),
+            ),
+            Feedback(
+                name="retrieval_empty_route_count",
+                value=empty_route_count,
+                rationale=(
+                    f"{empty_route_count} of {route_count} retrieval routes "
+                    "returned no filtered evidence."
+                ),
+            ),
+        ]
+
+    return retrieval_trace_sufficiency
+
+
+def _retrieval_routes_for_sufficiency(
+    trace: Any,
+) -> tuple[dict[str, Any], ...]:
+    """Extract privacy-bounded route/query/documents from RETRIEVER spans."""
+
+    if trace is None or not hasattr(
+        trace,
+        "search_spans",
+    ):
+        raise ValueError(
+            "Retrieval sufficiency requires an MLflow trace with retriever spans."
+        )
+
+    spans = trace.search_spans(
+        span_type=SpanType.RETRIEVER
+    )
+    routes: list[
+        dict[str, Any]
+    ] = []
+
+    for span in spans:
+        inputs = getattr(
+            span,
+            "inputs",
+            None,
+        )
+        documents = getattr(
+            span,
+            "outputs",
+            None,
+        )
+
+        if not isinstance(
+            inputs,
+            Mapping,
+        ):
+            continue
+
+        query = inputs.get(
+            "query"
+        )
+        symbol = inputs.get(
+            "symbol"
+        )
+        topic = inputs.get(
+            "topic"
+        )
+        source_type = inputs.get(
+            "source_type"
+        )
+
+        if (
+            not isinstance(query, str)
+            or not query.strip()
+            or not isinstance(symbol, str)
+            or not symbol.strip()
+            or topic
+            not in {
+                "recent_developments",
+                "principal_risks",
+            }
+            or not isinstance(source_type, str)
+            or not source_type.strip()
+        ):
+            continue
+
+        normalized_documents: list[
+            dict[str, Any]
+        ] = []
+
+        if isinstance(
+            documents,
+            list,
+        ):
+            for document in documents:
+                if not isinstance(
+                    document,
+                    Mapping,
+                ):
+                    continue
+
+                evidence_id = document.get(
+                    "id"
+                )
+                page_content = document.get(
+                    "page_content"
+                )
+                metadata = document.get(
+                    "metadata"
+                )
+
+                if (
+                    not isinstance(
+                        evidence_id,
+                        str,
+                    )
+                    or not evidence_id.strip()
+                    or not isinstance(
+                        page_content,
+                        str,
+                    )
+                    or not page_content.strip()
+                ):
+                    continue
+
+                normalized_documents.append(
+                    {
+                        "id": evidence_id.strip(),
+                        "page_content": page_content.strip(),
+                        "metadata": (
+                            dict(
+                                metadata
+                            )
+                            if isinstance(
+                                metadata,
+                                Mapping,
+                            )
+                            else {}
+                        ),
+                    }
+                )
+
+        routes.append(
+            {
+                "query": query.strip(),
+                "symbol": symbol.strip().upper(),
+                "topic": topic,
+                "source_type": source_type.strip(),
+                "documents": normalized_documents,
+            }
+        )
+
+    if not routes:
+        raise ValueError(
+            "Retrieval sufficiency requires at least one valid RETRIEVER route."
+        )
+
+    return tuple(
+        routes
+    )
+
+
 def build_llm_judges(
     *,
     model: str = "databricks:/databricks-gpt-oss-120b",
@@ -1611,6 +1898,12 @@ def build_llm_judges(
 
     return [
         RelevanceToQuery(
+            model=judge_model
+        ),
+        RetrievalRelevance(
+            model=judge_model
+        ),
+        build_trace_aware_retrieval_sufficiency_judge(
             model=judge_model
         ),
         Safety(
