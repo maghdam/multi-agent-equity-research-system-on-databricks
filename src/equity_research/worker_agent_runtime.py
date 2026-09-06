@@ -22,6 +22,9 @@ from equity_research.market_analyst import (
     build_market_analyst_context,
     validate_market_analyst_output,
 )
+from equity_research.mlflow_runtime_spans import (
+    run_traced_chat_completion,
+)
 from equity_research.retrieval_tools import EvidenceRecord
 from equity_research.structured_data_tools import (
     FundamentalMetricsToolResult,
@@ -125,9 +128,24 @@ def run_market_analyst(
     payload = build_market_analyst_model_request(
         context
     )
-    response = model_query(
+    response = run_traced_chat_completion(
+        span_name="market_analyst_20b_initial",
+        component="market_analyst",
+        attempt="initial",
         payload=payload,
         profile=profile,
+        model_query=model_query,
+        safe_inputs={
+            "symbols": list(
+                requested_symbols
+            ),
+            "market_result_count": len(
+                market_results
+            ),
+            "fundamental_result_count": len(
+                fundamental_results
+            ),
+        },
     )
     raw_output = parse_structured_chat_response(
         response
@@ -146,9 +164,24 @@ def run_market_analyst(
             context,
             validation_error=str(exc),
         )
-        repair_response = model_query(
+        repair_response = run_traced_chat_completion(
+            span_name="market_analyst_20b_repair",
+            component="market_analyst",
+            attempt="repair",
             payload=repair_payload,
             profile=profile,
+            model_query=model_query,
+            safe_inputs={
+                "symbols": list(
+                    requested_symbols
+                ),
+                "market_result_count": len(
+                    market_results
+                ),
+                "fundamental_result_count": len(
+                    fundamental_results
+                ),
+            },
         )
         repaired_output = parse_structured_chat_response(
             repair_response
@@ -185,9 +218,28 @@ def run_company_researcher(
     payload = build_company_researcher_model_request(
         context
     )
-    response = model_query(
+    response = run_traced_chat_completion(
+        span_name=(
+            "company_researcher_20b_"
+            f"{topic}"
+        ),
+        component="company_researcher",
+        attempt="initial",
         payload=payload,
         profile=profile,
+        model_query=model_query,
+        safe_inputs={
+            "symbols": list(
+                requested_symbols
+            ),
+            "topic": topic,
+            "evidence_count": len(
+                evidence
+            ),
+        },
+        safe_attributes={
+            "equity_research.topic": topic,
+        },
     )
     raw_output = parse_structured_chat_response(
         response
