@@ -343,6 +343,21 @@ def _validate_market_metric(
             f"{equity.symbol}: market_metrics source_system is not alpaca."
         )
 
+    if metric.feed != "sip":
+        raise ControlledToolDataError(
+            f"{equity.symbol}: market_metrics feed is not sip."
+        )
+
+    if metric.adjustment != "split":
+        raise ControlledToolDataError(
+            f"{equity.symbol}: market_metrics adjustment is not split."
+        )
+
+    if metric.timeframe != "1Day":
+        raise ControlledToolDataError(
+            f"{equity.symbol}: market_metrics timeframe is not 1Day."
+        )
+
     if metric.currency != "USD":
         raise ControlledToolDataError(
             f"{equity.symbol}: market_metrics currency is not USD."
@@ -380,6 +395,15 @@ def _validate_fundamental_metric(
         raise ControlledToolDataError(
             f"{equity.symbol}: fundamental_metrics filing form is "
             "outside the supported scope."
+        )
+
+    if metric.ttm_derivation_method not in {
+        "annual",
+        "annual_plus_ytd_minus_prior_ytd",
+    }:
+        raise ControlledToolDataError(
+            f"{equity.symbol}: fundamental_metrics TTM derivation "
+            "is outside the supported scope."
         )
 
     if metric.fundamental_period_end > metric.as_of_date:
