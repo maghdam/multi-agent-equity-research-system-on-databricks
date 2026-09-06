@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import mlflow
+from mlflow.langchain import autolog as mlflow_langchain_autolog
 
 from equity_research.config import Equity
 from equity_research.supervisor_graph import CompanyWorker, MarketWorker
@@ -94,7 +95,7 @@ def configure_mlflow_tracing(
     # MLflow documents LangGraph tracing through the LangChain integration.
     # This is intentionally called once per process entry point rather than
     # decorating individual graph nodes, which could create disconnected roots.
-    mlflow.langchain.autolog(
+    mlflow_langchain_autolog(
         log_traces=True,
         silent=False,
     )
