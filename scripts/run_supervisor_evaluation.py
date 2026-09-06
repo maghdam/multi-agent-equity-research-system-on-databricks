@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import itertools
+import os
 import sys
+import time
 from pathlib import Path
 
 import mlflow
@@ -124,12 +127,27 @@ def parse_args() -> argparse.Namespace:
             "databricks-gpt-oss-120b serving model."
         ),
     )
+    parser.add_argument(
+        "--skip-trace-validation",
+        action="store_true",
+        help=(
+            "Skip MLflow's extra first-sample prediction used only to validate "
+            "trace shape. Use after the evaluation predict path has already "
+            "been proven live."
+        ),
+    )
 
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+
+    if args.skip_trace_validation:
+        os.environ[
+            "MLFLOW_GENAI_EVAL_SKIP_TRACE_VALIDATION"
+        ] = "True"
+
     experiment_name = args.mlflow_experiment.strip()
     if not experiment_name:
         raise ValueError(
@@ -165,20 +183,52 @@ def main() -> None:
             profile=args.profile,
         )
 
+    predict_calls = itertools.count(
+        1
+    )
+
     def predict_fn(
         request_text: str,
         requested_symbols: list[str],
     ):
-        result = run_supervisor_research_graph(
-            request_text=request_text,
-            requested_symbols=tuple(
-                requested_symbols
-            ),
-            market_worker=workers.market_worker,
-            company_worker=workers.company_worker,
-            report_synthesizer=report_synthesizer,
-            equities=equities,
+        call_number = next(
+            predict_calls
         )
+        started_at = time.monotonic()
+        symbol_label = ",".join(
+            requested_symbols
+        )
+
+        print(
+            "SUPERVISOR_EVAL_PREDICT_START"
+            f"; call={call_number}"
+            f"; symbols={symbol_label}",
+            flush=True,
+        )
+
+        try:
+            result = run_supervisor_research_graph(
+                request_text=request_text,
+                requested_symbols=tuple(
+                    requested_symbols
+                ),
+                market_worker=workers.market_worker,
+                company_worker=workers.company_worker,
+                report_synthesizer=report_synthesizer,
+                equities=equities,
+            )
+        finally:
+            elapsed = (
+                time.monotonic()
+                - started_at
+            )
+            print(
+                "SUPERVISOR_EVAL_PREDICT_END"
+                f"; call={call_number}"
+                f"; symbols={symbol_label}"
+                f"; elapsed_seconds={elapsed:.1f}",
+                flush=True,
+            )
 
         return serialize_supervisor_report_for_evaluation(
             result.report
@@ -227,6 +277,7 @@ def main() -> None:
         f"; cases={case_label}"
         f"; data_source={data_source}"
         f"; llm_judges={str(args.include_llm_judges).lower()}"
+        f"; skip_trace_validation={str(args.skip_trace_validation).lower()}"
         f"; scorers={','.join(scorer.name for scorer in scorers)}"
     )
 
