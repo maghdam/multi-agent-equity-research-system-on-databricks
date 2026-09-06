@@ -317,9 +317,27 @@ def _validate_plan(
         "request_text",
     )
 
-    if not request.requested_symbols:
+    if len(request.requested_symbols) not in {1, 2}:
         raise SupervisorContractError(
-            "Supervisor request must contain requested symbols."
+            "Supervisor request must contain one or two requested symbols."
+        )
+
+    normalized_symbols = tuple(
+        _required_text(
+            symbol,
+            "requested symbol",
+        ).upper()
+        for symbol in request.requested_symbols
+    )
+
+    if normalized_symbols != request.requested_symbols:
+        raise SupervisorContractError(
+            "Supervisor request symbols must already be normalized."
+        )
+
+    if len(set(normalized_symbols)) != len(normalized_symbols):
+        raise SupervisorContractError(
+            "Supervisor request symbols must be unique."
         )
 
     expected_mode = (
