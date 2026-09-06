@@ -327,11 +327,15 @@ class DatabricksSupervisorWorkers:
         results: list[tuple[str, CompanyResearcherResult]] = []
 
         for symbol in request.requested_symbols:
+            query_text = _company_retrieval_query_text(
+                request=request,
+                symbol=symbol,
+                topic=topic,
+                query_focus=query_focus,
+                equities=self._equities,
+            )
             payload = build_retrieval_query_payload(
-                query_text=(
-                    f"{request.request_text}\n"
-                    f"Research focus: {query_focus}"
-                ),
+                query_text=query_text,
                 requested_symbols=(symbol,),
                 source_type=source_type,
                 section_code=section_code,
@@ -432,6 +436,38 @@ class DatabricksSupervisorWorkers:
             requested_symbols=request.requested_symbols,
             results=results,
         )
+
+
+def _company_retrieval_query_text(
+    *,
+    request: SupervisorRequest,
+    symbol: str,
+    topic: ResearchTopic,
+    query_focus: str,
+    equities: Mapping[str, Equity],
+) -> str:
+    """Build a symbol-specific semantic query without cross-company contamination."""
+
+    if request.mode == "single_company":
+        return (
+            f"{request.request_text}\n"
+            f"Research focus: {query_focus}"
+        )
+
+    equity = equities[symbol]
+
+    if topic == "recent_developments":
+        return (
+            "What important recent business developments at "
+            f"{equity.display_name} ({symbol}) could matter to an equity "
+            "researcher? Focus on products, operations, strategy, corporate "
+            "actions, and material legal or regulatory events."
+        )
+
+    return (
+        "What principal business and operating risks has "
+        f"{equity.display_name} ({symbol}) disclosed in SEC Risk Factors?"
+    )
 
 
 def _gold_tool_result_summary(
