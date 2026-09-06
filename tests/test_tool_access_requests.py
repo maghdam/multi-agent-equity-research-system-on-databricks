@@ -280,6 +280,22 @@ class ControlledRetrievalToolTests(unittest.TestCase):
             "2026-09-05T22:00:00+00:00",
         )
 
+    def test_parses_timezone_less_vector_timestamp_as_utc(self) -> None:
+        row = _news_row()
+        row["source_fetched_at"] = "2026-09-05T22:00:00"
+
+        evidence = parse_retrieval_response(
+            _vector_response(row),
+            requested_symbols=("AAPL",),
+            expected_source_type="news",
+            equities=EQUITIES,
+        )
+
+        self.assertEqual(
+            evidence[0].source_fetched_at.isoformat(),
+            "2026-09-05T22:00:00+00:00",
+        )
+
     def test_parses_filing_accession_and_section_identity(self) -> None:
         evidence = parse_retrieval_response(
             _vector_response(_filing_row()),
