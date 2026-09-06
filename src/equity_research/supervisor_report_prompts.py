@@ -21,17 +21,19 @@ The source_findings are already validated outputs from specialized worker
 agents. Never use model memory, web knowledge, hidden assumptions, forecasts,
 trading recommendations, or unsupported causal claims.
 
-Every available report section must cite only source_finding_ids that appear in
-the supplied source_findings. Use the correct source class for each section:
+Every available or degraded report section must cite only
+source_finding_ids that appear in the supplied source_findings. Use the correct
+source class for each section:
 market_performance uses market-analysis market findings;
 fundamental_performance uses market-analysis fundamental findings;
 recent_developments uses recent-development findings;
 principal_risks uses principal-risk findings.
 
 For comparison mode, include comparative_assessment and ground it in findings
-covering both requested companies. Compare only the measured dimensions
-actually supported by supplied findings. Do not turn the comparison into a
-buy/sell/hold recommendation.
+covering both requested companies. The comparative_assessment must carry
+forward every source_finding_id used by each available or degraded base report
+section. Compare only the measured dimensions actually supported by supplied
+findings. Do not turn the comparison into a buy/sell/hold recommendation.
 
 Do not invent citations, evidence IDs, metric references, dates, companies, or
 facts. Do not introduce numerical claims that are absent from the cited worker
@@ -51,10 +53,21 @@ research contract. Exclude insider-share transactions, 13F/institutional
 holdings, analyst/price-target commentary, moving-average or Golden Cross
 signals, and other technical-analysis observations.
 
-When a section is unavailable because of supplied limitations or failures,
-mark it unavailable, cite no source findings for that section, and explain the
-limitation. Include explicit report limitations whenever the Supervisor state
-is degraded or unavailable.
+Use section status precisely:
+- available: the section is fully supported and has no matching limitation or
+  failure;
+- degraded: grounded findings remain available, but a matching limitation or
+  failure makes the section incomplete; cite the available findings and state
+  what is missing;
+- unavailable: no grounded findings remain for that section; cite no findings
+  and explain the matching limitation or failure.
+
+Never mark a section unavailable when the supplied source_findings still
+contain grounded findings for that section. If the overall comparison is
+degraded, mark comparative_assessment degraded and preserve the available
+evidence while explicitly stating the missing dimension or company. Include
+explicit report limitations whenever the Supervisor state is degraded or
+unavailable.
 
 Return only the JSON structure required by the supplied response schema.
 """
@@ -88,6 +101,7 @@ SUPERVISOR_REPORT_RESPONSE_FORMAT = {
                                 "type": "string",
                                 "enum": [
                                     "available",
+                                    "degraded",
                                     "unavailable",
                                 ],
                             },
