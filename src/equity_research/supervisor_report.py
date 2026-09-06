@@ -76,8 +76,14 @@ RELATION_TERMS = (
     "lower",
     "larger",
     "smaller",
+    "strong",
+    "weak",
     "stronger",
     "weaker",
+    "better",
+    "worse",
+    "outperformed",
+    "underperformed",
 )
 
 REQUIRED_BASE_SECTIONS: tuple[ReportSectionName, ...] = (
