@@ -36,10 +36,6 @@ from equity_research.structured_data_tools import (  # noqa: E402
 
 
 DEFAULT_CATALOG = "workspace"
-DEFAULT_GOLD_SCHEMA = "equity_research_gold"
-DEFAULT_INDEX_NAME = (
-    "workspace.equity_research_ai.research_chunks_index"
-)
 
 
 def parse_args() -> argparse.Namespace:
@@ -66,11 +62,19 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--gold-schema",
-        default=DEFAULT_GOLD_SCHEMA,
+        required=True,
+        help=(
+            "Physical Gold schema name in the target workspace. "
+            "Development-mode bundles may prefix this name."
+        ),
     )
     parser.add_argument(
         "--index-name",
-        default=DEFAULT_INDEX_NAME,
+        required=True,
+        help=(
+            "Fully qualified physical Vector Search index name in the "
+            "target workspace."
+        ),
     )
     parser.add_argument(
         "--symbols",
