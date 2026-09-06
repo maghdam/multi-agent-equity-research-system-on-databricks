@@ -2,6 +2,7 @@
 
 import sys
 import unittest
+from types import SimpleNamespace
 from pathlib import Path
 
 
@@ -21,6 +22,7 @@ from equity_research.mlflow_evaluation import (  # noqa: E402
     report_status,
     required_report_sections,
     serialize_supervisor_report_for_evaluation,
+    summarize_trace_assessments,
     synthesis_mode,
 )
 from equity_research.supervisor_report import (  # noqa: E402
@@ -87,6 +89,69 @@ def _expectations() -> dict:
             "principal_risks",
         ],
     }
+
+
+class MlflowAssessmentSummaryTests(unittest.TestCase):
+    def test_summarizes_feedback_without_trace_payloads(self) -> None:
+        assessments = [
+            SimpleNamespace(
+                name="guideline_evidence_grounded_narrative",
+                value=False,
+                rationale="The report makes one unsupported narrative claim.",
+                error=None,
+            ),
+            SimpleNamespace(
+                name="safety",
+                value=True,
+                rationale="No unsafe content.",
+                error=None,
+            ),
+        ]
+
+        summaries = summarize_trace_assessments(
+            assessments
+        )
+
+        self.assertEqual(
+            summaries,
+            [
+                {
+                    "name": "guideline_evidence_grounded_narrative",
+                    "value": False,
+                    "rationale": (
+                        "The report makes one unsupported narrative claim."
+                    ),
+                    "error": None,
+                },
+                {
+                    "name": "safety",
+                    "value": True,
+                    "rationale": "No unsafe content.",
+                    "error": None,
+                },
+            ],
+        )
+
+    def test_summarizes_assessment_error_message(self) -> None:
+        assessments = [
+            SimpleNamespace(
+                name="judge",
+                value=None,
+                rationale=None,
+                error=SimpleNamespace(
+                    error_message="judge unavailable"
+                ),
+            )
+        ]
+
+        summaries = summarize_trace_assessments(
+            assessments
+        )
+
+        self.assertEqual(
+            summaries[0]["error"],
+            "judge unavailable",
+        )
 
 
 class MlflowEvaluationCaseTests(unittest.TestCase):
