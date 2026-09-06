@@ -449,6 +449,10 @@ class SupervisorReportRuntimeTests(unittest.TestCase):
             "ready",
         )
         self.assertEqual(
+            report.synthesis_mode,
+            "model",
+        )
+        self.assertEqual(
             len(report.sections),
             4,
         )
@@ -499,6 +503,10 @@ class SupervisorReportRuntimeTests(unittest.TestCase):
             "ready",
         )
         self.assertEqual(
+            report.synthesis_mode,
+            "repaired_model",
+        )
+        self.assertEqual(
             model_query.call_count,
             2,
         )
@@ -510,7 +518,9 @@ class SupervisorReportRuntimeTests(unittest.TestCase):
             repair_payload["messages"][-1]["content"],
         )
 
-    def test_second_invalid_report_still_fails(self) -> None:
+    def test_second_invalid_report_uses_deterministic_fallback(
+        self,
+    ) -> None:
         invalid = _single_report_output()
         invalid["sections"][0]["source_finding_ids"] = [
             "market_analysis:invented"
@@ -522,18 +532,30 @@ class SupervisorReportRuntimeTests(unittest.TestCase):
             ]
         )
 
-        with self.assertRaisesRegex(
-            SupervisorReportContractError,
-            "unknown worker findings",
-        ):
-            run_supervisor_report_synthesis(
-                state=_state(),
-                model_query=model_query,
-            )
+        report = run_supervisor_report_synthesis(
+            state=_state(),
+            model_query=model_query,
+        )
 
+        self.assertEqual(
+            report.status,
+            "ready",
+        )
+        self.assertEqual(
+            report.synthesis_mode,
+            "deterministic_fallback",
+        )
         self.assertEqual(
             model_query.call_count,
             2,
+        )
+        self.assertNotIn(
+            "market_analysis:invented",
+            {
+                source_id
+                for section in report.sections
+                for source_id in section.source_finding_ids
+            },
         )
 
     def test_accepts_reasoning_plus_single_final_text_block(self) -> None:
@@ -552,24 +574,70 @@ class SupervisorReportRuntimeTests(unittest.TestCase):
             "market_performance",
         )
 
-    def test_rejects_invented_worker_finding_id_after_model_call(self) -> None:
+    def test_invented_worker_finding_never_survives_fallback(self) -> None:
         output = _single_report_output()
         output["sections"][0]["source_finding_ids"] = [
             "market_analysis:invented"
         ]
 
+        report = run_supervisor_report_synthesis(
+            state=_state(),
+            model_query=Mock(
+                return_value=_chat_response(
+                    output
+                )
+            ),
+        )
+
+        self.assertEqual(
+            report.synthesis_mode,
+            "deterministic_fallback",
+        )
+        self.assertNotIn(
+            "market_analysis:invented",
+            {
+                source_id
+                for section in report.sections
+                for source_id in section.source_finding_ids
+            },
+        )
+
+    def test_malformed_repair_response_still_fails(self) -> None:
+        invalid = _single_report_output()
+        invalid["sections"][0]["source_finding_ids"] = [
+            "market_analysis:invented"
+        ]
+        malformed = {
+            "choices": [
+                {
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": "not json",
+                    },
+                }
+            ]
+        }
+        model_query = Mock(
+            side_effect=[
+                _chat_response(invalid),
+                malformed,
+            ]
+        )
+
         with self.assertRaisesRegex(
-            SupervisorReportContractError,
-            "unknown worker findings",
+            AgentModelResponseError,
+            "not valid JSON",
         ):
             run_supervisor_report_synthesis(
                 state=_state(),
-                model_query=Mock(
-                    return_value=_chat_response(
-                        output
-                    )
-                ),
+                model_query=model_query,
             )
+
+        self.assertEqual(
+            model_query.call_count,
+            2,
+        )
 
     def test_rejects_non_json_model_response(self) -> None:
         response = {
