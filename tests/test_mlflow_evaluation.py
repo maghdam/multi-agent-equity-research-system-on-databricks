@@ -178,16 +178,14 @@ class MlflowAssessmentSummaryTests(unittest.TestCase):
                     "name": "guideline_evidence_grounded_narrative",
                     "value": False,
                     "span_id": None,
-                    "rationale": (
-                        "The report makes one unsupported narrative claim."
-                    ),
+                    "rationale": None,
                     "error": None,
                 },
                 {
                     "name": "safety",
                     "value": True,
                     "span_id": None,
-                    "rationale": "No unsafe content.",
+                    "rationale": None,
                     "error": None,
                 },
             ],
@@ -215,8 +213,8 @@ class MlflowAssessmentSummaryTests(unittest.TestCase):
                     "name": "guideline_evidence_grounded_narrative",
                     "value": False,
                     "span_id": None,
-                    "rationale": "Serialized rationale.",
-                    "error": "Serialized error.",
+                    "rationale": None,
+                    "error": "assessment_error",
                 }
             ],
         )
@@ -267,7 +265,44 @@ class MlflowAssessmentSummaryTests(unittest.TestCase):
 
         self.assertEqual(
             summaries[0]["error"],
+            "assessment_error",
+        )
+        self.assertNotIn(
             "judge unavailable",
+            str(summaries),
+        )
+
+    def test_llm_judge_source_hides_unrecognized_rationale_and_error(
+        self,
+    ) -> None:
+        secret = "future judge leaked report text"
+        summaries = summarize_trace_assessments(
+            [
+                SimpleNamespace(
+                    name="future_correctness_judge",
+                    value=False,
+                    rationale=secret,
+                    source=SimpleNamespace(
+                        source_type="LLM_JUDGE",
+                    ),
+                    error=SimpleNamespace(
+                        error_code="JUDGE_PARSE_ERROR",
+                        error_message=secret,
+                    ),
+                )
+            ]
+        )
+
+        self.assertIsNone(
+            summaries[0]["rationale"],
+        )
+        self.assertEqual(
+            summaries[0]["error"],
+            "assessment_error:JUDGE_PARSE_ERROR",
+        )
+        self.assertNotIn(
+            secret,
+            str(summaries),
         )
 
     def test_scope_rejection_span_is_in_observability_summary(
@@ -1705,6 +1740,71 @@ class MlflowJudgeConfigurationTests(unittest.TestCase):
         self.assertNotIn(
             "market_performance",
             str(judge_outputs),
+        )
+
+    def test_narrative_grounding_discards_inner_judge_rationale(
+        self,
+    ) -> None:
+        secret = "provider-derived rationale must not persist"
+        inner = Mock(
+            return_value=SimpleNamespace(
+                value="yes",
+                rationale=secret,
+            )
+        )
+
+        with patch(
+            "equity_research.mlflow_evaluation.Guidelines",
+            return_value=inner,
+        ):
+            judge = build_narrative_trace_grounding_judge(
+                model="databricks:/databricks-gpt-oss-120b"
+            )
+
+        output = serialize_supervisor_report_for_evaluation(
+            _report()
+        )
+        trace = Mock()
+        trace.search_spans.return_value = [
+            SimpleNamespace(
+                outputs=[
+                    {
+                        "id": "a" * 64,
+                        "page_content": "Synthetic development evidence.",
+                        "metadata": {
+                            "source_type": "news",
+                            "configured_symbols": ["AAPL"],
+                            "evidence_date": "2026-08-30",
+                        },
+                    },
+                    {
+                        "id": "b" * 64,
+                        "page_content": "Synthetic risk evidence.",
+                        "metadata": {
+                            "source_type": "filing",
+                            "configured_symbols": ["AAPL"],
+                            "evidence_date": "2026-07-31",
+                        },
+                    },
+                ]
+            )
+        ]
+
+        feedback = judge(
+            outputs=output,
+            trace=trace,
+        )
+
+        self.assertTrue(
+            feedback.value,
+        )
+        self.assertEqual(
+            feedback.rationale,
+            "Narrative trace groundedness judge result: grounded.",
+        )
+        self.assertNotIn(
+            secret,
+            feedback.rationale,
         )
 
     def test_narrative_grounding_retries_one_parse_failure(self) -> None:
