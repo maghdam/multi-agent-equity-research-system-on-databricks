@@ -14,7 +14,9 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from equity_research.config import load_equities  # noqa: E402
-from equity_research.supervisor_graph import run_supervisor_graph  # noqa: E402
+from equity_research.supervisor_research_graph import (  # noqa: E402
+    run_supervisor_research_graph,
+)
 from equity_research.supervisor_report_runtime import (  # noqa: E402
     run_supervisor_report_synthesis,
 )
@@ -111,18 +113,21 @@ def main() -> None:
         equities=equities,
     )
 
-    state = run_supervisor_graph(
+    def report_synthesizer(*, state):
+        return run_supervisor_report_synthesis(
+            state=state,
+            profile=args.profile,
+        )
+
+    result = run_supervisor_research_graph(
         request_text=request_text,
         requested_symbols=symbols,
         market_worker=workers.market_worker,
         company_worker=workers.company_worker,
+        report_synthesizer=report_synthesizer,
         equities=equities,
     )
-
-    report = run_supervisor_report_synthesis(
-        state=state,
-        profile=args.profile,
-    )
+    report = result.report
 
     print("SUPERVISOR_REPORT_SMOKE=PASSED")
     print(
