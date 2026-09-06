@@ -10,8 +10,6 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Callable
 
-from equity_research.structured_data_tools import ControlledToolDataError
-
 
 TERMINAL_SQL_STATES = frozenset(
     {
