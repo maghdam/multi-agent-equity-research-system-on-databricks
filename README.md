@@ -41,8 +41,24 @@ The MVP will not include trading execution, price prediction, portfolio optimiza
 - **Milestone 1 — Data Engineering:** complete. Bronze, Silver, Gold, CI, scheduled refresh orchestration, quality/freshness/lineage gates, safe replay behavior, and controlled deployment verification are all implemented and verified. The deployment gate was executed from the CI-tested `main` commit `caa3dcb` and completed with a converged bundle plan plus a successful serverless Spark smoke test.
 - **Operational audit policy:** the MVP uses fail-before-publication validation rather than partial publication plus quarantine tables. Immutable Bronze provenance, validation diagnostics, deterministic replay, Databricks job history, and final verification gates provide the required operational evidence; dedicated row-level rejection tables are deferred until a mixed valid/invalid batch workflow requires them.
 - **Milestone 2 — AI Engineering:** complete. The deterministic RAG corpus, managed GTE embeddings/AI Search index, independent retrieval holdout, controlled Gold/retrieval tools, GPT OSS 20B Market Analyst and Company Researcher workers, deterministic LangGraph Supervisor, GPT OSS 120B terminal synthesis, report provenance validation, bounded repair/fallback, MLflow tracing, route-aware retrieval relevance/sufficiency, trace-aware narrative grounding, controlled E3-E6 failure/security evaluation, and the final E1/E2 managed regression baseline are implemented and live-verified. Pull-request CI now exposes a dedicated 107-test credential-free AI-evaluation gate plus the full 482-test repository suite; GitHub Actions run #25 passed both with Ruff clean on Python 3.14.7. Credentialed Databricks SQL, Vector Search, and model evaluations remain deliberately separate, bounded live checks.
-- **Milestone 3 — Application Delivery:** active and substantially implemented. The configuration-driven Dash workspace is deployed privately on Databricks Apps and live-verified for single-company and AAPL/MSFT comparison research. It renders controlled Gold metrics, normalized Silver price history, validated cited reports, publication-safe evidence cards, signed session-bound follow-up answers, fixed-category feedback, and bounded `APP_EVENT` telemetry. The app uses unified authentication plus least-privilege read-only resource bindings rather than a developer PAT. The public-repository publication audit is implemented in CI and passed locally on 2026-09-07; final reviewed screenshots/demo artifacts remain before milestone closure.
+- **Milestone 3 — Application Delivery:** active and substantially implemented. The configuration-driven Dash workspace is deployed privately on Databricks Apps and live-verified for single-company and AAPL/MSFT comparison research. It renders controlled Gold metrics, normalized Silver price history, validated cited reports, publication-safe evidence cards, signed session-bound follow-up answers, fixed-category feedback, and bounded `APP_EVENT` telemetry. The app uses unified authentication plus least-privilege read-only resource bindings rather than a developer PAT. The public-repository publication audit passed locally on 2026-09-07, and the reviewed screenshot set is committed; final branch CI plus post-merge deployment verification remain before milestone closure.
 - Detailed implementation evidence and run links are tracked in [PLAN.md](PLAN.md).
+
+## Portfolio preview
+
+### AAPL vs MSFT research workspace
+
+![AAPL vs MSFT comparison overview](docs/screenshots/01-comparison-overview.png)
+
+### Normalized market comparison
+
+![AAPL vs MSFT normalized 60-session market comparison](docs/screenshots/02-market-comparison.png)
+
+### Validated cited research report
+
+![Validated AAPL vs MSFT research report](docs/screenshots/03-research-report.png)
+
+See the [portfolio demo walkthrough](docs/PORTFOLIO_DEMO.md) for the full evidence set, including provenance, grounded follow-up, Unity Catalog assets, and MLflow evaluation results.
 
 ## Architecture
 
