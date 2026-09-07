@@ -29,6 +29,20 @@ mlruns/
 .DS_Store
 Thumbs.db
 
+# Private provider/export artifacts
+private_artifacts/
+exports/
+*.arrow
+*.avro
+*.feather
+*.npy
+*.npz
+*.orc
+*.parquet
+*.pickle
+*.pkl
+*.sqlite
+
 # Build artifacts
 build/
 dist/
