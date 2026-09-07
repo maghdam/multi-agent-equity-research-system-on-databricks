@@ -404,7 +404,7 @@ class AppFollowupTests(unittest.TestCase):
                     "market_analysis:m1"
                 ],
                 "evidence_ids": [],
-                "limitation": None,
+                "limitation": "",
             },
             session_payload=payload,
         )
@@ -425,7 +425,7 @@ class AppFollowupTests(unittest.TestCase):
                         "market_analysis:m1"
                     ],
                     "evidence_ids": [],
-                    "limitation": None,
+                    "limitation": "",
                 },
                 session_payload=payload,
             )
@@ -441,7 +441,7 @@ class AppFollowupTests(unittest.TestCase):
                         "made-up-source"
                     ],
                     "evidence_ids": [],
-                    "limitation": None,
+                    "limitation": "",
                 },
                 session_payload=payload,
             )
@@ -462,7 +462,7 @@ class AppFollowupTests(unittest.TestCase):
                 "evidence_ids": [
                     EVIDENCE_ID
                 ],
-                "limitation": None,
+                "limitation": "",
             },
             session_payload=payload,
         )
@@ -487,7 +487,7 @@ class AppFollowupTests(unittest.TestCase):
                     "evidence_ids": [
                         FILING_ID
                     ],
-                    "limitation": None,
+                    "limitation": "",
                 },
                 session_payload=payload,
             )
@@ -510,7 +510,7 @@ class AppFollowupTests(unittest.TestCase):
                         "market_analysis:m1"
                     ],
                     "evidence_ids": [],
-                    "limitation": None,
+                    "limitation": "",
                 },
                 session_payload=payload,
             )
@@ -550,7 +550,7 @@ class AppFollowupTests(unittest.TestCase):
                             "market_analysis:m1"
                         ],
                         "evidence_ids": [],
-                        "limitation": None,
+                        "limitation": "",
                     }
                 ),
                 _response(
@@ -562,7 +562,7 @@ class AppFollowupTests(unittest.TestCase):
                             "market_analysis:m1"
                         ],
                         "evidence_ids": [],
-                        "limitation": None,
+                        "limitation": "",
                     }
                 ),
             ]
