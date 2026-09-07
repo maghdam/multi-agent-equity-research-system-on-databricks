@@ -82,13 +82,14 @@ Only bounded deterministic rationales intended for safe diagnostics are shown.
 
 ## 3. Live application production monitoring
 
-The deployed Databricks App writes live `research_request` and
-`followup_question` traces to the bundle-managed production trace experiment.
-That experiment is intentionally separate from the controlled offline evaluation
-experiment and from the curated `supervisor_evaluation_dataset`.
+The repository contains live-app MLflow tracing and production-scorer support for
+`research_request` and `followup_question` interactions. The bundle-managed
+production trace experiment is intentionally separate from the controlled offline
+evaluation experiment and from the curated `supervisor_evaluation_dataset`.
 
-After deploying the app trace experiment, register automatic built-in MLflow
-production scorers against its experiment ID:
+In a workspace that supports complete production trace persistence, bind that
+experiment to the app and register automatic built-in MLflow production scorers
+against its experiment ID:
 
 ```powershell
 python scripts/configure_app_production_monitoring.py `
@@ -122,11 +123,14 @@ project cannot provision the non-default managed storage required for UC-backed
 trace tables in this workspace.
 
 Treat automatic live production scoring as implemented but environment-blocked in
-Free Edition. Controlled MLflow evaluation remains fully verifiable through the
-offline/live evaluation experiment. In a paid workspace with supported managed
-storage, create the production experiment with a Unity Catalog trace location from
-the outset, grant the app MODIFY and SELECT on the four OTel tables, and persist
-the monitoring SQL warehouse ID before enabling production scorers.
+Free Edition. The Free Edition app therefore leaves the production experiment
+binding disabled so it does not continuously emit incomplete traces or retain an
+unused CAN_EDIT permission. Controlled MLflow evaluation remains fully verifiable
+through the offline/live evaluation experiment. In a paid workspace with supported
+managed storage, create the production experiment with a Unity Catalog trace
+location from the outset, grant the app MODIFY and SELECT on the four OTel tables,
+persist the monitoring SQL warehouse ID, restore the experiment app binding, and
+then enable production scorers.
 
 ## Policy
 
