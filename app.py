@@ -885,24 +885,145 @@ def _render_evidence(
     return html.Div(
         className="evidence-grid",
         children=[
-            html.Div(
-                className="evidence-card",
-                children=[
-                    html.Div(
-                        item.evidence_id,
-                        className="evidence-id",
-                    ),
-                    html.Div(
-                        (
-                            "Supports: "
-                            + ", ".join(item.source_finding_ids)
-                        ),
-                        className="source-findings",
-                    ),
-                ],
+            _evidence_card(
+                item
             )
             for item in presentation.evidence
         ],
+    )
+
+
+def _evidence_card(
+    item,
+):
+    if item.metadata_status != "ready":
+        return html.Div(
+            className="evidence-card",
+            children=[
+                html.Div(
+                    "Citation",
+                    className="evidence-source-badge",
+                ),
+                html.Div(
+                    item.short_evidence_id,
+                    className="evidence-id",
+                    title=item.evidence_id,
+                ),
+                html.P(
+                    (
+                        "Validated citation metadata was not captured for "
+                        "this render."
+                    ),
+                    className="evidence-copy",
+                ),
+                html.Div(
+                    (
+                        "Supports: "
+                        + ", ".join(item.source_finding_ids)
+                    ),
+                    className="source-findings",
+                ),
+            ],
+        )
+
+    metadata_parts = [
+        ", ".join(item.symbols),
+        item.evidence_date,
+        item.source_domain,
+    ]
+    metadata = " · ".join(
+        part
+        for part in metadata_parts
+        if part
+    )
+
+    detail_parts = []
+
+    if item.section_label:
+        detail_parts.append(
+            item.section_label
+        )
+
+    if item.retrieval_rank is not None:
+        detail_parts.append(
+            f"retrieval rank {item.retrieval_rank}"
+        )
+
+    if item.chunk_index is not None:
+        detail_parts.append(
+            f"chunk {item.chunk_index + 1}"
+        )
+
+    children = [
+        html.Div(
+            className="evidence-card-header",
+            children=[
+                html.Div(
+                    item.source_label,
+                    className="evidence-source-badge",
+                ),
+                html.Div(
+                    item.short_evidence_id,
+                    className="evidence-short-id",
+                    title=item.evidence_id,
+                ),
+            ],
+        ),
+        html.Div(
+            metadata,
+            className="evidence-meta",
+        ),
+    ]
+
+    if detail_parts:
+        children.append(
+            html.Div(
+                " · ".join(detail_parts),
+                className="evidence-detail",
+            )
+        )
+
+    if item.source_business_id:
+        children.append(
+            html.Div(
+                [
+                    html.Span(
+                        "Source record: ",
+                        className="evidence-record-label",
+                    ),
+                    html.Span(
+                        item.source_business_id,
+                        className="evidence-record-value",
+                    ),
+                ],
+                className="evidence-record",
+            )
+        )
+
+    children.append(
+        html.Div(
+            (
+                "Supports: "
+                + ", ".join(item.source_finding_ids)
+            ),
+            className="source-findings",
+        )
+    )
+
+    if item.source_url:
+        children.append(
+            html.A(
+                "Open source",
+                href=item.source_url,
+                target="_blank",
+                rel="noopener noreferrer",
+                className="evidence-source-link",
+            )
+        )
+
+    return html.Div(
+        className="evidence-card",
+        children=children,
     )
 
 
