@@ -357,7 +357,9 @@ def _fundamental_metrics(
         ),
         PresentationMetric(
             label="TTM derivation",
-            value=metric.ttm_derivation_method,
+            value=_ttm_derivation_label(
+                metric.ttm_derivation_method
+            ),
             status=fundamental_result.status,
         ),
     )
@@ -373,6 +375,21 @@ def _fundamental_metrics(
         )
 
     return values
+
+
+def _ttm_derivation_label(
+    method: str,
+) -> str:
+    labels = {
+        "annual": "Latest annual filing",
+        "annual_plus_ytd_minus_prior_ytd": (
+            "Annual + current YTD - prior YTD"
+        ),
+    }
+    return labels.get(
+        method,
+        method.replace("_", " "),
+    )
 
 
 def _percentage(
