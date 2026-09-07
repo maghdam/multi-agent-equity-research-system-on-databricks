@@ -589,6 +589,16 @@ def run_research_action(
         "value",
         allow_duplicate=True,
     ),
+    Output(
+        "followup-input",
+        "disabled",
+        allow_duplicate=True,
+    ),
+    Output(
+        "followup-ask",
+        "disabled",
+        allow_duplicate=True,
+    ),
     Input("followup-ask", "n_clicks"),
     State("followup-input", "value"),
     State("followup-session-store", "data"),
@@ -606,15 +616,19 @@ def run_followup_action(
             no_update,
             no_update,
             "",
+            no_update,
+            no_update,
         )
 
     if not _databricks_app_resources_available():
         return (
-            no_update,
+            None,
             _followup_empty_state(
                 "Follow-up research requires the deployed Databricks App."
             ),
             "",
+            True,
+            True,
         )
 
     try:
@@ -636,6 +650,8 @@ def run_followup_action(
                 f"Follow-up question error: {exc}"
             ),
             "",
+            no_update,
+            no_update,
         )
     except FollowupSessionError:
         return (
@@ -645,6 +661,8 @@ def run_followup_action(
                 "again before asking another question."
             ),
             "",
+            True,
+            True,
         )
     except Exception as exc:
         logger.error(
@@ -662,12 +680,16 @@ def run_followup_action(
                 "is unchanged; check the Databricks App logs."
             ),
             "",
+            no_update,
+            no_update,
         )
 
     return (
         result.envelope,
         conversation,
         "",
+        False,
+        False,
     )
 
 
