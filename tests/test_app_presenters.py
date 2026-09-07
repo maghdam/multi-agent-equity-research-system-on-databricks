@@ -11,6 +11,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from equity_research.app_contracts import AppResearchSelection  # noqa: E402
+from equity_research.app_market_history import (  # noqa: E402
+    AppMarketHistorySeries,
+    AppPriceHistoryPoint,
+)
 from equity_research.app_presenters import (  # noqa: E402
     build_app_research_presentation,
 )
@@ -290,6 +294,52 @@ class AppPresenterTests(unittest.TestCase):
                 metric.value
                 for metric in market_metrics
             ),
+        )
+
+    def test_price_history_is_normalized_to_100(self) -> None:
+        session = _session()
+        history_session = AppResearchSession(
+            selection=session.selection,
+            request_text=session.request_text,
+            structured=AppStructuredSnapshot(
+                market_results=session.structured.market_results,
+                fundamental_results=session.structured.fundamental_results,
+                market_history=(
+                    AppMarketHistorySeries(
+                        symbol="AAPL",
+                        display_name="Apple Inc.",
+                        status="ready",
+                        limitation=None,
+                        points=(
+                            AppPriceHistoryPoint(
+                                symbol="AAPL",
+                                trading_date=date(2026, 9, 3),
+                                close=Decimal("200"),
+                                currency="USD",
+                            ),
+                            AppPriceHistoryPoint(
+                                symbol="AAPL",
+                                trading_date=date(2026, 9, 4),
+                                close=Decimal("220"),
+                                currency="USD",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            research=session.research,
+        )
+
+        presentation = build_app_research_presentation(
+            history_session
+        )
+
+        self.assertEqual(
+            tuple(
+                point.indexed_close
+                for point in presentation.market_history[0].points
+            ),
+            (100.0, 110.0),
         )
 
     def test_money_values_are_compact_and_readable(self) -> None:
