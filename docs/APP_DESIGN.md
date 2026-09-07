@@ -161,6 +161,38 @@ queries and avoids mutable cross-session caches in a multi-user app process.
 Physical warehouse/index values are resolved from environment variables populated by
 Databricks App resource bindings rather than hard-coded in Python.
 
+## Bound application resources
+
+The first deployment binding is defined in
+`resources/equity_research.app.yml`. The app receives only the resources required
+for research execution:
+
+- `sql-warehouse` — `CAN_USE`;
+- `market-metrics` — `SELECT`;
+- `fundamental-metrics` — `SELECT`;
+- `research-index` — `SELECT`.
+
+`app.yaml` maps those resource keys into environment variables using `valueFrom`.
+For the two Gold resources and the AI Search index, Databricks injects the full
+three-level Unity Catalog name. The runtime derives the Gold catalog/schema from the
+bound table names and verifies that both Gold resources share the same location.
+
+The `Run Research` callback has two intentional execution modes:
+
+```text
+local process without app resource variables
+        -> validate selection + Supervisor request preview only
+
+deployed Databricks App with bound resource variables
+        -> app_service.py
+        -> DatabricksAppResearchRuntime
+        -> real controlled Gold + RAG + multi-agent research
+```
+
+The callback currently renders only bounded completion metadata. Actual structured
+metrics, charts, report sections, citations, and evidence are added by the next
+presentation slice.
+
 ## Implementation slices
 
 1. App selection contract + static Dash shell.
