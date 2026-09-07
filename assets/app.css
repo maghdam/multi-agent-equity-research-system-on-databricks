@@ -6,6 +6,26 @@
   --line: #dce2ec;
   --accent: #2457d6;
   --accent-soft: #eaf0ff;
+  --header-start: #172033;
+  --header-end: #243252;
+  --header-muted: #d7def0;
+  --input: #ffffff;
+  --shadow: 0 12px 32px rgba(23, 32, 51, 0.08);
+}
+
+.theme-dark {
+  --page: #0f1420;
+  --card: #171e2d;
+  --ink: #edf2ff;
+  --muted: #9aa7c0;
+  --line: #2d374b;
+  --accent: #7aa2ff;
+  --accent-soft: #202b44;
+  --header-start: #0c111b;
+  --header-end: #151d2c;
+  --header-muted: #bac5da;
+  --input: #111827;
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
 }
 
 * {
@@ -21,10 +41,30 @@ body {
     "Segoe UI", sans-serif;
 }
 
+.app-shell {
+  min-height: 100vh;
+  background: var(--page);
+  color: var(--ink);
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
 .app-header {
   padding: 40px 32px 26px;
-  background: linear-gradient(135deg, #172033 0%, #243252 100%);
+  background: linear-gradient(
+    135deg,
+    var(--header-start) 0%,
+    var(--header-end) 100%
+  );
   color: white;
+}
+
+.header-row {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  justify-content: space-between;
 }
 
 .app-title {
@@ -35,7 +75,7 @@ body {
 .app-subtitle {
   max-width: 760px;
   margin: 0;
-  color: #d7def0;
+  color: var(--header-muted);
 }
 
 .eyebrow {
@@ -56,7 +96,7 @@ body {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 16px;
-  box-shadow: 0 12px 32px rgba(23, 32, 51, 0.08);
+  box-shadow: var(--shadow);
 }
 
 .research-controls,
@@ -90,7 +130,8 @@ body {
 }
 
 .primary-button,
-.secondary-button {
+.secondary-button,
+.theme-toggle {
   border: 0;
   border-radius: 10px;
   cursor: pointer;
@@ -110,6 +151,19 @@ body {
   color: var(--accent);
 }
 
+.theme-toggle {
+  flex: 0 0 auto;
+  min-width: 104px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
 .secondary-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -120,7 +174,7 @@ body {
   padding: 12px 14px;
   border-radius: 10px;
   background: var(--accent-soft);
-  color: #27448c;
+  color: var(--accent);
   font-size: 0.9rem;
   line-height: 1.5;
 }
@@ -162,6 +216,49 @@ body {
   padding: 0 14px;
   border: 1px solid var(--line);
   border-radius: 10px;
+  background: var(--input);
+  color: var(--ink);
+}
+
+.research-tab {
+  background: var(--card) !important;
+  border-color: var(--line) !important;
+  color: var(--muted) !important;
+}
+
+.research-tab--selected {
+  background: var(--card) !important;
+  border-top-color: var(--accent) !important;
+  color: var(--ink) !important;
+  font-weight: 700;
+}
+
+.theme-dark .Select-control,
+.theme-dark .Select-menu-outer,
+.theme-dark .Select-menu {
+  background: var(--input);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.theme-dark .Select-value-label,
+.theme-dark .Select-placeholder,
+.theme-dark .Select-input > input {
+  color: var(--ink) !important;
+}
+
+.theme-dark .Select-arrow {
+  border-top-color: var(--muted);
+}
+
+.theme-dark .VirtualizedSelectOption {
+  background: var(--input);
+  color: var(--ink);
+}
+
+.theme-dark .VirtualizedSelectFocusedOption {
+  background: var(--accent-soft);
+  color: var(--ink);
 }
 
 @media (max-width: 920px) {
@@ -177,6 +274,15 @@ body {
 @media (max-width: 640px) {
   .app-header {
     padding: 30px 20px 22px;
+  }
+
+  .header-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .theme-toggle {
+    align-self: flex-start;
   }
 
   .app-main {
