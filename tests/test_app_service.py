@@ -80,12 +80,14 @@ class FakeRuntime:
         self.report_mode = report_mode
         self.structured_calls: list[object] = []
         self.research_calls: list[tuple[str, tuple[str, ...]]] = []
+        self.call_order: list[str] = []
 
     def load_structured_snapshot(
         self,
         *,
         selection,
     ) -> AppStructuredSnapshot:
+        self.call_order.append("structured")
         self.structured_calls.append(selection)
         return self.structured
 
@@ -95,6 +97,7 @@ class FakeRuntime:
         request_text: str,
         requested_symbols: tuple[str, ...],
     ) -> SupervisorResearchResult:
+        self.call_order.append("research")
         self.research_calls.append(
             (
                 request_text,
@@ -156,6 +159,10 @@ class AppServiceTests(unittest.TestCase):
             [selection],
         )
         self.assertEqual(
+            runtime.call_order,
+            ["research", "structured"],
+        )
+        self.assertEqual(
             runtime.research_calls[0][1],
             ("AAPL", "MSFT"),
         )
@@ -197,8 +204,8 @@ class AppServiceTests(unittest.TestCase):
             )
 
         self.assertEqual(
-            runtime.research_calls,
-            [],
+            runtime.call_order,
+            ["research", "structured"],
         )
 
     def test_report_symbols_must_match_selection(self) -> None:
