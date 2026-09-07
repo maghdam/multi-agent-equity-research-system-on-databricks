@@ -11,34 +11,6 @@ resources:
             experiment_id: ${resources.experiments.app_production_traces.id}
             permission: CAN_EDIT
 
-        - name: trace-annotations
-          description: Unity Catalog annotations for production MLflow traces.
-          uc_securable:
-            securable_full_name: ${resources.schemas.ai.catalog_name}.${resources.schemas.ai.name}.app_production_otel_annotations
-            securable_type: TABLE
-            permission: MODIFY
-
-        - name: trace-logs
-          description: Unity Catalog logs for production MLflow traces.
-          uc_securable:
-            securable_full_name: ${resources.schemas.ai.catalog_name}.${resources.schemas.ai.name}.app_production_otel_logs
-            securable_type: TABLE
-            permission: MODIFY
-
-        - name: trace-metrics
-          description: Unity Catalog metrics for production MLflow traces.
-          uc_securable:
-            securable_full_name: ${resources.schemas.ai.catalog_name}.${resources.schemas.ai.name}.app_production_otel_metrics
-            securable_type: TABLE
-            permission: MODIFY
-
-        - name: trace-spans
-          description: Unity Catalog spans for production MLflow traces.
-          uc_securable:
-            securable_full_name: ${resources.schemas.ai.catalog_name}.${resources.schemas.ai.name}.app_production_otel_spans
-            securable_type: TABLE
-            permission: MODIFY
-
         - name: sql-warehouse
           description: Read-only SQL compute for controlled Gold queries.
           sql_warehouse:
