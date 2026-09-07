@@ -21,7 +21,7 @@ from equity_research.databricks_app_runtime import (  # noqa: E402
     FUNDAMENTAL_METRICS_TABLE_ENV,
     GOLD_SCHEMA_ENV,
     MARKET_METRICS_TABLE_ENV,
-    MLFLOW_EXPERIMENT_ENV,
+    MLFLOW_EXPERIMENT_ID_ENV,
     VECTOR_INDEX_ENV,
     WAREHOUSE_ENV,
     DatabricksAppResearchRuntime,
@@ -171,7 +171,7 @@ class DatabricksAppRuntimeTests(unittest.TestCase):
                     "workspace.silver_schema.daily_prices"
                 ),
                 VECTOR_INDEX_ENV: "workspace.ai.index",
-                MLFLOW_EXPERIMENT_ENV: "/Shared/app-traces",
+                MLFLOW_EXPERIMENT_ID_ENV: "123456789",
             }
         )
 
@@ -196,8 +196,8 @@ class DatabricksAppRuntimeTests(unittest.TestCase):
             "workspace.silver_schema.daily_prices",
         )
         self.assertEqual(
-            config.mlflow_experiment,
-            "/Shared/app-traces",
+            config.mlflow_experiment_id,
+            "123456789",
         )
 
     def test_config_requires_bound_runtime_resources(self) -> None:

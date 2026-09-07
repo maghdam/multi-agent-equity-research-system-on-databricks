@@ -1,0 +1,9 @@
+resources:
+  experiments:
+    app_production_traces:
+      name: /Shared/equity-research-app-production-traces
+      tags:
+        - key: mlflow.note.content
+          value: Production MLflow traces for the Databricks equity research application.
+      lifecycle:
+        prevent_destroy: true

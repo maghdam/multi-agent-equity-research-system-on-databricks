@@ -55,6 +55,14 @@ class MlflowTracingConfigTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
+            "experiment_id must be None or a nonblank string",
+        ):
+            MlflowTracingConfig(
+                experiment_id=" ",
+            )
+
+        with self.assertRaisesRegex(
+            ValueError,
             "profile must be None or a nonblank string",
         ):
             MlflowTracingConfig(
@@ -83,6 +91,7 @@ class MlflowTracingConfigTests(unittest.TestCase):
                 "project": "multi-agent-equity-research-system",
                 "component": "supervisor_research_graph",
                 "environment": "dev",
+                "interaction_type": "research_request",
                 "request_mode": "comparison",
                 "symbols": "AAPL,MSFT",
             },
@@ -157,6 +166,39 @@ class MlflowTracingRuntimeTests(unittest.TestCase):
         )
         set_experiment.assert_called_once_with(
             "/Shared/equity-research-test"
+        )
+        autolog.assert_called_once_with(
+            log_traces=True,
+            silent=False,
+        )
+
+    @patch("equity_research.mlflow_tracing.mlflow_langchain_autolog")
+    @patch("equity_research.mlflow_tracing.mlflow.set_experiment")
+    @patch("equity_research.mlflow_tracing.mlflow.set_tracking_uri")
+    def test_configure_uses_bound_experiment_id(
+        self,
+        set_tracking_uri,
+        set_experiment,
+        autolog,
+    ) -> None:
+        config = MlflowTracingConfig(
+            experiment_id="123456789",
+            profile=None,
+        )
+
+        tracking_uri = configure_mlflow_tracing(
+            config
+        )
+
+        self.assertEqual(
+            tracking_uri,
+            "databricks",
+        )
+        set_tracking_uri.assert_called_once_with(
+            "databricks"
+        )
+        set_experiment.assert_called_once_with(
+            experiment_id="123456789"
         )
         autolog.assert_called_once_with(
             log_traces=True,

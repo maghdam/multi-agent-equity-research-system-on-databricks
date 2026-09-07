@@ -41,6 +41,7 @@ class MlflowTracingConfig:
     """Configuration for Databricks-managed MLflow tracing."""
 
     experiment_name: str = DEFAULT_TRACE_EXPERIMENT
+    experiment_id: str | None = None
     profile: str | None = None
     environment: str = "dev"
 
@@ -48,6 +49,14 @@ class MlflowTracingConfig:
         if not isinstance(self.experiment_name, str) or not self.experiment_name.strip():
             raise ValueError(
                 "experiment_name must be a nonblank string."
+            )
+
+        if self.experiment_id is not None and (
+            not isinstance(self.experiment_id, str)
+            or not self.experiment_id.strip()
+        ):
+            raise ValueError(
+                "experiment_id must be None or a nonblank string."
             )
 
         if self.profile is not None and (
@@ -101,9 +110,14 @@ def configure_mlflow_tracing(
     mlflow.set_tracking_uri(
         tracking_uri
     )
-    mlflow.set_experiment(
-        config.experiment_name.strip()
-    )
+    if config.experiment_id is not None:
+        mlflow.set_experiment(
+            experiment_id=config.experiment_id.strip()
+        )
+    else:
+        mlflow.set_experiment(
+            config.experiment_name.strip()
+        )
 
     # MLflow documents LangGraph tracing through the LangChain integration.
     # This is intentionally called once per process entry point rather than
@@ -144,6 +158,7 @@ def research_trace_tags(
         "project": TRACE_PROJECT,
         "component": TRACE_COMPONENT,
         "environment": environment.strip(),
+        "interaction_type": "research_request",
         "request_mode": request_mode,
         "symbols": ",".join(symbols),
     }
