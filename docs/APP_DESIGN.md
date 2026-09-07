@@ -107,6 +107,30 @@ The repository-root `app.py` is the UI entry point and `app.yaml` defines the
 Databricks Apps command. The first shell intentionally performs no live SQL, Vector
 Search, or model calls.
 
+## Runtime boundary
+
+The deployed Databricks App must use its own app service principal plus Databricks
+App resource bindings/unified authentication. It must not depend on the developer's
+local Databricks CLI profile.
+
+The existing CLI adapters remain valid for local smoke/evaluation workflows. The app
+service is therefore runtime-agnostic:
+
+```text
+Dash
+  |
+  v
+app_service.py
+  |
+  +--> local/evaluation runtime adapters (CLI where appropriate)
+  |
+  +--> deployed Databricks App runtime
+       service principal + bound SQL/AI Search/model resources
+```
+
+This keeps application orchestration reusable while allowing deployment-specific
+authentication and transport to change without rewriting UI/business contracts.
+
 ## Implementation slices
 
 1. App selection contract + static Dash shell.
