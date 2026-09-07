@@ -28,6 +28,7 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from equity_research.app_followup import (  # noqa: E402
+    FollowupQuestionError,
     FollowupSessionError,
     build_followup_session_payload,
     conversation_from_envelope,
@@ -627,6 +628,14 @@ def run_followup_action(
         )
         conversation = _render_followup_conversation(
             result.envelope
+        )
+    except FollowupQuestionError as exc:
+        return (
+            no_update,
+            _followup_empty_state(
+                f"Follow-up question error: {exc}"
+            ),
+            "",
         )
     except FollowupSessionError:
         return (
