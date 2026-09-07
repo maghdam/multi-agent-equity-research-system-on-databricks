@@ -193,6 +193,28 @@ The callback currently renders only bounded completion metadata. Actual structur
 metrics, charts, report sections, citations, and evidence are added by the next
 presentation slice.
 
+## Normalized market-history chart
+
+The Market tab uses validated Silver `daily_prices` only for chart presentation.
+The chart does not call Alpaca and does not attempt to reconstruct daily history from
+aggregate Gold metrics.
+
+For a selected `N`-session market window, the application:
+
+1. requests exactly `N+1` closes for each selected company;
+2. verifies that the final trading date equals the ready Gold
+   `market_metrics.as_of_date`;
+3. requires aligned trading dates across comparison companies;
+4. normalizes each validated series to `100` at its first close;
+5. plots normalized performance while preserving Gold as the authoritative source
+   for report metrics and numeric claims.
+
+The Silver table is bound to the Databricks App with read-only `SELECT` permission.
+Price-history access is presentation-only: a history-query or alignment failure must
+not fail the research graph or substitute unvalidated values. The Market tab instead
+shows an explicit chart-unavailable limitation while keeping validated Gold/report
+content visible.
+
 ## First rendered research result
 
 The first result renderer uses only data already carried by the validated
