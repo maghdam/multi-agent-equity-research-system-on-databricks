@@ -209,6 +209,22 @@ body {
   padding-top: 18px;
 }
 
+.market-chart-panel {
+  min-height: 360px;
+}
+
+.market-history-chart {
+  width: 100%;
+  min-height: 320px;
+  margin-top: 8px;
+}
+
+.market-history-chart .js-plotly-plot,
+.market-history-chart .plot-container,
+.market-history-chart .svg-container {
+  width: 100% !important;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
