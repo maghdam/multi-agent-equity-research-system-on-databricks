@@ -6,6 +6,7 @@ import logging
 import os
 import secrets
 import sys
+import time
 from pathlib import Path
 
 import plotly.graph_objects as go
@@ -16,6 +17,7 @@ from dash import (
     Output,
     State,
     clientside_callback,
+    ctx,
     dcc,
     html,
     no_update,
@@ -41,6 +43,12 @@ from equity_research.app_contracts import (  # noqa: E402
     build_app_research_selection,
     build_research_request_text,
     company_selector_options,
+)
+from equity_research.app_observability import (  # noqa: E402
+    feedback_event,
+    followup_event,
+    log_app_event,
+    research_event,
 )
 from equity_research.app_presenters import (  # noqa: E402
     build_app_research_presentation,
@@ -381,6 +389,54 @@ app.layout = html.Div(
                         ),
                     ],
                 ),
+                html.Section(
+                    className="feedback card",
+                    children=[
+                        html.Div(
+                            "Research feedback",
+                            className="eyebrow",
+                        ),
+                        html.H2(
+                            "Was this active research useful?",
+                            className="section-title",
+                        ),
+                        html.P(
+                            (
+                                "Feedback is optional and privacy-safe: only the "
+                                "fixed rating and bounded session metadata are "
+                                "recorded in application telemetry."
+                            ),
+                            className="section-copy",
+                        ),
+                        html.Div(
+                            className="feedback-row",
+                            children=[
+                                html.Button(
+                                    "Helpful",
+                                    id="feedback-helpful",
+                                    n_clicks=0,
+                                    disabled=True,
+                                    className="feedback-button",
+                                ),
+                                html.Button(
+                                    "Needs work",
+                                    id="feedback-needs-work",
+                                    n_clicks=0,
+                                    disabled=True,
+                                    className="feedback-button",
+                                ),
+                                html.Div(
+                                    (
+                                        "Run research first to enable optional "
+                                        "feedback."
+                                    ),
+                                    id="feedback-message",
+                                    className="feedback-message",
+                                ),
+                            ],
+                        ),
+                    ],
+                ),
             ],
         ),
     ],
@@ -445,6 +501,8 @@ def run_research_action(
     market_window: int,
 ) -> tuple:
     """Validate locally or run the real Databricks App research runtime."""
+
+    started_at = time.perf_counter()
 
     try:
         selection = build_app_research_selection(
@@ -517,6 +575,21 @@ def run_research_action(
             selection.market_window_sessions,
             type(exc).__name__,
         )
+        log_app_event(
+            logger,
+            research_event(
+                event_type="research_failed",
+                mode=selection.mode,
+                symbols=selection.requested_symbols,
+                market_window_sessions=(
+                    selection.market_window_sessions
+                ),
+                duration_ms=_elapsed_ms(
+                    started_at
+                ),
+                error_type=type(exc).__name__,
+            ),
+        )
         return (
             (
                 "Research execution failed safely. No partial result is shown. "
@@ -554,6 +627,25 @@ def run_research_action(
             session
         ),
         signing_key=FOLLOWUP_SIGNING_KEY,
+    )
+    log_app_event(
+        logger,
+        research_event(
+            event_type="research_completed",
+            mode=presentation.mode,
+            symbols=presentation.symbols,
+            market_window_sessions=(
+                presentation.market_window_sessions
+            ),
+            duration_ms=_elapsed_ms(
+                started_at
+            ),
+            report_status=presentation.report_status,
+            synthesis_mode=presentation.synthesis_mode,
+            evidence_count=len(
+                presentation.evidence
+            ),
+        ),
     )
 
     return (
@@ -611,6 +703,8 @@ def run_followup_action(
 ) -> tuple:
     """Run one signed, session-bound grounded follow-up turn."""
 
+    started_at = time.perf_counter()
+
     if not isinstance(question, str) or not question.strip():
         return (
             no_update,
@@ -631,7 +725,16 @@ def run_followup_action(
             True,
         )
 
+    verified_research = None
+
     try:
+        verified_payload = verify_followup_session(
+            envelope,
+            signing_key=FOLLOWUP_SIGNING_KEY,
+        )
+        verified_research = verified_payload[
+            "research"
+        ]
         transport = DatabricksAppTransport()
         result = run_followup_turn(
             envelope,
@@ -644,6 +747,20 @@ def run_followup_action(
             result.envelope
         )
     except FollowupQuestionError as exc:
+        log_app_event(
+            logger,
+            followup_event(
+                event_type="followup_failed",
+                research=verified_research,
+                duration_ms=_elapsed_ms(
+                    started_at
+                ),
+                question_length=len(
+                    question.strip()
+                ),
+                error_type=type(exc).__name__,
+            ),
+        )
         return (
             no_update,
             _followup_empty_state(
@@ -653,7 +770,21 @@ def run_followup_action(
             no_update,
             no_update,
         )
-    except FollowupSessionError:
+    except FollowupSessionError as exc:
+        log_app_event(
+            logger,
+            followup_event(
+                event_type="followup_failed",
+                research=verified_research,
+                duration_ms=_elapsed_ms(
+                    started_at
+                ),
+                question_length=len(
+                    question.strip()
+                ),
+                error_type=type(exc).__name__,
+            ),
+        )
         return (
             None,
             _followup_empty_state(
@@ -673,6 +804,20 @@ def run_followup_action(
             type(exc).__name__,
             len(question.strip()),
         )
+        log_app_event(
+            logger,
+            followup_event(
+                event_type="followup_failed",
+                research=verified_research,
+                duration_ms=_elapsed_ms(
+                    started_at
+                ),
+                question_length=len(
+                    question.strip()
+                ),
+                error_type=type(exc).__name__,
+            ),
+        )
         return (
             no_update,
             _followup_empty_state(
@@ -684,12 +829,128 @@ def run_followup_action(
             no_update,
         )
 
+    updated_payload = verify_followup_session(
+        result.envelope,
+        signing_key=FOLLOWUP_SIGNING_KEY,
+    )
+    log_app_event(
+        logger,
+        followup_event(
+            event_type="followup_completed",
+            research=updated_payload[
+                "research"
+            ],
+            duration_ms=_elapsed_ms(
+                started_at
+            ),
+            question_length=len(
+                question.strip()
+            ),
+            turn_count=len(
+                updated_payload[
+                    "conversation"
+                ]
+            ),
+            source_count=len(
+                result.answer.source_ids
+            ),
+            limitation_present=(
+                result.answer.limitation is not None
+            ),
+        ),
+    )
+
     return (
         result.envelope,
         conversation,
         "",
         False,
         False,
+    )
+
+
+@app.callback(
+    Output("feedback-message", "children"),
+    Output("feedback-helpful", "disabled"),
+    Output("feedback-needs-work", "disabled"),
+    Input("followup-session-store", "data"),
+    Input("feedback-helpful", "n_clicks"),
+    Input("feedback-needs-work", "n_clicks"),
+)
+def handle_research_feedback(
+    envelope,
+    _helpful_clicks: int,
+    _needs_work_clicks: int,
+) -> tuple:
+    """Collect one fixed-category privacy-safe rating for the active session."""
+
+    if envelope is None:
+        return (
+            "Run research first to enable optional feedback.",
+            True,
+            True,
+        )
+
+    try:
+        payload = verify_followup_session(
+            envelope,
+            signing_key=FOLLOWUP_SIGNING_KEY,
+        )
+    except FollowupSessionError:
+        return (
+            "The active session changed. Run research again before rating it.",
+            True,
+            True,
+        )
+
+    triggered = ctx.triggered_id
+
+    if triggered not in {
+        "feedback-helpful",
+        "feedback-needs-work",
+    }:
+        return (
+            "Optional: rate the current research session.",
+            False,
+            False,
+        )
+
+    rating = (
+        "helpful"
+        if triggered == "feedback-helpful"
+        else "needs_work"
+    )
+    log_app_event(
+        logger,
+        feedback_event(
+            research=payload[
+                "research"
+            ],
+            feedback=rating,
+        ),
+    )
+
+    return (
+        "Thanks — privacy-safe session feedback was recorded.",
+        True,
+        True,
+    )
+
+
+def _elapsed_ms(
+    started_at: float,
+) -> int:
+    return max(
+        0,
+        int(
+            round(
+                (
+                    time.perf_counter()
+                    - started_at
+                )
+                * 1000
+            )
+        ),
     )
 
 
