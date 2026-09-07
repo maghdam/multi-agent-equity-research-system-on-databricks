@@ -38,7 +38,6 @@ from equity_research.app_presenters import (  # noqa: E402
 from equity_research.app_service import run_app_research  # noqa: E402
 from equity_research.config import load_equities  # noqa: E402
 from equity_research.databricks_app_runtime import (  # noqa: E402
-    DAILY_PRICES_TABLE_ENV,
     FUNDAMENTAL_METRICS_TABLE_ENV,
     MARKET_METRICS_TABLE_ENV,
     VECTOR_INDEX_ENV,
