@@ -46,6 +46,10 @@ class FollowupAnswerContractError(ValueError):
     """Raised when a follow-up model answer violates grounding rules."""
 
 
+class FollowupQuestionError(ValueError):
+    """Raised when a user follow-up question violates input bounds."""
+
+
 @dataclass(frozen=True)
 class FollowupAnswer:
     """One deterministically validated follow-up answer."""
@@ -1079,7 +1083,8 @@ def _validate_session_payload(
             )
 
         _required_question(
-            turn.get("question")
+            turn.get("question"),
+            error_type=FollowupSessionError,
         )
         _required_text(
             turn.get("answer"),
@@ -1217,12 +1222,14 @@ def _validate_optional_text_fields(
 
 def _required_question(
     value: object,
+    *,
+    error_type: type[ValueError] = FollowupQuestionError,
 ) -> str:
     return _required_text(
         value,
         "question",
         max_chars=MAX_FOLLOWUP_QUESTION_CHARS,
-        error_type=FollowupSessionError,
+        error_type=error_type,
     )
 
 
