@@ -98,8 +98,26 @@ window_options = [
     for value in SUPPORTED_MARKET_WINDOWS
 ]
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("equity_research.app")
 logger.setLevel(logging.INFO)
+
+if not logger.handlers:
+    app_log_handler = logging.StreamHandler(
+        sys.stdout
+    )
+    app_log_handler.setLevel(
+        logging.INFO
+    )
+    app_log_handler.setFormatter(
+        logging.Formatter(
+            "%(levelname)s:%(name)s:%(message)s"
+        )
+    )
+    logger.addHandler(
+        app_log_handler
+    )
+
+logger.propagate = False
 FOLLOWUP_SIGNING_KEY = secrets.token_bytes(32)
 
 app = Dash(__name__, title="Equity Research Workspace")
