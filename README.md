@@ -60,6 +60,18 @@ The MVP will not include trading execution, price prediction, portfolio optimiza
 
 ## Databricks implementation evidence
 
+### Databricks Workflows — daily market & news refresh
+
+Bronze ingestion → Silver transformation → Gold market metrics → automated verification.
+
+![Databricks daily market and news refresh workflow](docs/screenshots/08-databricks-daily-refresh-workflow.png)
+
+### Databricks Workflows — weekly fundamentals & SEC filings refresh
+
+Company facts + SEC filings → Silver transformations → Gold fundamentals → automated verification.
+
+![Databricks weekly fundamentals and SEC filings workflow](docs/screenshots/09-databricks-weekly-fundamentals-workflow.png)
+
 ### Unity Catalog — real Bronze, Silver, Gold, and AI/RAG assets
 
 ![Databricks Catalog showing the implemented medallion and AI/RAG assets](docs/screenshots/06-databricks-catalog.png)
