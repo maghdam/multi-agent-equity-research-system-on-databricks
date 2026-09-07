@@ -123,14 +123,17 @@ project cannot provision the non-default managed storage required for UC-backed
 trace tables in this workspace.
 
 Treat automatic live production scoring as implemented but environment-blocked in
-Free Edition. The Free Edition app therefore leaves the production experiment
-binding disabled so it does not continuously emit incomplete traces or retain an
-unused CAN_EDIT permission. Controlled MLflow evaluation remains fully verifiable
-through the offline/live evaluation experiment. In a paid workspace with supported
-managed storage, create the production experiment with a Unity Catalog trace
-location from the outset, grant the app MODIFY and SELECT on the four OTel tables,
-persist the monitoring SQL warehouse ID, restore the experiment app binding, and
-then enable production scorers.
+Free Edition. The Free Edition app intentionally keeps the production experiment
+binding enabled so live research and follow-up requests remain visible as MLflow
+trace rows for observability, even though their span payload cannot be persisted in
+this workspace. Keep production scorers paused at sample rate 0 here because scorer
+assessments require complete trace data and therefore will not appear as score
+columns for these incomplete traces. Controlled MLflow evaluation remains fully
+verifiable through the offline/live evaluation experiment. In a paid workspace
+with supported managed storage, create the production experiment with a Unity
+Catalog trace location from the outset, grant the app MODIFY and SELECT on the four
+OTel tables, persist the monitoring SQL warehouse ID, and then enable production
+scorers.
 
 ## Policy
 
