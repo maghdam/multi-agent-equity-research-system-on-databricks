@@ -16,6 +16,7 @@ from equity_research.app_contracts import (  # noqa: E402
 from equity_research.config import Equity  # noqa: E402
 from equity_research.databricks_app_runtime import (  # noqa: E402
     CATALOG_ENV,
+    DAILY_PRICES_TABLE_ENV,
     FUNDAMENTAL_METRICS_TABLE_ENV,
     GOLD_SCHEMA_ENV,
     MARKET_METRICS_TABLE_ENV,
@@ -133,6 +134,9 @@ class DatabricksAppRuntimeTests(unittest.TestCase):
                 FUNDAMENTAL_METRICS_TABLE_ENV: (
                     "workspace.gold_schema.fundamental_metrics"
                 ),
+                DAILY_PRICES_TABLE_ENV: (
+                    "workspace.silver_schema.daily_prices"
+                ),
                 VECTOR_INDEX_ENV: "workspace.ai.index",
                 MLFLOW_EXPERIMENT_ENV: "/Shared/app-traces",
             }
@@ -153,6 +157,10 @@ class DatabricksAppRuntimeTests(unittest.TestCase):
         self.assertEqual(
             config.catalog,
             "workspace",
+        )
+        self.assertEqual(
+            config.daily_prices_table,
+            "workspace.silver_schema.daily_prices",
         )
         self.assertEqual(
             config.mlflow_experiment,
