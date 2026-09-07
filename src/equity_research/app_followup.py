@@ -338,6 +338,18 @@ def build_followup_session_payload(
                 else None
             ),
         ]
+        metadata_text = " · ".join(
+            part
+            for part in metadata_parts
+            if part
+        )
+
+        if not metadata_text:
+            metadata_text = (
+                "Validated citation "
+                f"{item['short_evidence_id']}."
+            )
+
         sources.append(
             {
                 "source_id": (
@@ -348,11 +360,7 @@ def build_followup_session_payload(
                 "symbols": list(
                     item["symbols"]
                 ),
-                "text": " · ".join(
-                    part
-                    for part in metadata_parts
-                    if part
-                ),
+                "text": metadata_text,
                 "evidence_ids": [
                     item["evidence_id"]
                 ],
