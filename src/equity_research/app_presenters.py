@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from urllib.parse import urlparse
 
 from equity_research.app_service import AppResearchSession
 
@@ -63,10 +64,21 @@ class PresentationReportSection:
 
 @dataclass(frozen=True)
 class PresentationEvidence:
-    """One validated citation reference prepared for rendering."""
+    """One publication-safe validated citation prepared for rendering."""
 
     evidence_id: str
+    short_evidence_id: str
     source_finding_ids: tuple[str, ...]
+    metadata_status: str
+    source_label: str | None
+    symbols: tuple[str, ...]
+    evidence_date: str | None
+    source_domain: str | None
+    source_url: str | None
+    source_business_id: str | None
+    section_label: str | None
+    retrieval_rank: int | None
+    chunk_index: int | None
 
 
 @dataclass(frozen=True)
@@ -157,14 +169,94 @@ def build_app_research_presentation(
             for section in report.sections
         ),
         limitations=report.limitations,
-        evidence=tuple(
-            PresentationEvidence(
-                evidence_id=item.evidence_id,
-                source_finding_ids=item.source_finding_ids,
-            )
-            for item in report.evidence
+        evidence=_evidence_presentation(
+            report.evidence,
+            session.structured.narrative_evidence,
         ),
     )
+
+
+def _evidence_presentation(
+    citations,
+    narrative_evidence,
+) -> tuple[PresentationEvidence, ...]:
+    evidence_by_id = {
+        item.evidence_id: item
+        for item in narrative_evidence
+    }
+
+    values: list[PresentationEvidence] = []
+
+    for citation in citations:
+        item = evidence_by_id.get(
+            citation.evidence_id
+        )
+
+        if item is None:
+            values.append(
+                PresentationEvidence(
+                    evidence_id=citation.evidence_id,
+                    short_evidence_id=_short_evidence_id(
+                        citation.evidence_id
+                    ),
+                    source_finding_ids=citation.source_finding_ids,
+                    metadata_status="citation_only",
+                    source_label=None,
+                    symbols=(),
+                    evidence_date=None,
+                    source_domain=None,
+                    source_url=None,
+                    source_business_id=None,
+                    section_label=None,
+                    retrieval_rank=None,
+                    chunk_index=None,
+                )
+            )
+            continue
+
+        source_label = (
+            "Alpaca/Benzinga news"
+            if item.source_type == "news"
+            else "SEC filing"
+        )
+        section_label = (
+            item.section_title
+            if item.source_type == "filing"
+            else None
+        )
+
+        values.append(
+            PresentationEvidence(
+                evidence_id=citation.evidence_id,
+                short_evidence_id=_short_evidence_id(
+                    citation.evidence_id
+                ),
+                source_finding_ids=citation.source_finding_ids,
+                metadata_status="ready",
+                source_label=source_label,
+                symbols=item.configured_symbols,
+                evidence_date=item.evidence_date.isoformat(),
+                source_domain=urlparse(
+                    item.source_url
+                ).netloc,
+                source_url=item.source_url,
+                source_business_id=item.source_business_id,
+                section_label=section_label,
+                retrieval_rank=item.retrieval_rank,
+                chunk_index=item.chunk_index,
+            )
+        )
+
+    return tuple(values)
+
+
+def _short_evidence_id(
+    evidence_id: str,
+) -> str:
+    if len(evidence_id) <= 16:
+        return evidence_id
+
+    return f"{evidence_id[:12]}…"
 
 
 def _market_history_presentation(
