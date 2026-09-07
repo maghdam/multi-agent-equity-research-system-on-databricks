@@ -98,17 +98,27 @@ class AppShellTests(unittest.TestCase):
                 60,
             )
 
+        self.assertEqual(
+            len(result),
+            6,
+        )
         self.assertIn(
             "Valid local preview",
-            result,
+            result[0],
         )
         self.assertIn(
             "mode=comparison",
-            result,
+            result[0],
         )
         self.assertIn(
             "symbols=AAPL,MSFT",
-            result,
+            result[0],
+        )
+        self.assertTrue(
+            all(
+                item is app_module.no_update
+                for item in result[1:]
+            )
         )
 
     def test_live_failure_logs_only_bounded_metadata(self) -> None:
@@ -156,9 +166,19 @@ class AppShellTests(unittest.TestCase):
                 60,
             )
 
+        self.assertEqual(
+            len(result),
+            6,
+        )
         self.assertIn(
             "Research execution failed safely",
-            result,
+            result[0],
+        )
+        self.assertTrue(
+            all(
+                item is app_module.no_update
+                for item in result[1:]
+            )
         )
         log_text = "\n".join(
             captured.output
@@ -195,18 +215,36 @@ class AppShellTests(unittest.TestCase):
             ),
             app_module.VECTOR_INDEX_ENV: "workspace.ai.index",
         }
-        report = SimpleNamespace(
+        session = object()
+        presentation = SimpleNamespace(
             mode="comparison",
             symbols=("AAPL", "MSFT"),
-            status="ready",
+            report_status="ready",
             synthesis_mode="model",
-            sections=(object(), object()),
-            evidence=(object(),),
-        )
-        session = SimpleNamespace(
-            research=SimpleNamespace(
-                report=report,
-            )
+            report_sections=(
+                SimpleNamespace(
+                    section="market_performance",
+                    title="Market performance",
+                    status="available",
+                    text="Market text.",
+                    source_finding_ids=("market:m1",),
+                ),
+                SimpleNamespace(
+                    section="recent_developments",
+                    title="Recent developments",
+                    status="available",
+                    text="Recent text.",
+                    source_finding_ids=("recent:r1",),
+                ),
+            ),
+            evidence=(
+                SimpleNamespace(
+                    evidence_id="news:e1",
+                    source_finding_ids=("recent:r1",),
+                ),
+            ),
+            companies=(),
+            limitations=(),
         )
 
         self.assertTrue(
@@ -234,6 +272,10 @@ class AppShellTests(unittest.TestCase):
                 "app.run_app_research",
                 return_value=session,
             ) as research_runner,
+            patch(
+                "app.build_app_research_presentation",
+                return_value=presentation,
+            ) as presenter,
         ):
             result = app_module.run_research_action(
                 1,
@@ -245,12 +287,35 @@ class AppShellTests(unittest.TestCase):
         config_loader.assert_called_once_with()
         runtime_factory.assert_called_once()
         research_runner.assert_called_once()
+        presenter.assert_called_once_with(
+            session
+        )
         self.assertEqual(
-            result,
+            len(result),
+            6,
+        )
+        self.assertEqual(
+            result[0],
             (
                 "Research complete: mode=comparison; symbols=AAPL,MSFT; "
                 "status=ready; synthesis_mode=model; sections=2; evidence=1."
             ),
+        )
+        self.assertIsInstance(
+            result[1],
+            list,
+        )
+        self.assertIsNotNone(
+            result[2],
+        )
+        self.assertIsNotNone(
+            result[3],
+        )
+        self.assertIsNotNone(
+            result[4],
+        )
+        self.assertIsNotNone(
+            result[5],
         )
 
 
