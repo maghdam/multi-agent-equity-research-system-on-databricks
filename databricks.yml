@@ -33,6 +33,9 @@ variables:
   embedding_model_endpoint_name:
     description: Databricks embedding endpoint used for document and query embeddings.
     default: databricks-gte-large-en
+  app_sql_warehouse_id:
+    description: Existing SQL warehouse used by the Databricks App for controlled Gold queries.
+    default: 43ebc7727b6328ed
 
 targets:
   dev:
