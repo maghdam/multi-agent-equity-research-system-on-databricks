@@ -316,6 +316,8 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
         - [ ] Inspect `databricks bundle plan -t dev` for the new app/resource grants, then perform the first controlled bundle deploy and app restart.
           - [x] Plan gate verified locally on 2026-09-07: `databricks bundle plan -t dev` returned `create apps.equity_research` with `Plan: 1 to add, 0 to change, 0 to delete, 19 unchanged`, confirming the first app deployment is isolated from the existing Milestone 1–2 resources.
           - [ ] Deploy the bundle, inspect the deployed app in `bundle summary`, then start/restart `equity_research` and verify startup health.
+            - [x] First bundle deployment on 2026-09-07 created `apps.equity_research`, uploaded 85 files, and reported `Resources: 1 created, 0 changed, 0 deleted, 19 unchanged`. `bundle summary` showed app name `equity-research-dev` with no active deployment URL yet, while all existing jobs/schemas remained present.
+            - [ ] Complete the first app startup-health gate. `databricks bundle run equity_research -t dev` successfully transitioned the app from `UNAVAILABLE` / compute `STOPPED` into startup and was still reporting `App is starting...` at the latest observed output; do not record startup success until the app reaches `RUNNING` or a deployment failure is diagnosed from app status/logs.
   - [ ] Render Overview/Market/Fundamentals from controlled data with exact as-of/status semantics and comparison-safe charts/tables.
   - [ ] Render the validated cited report and evidence/provenance views.
   - [ ] Add session-bound evidence-grounded follow-up chat over the active validated research context.
