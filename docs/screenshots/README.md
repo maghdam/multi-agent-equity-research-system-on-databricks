@@ -136,12 +136,22 @@ possible.
 
 ### 7. Final MLflow evaluation metrics
 
-Suggested filename:
+Suggested filenames:
 
-`07-mlflow-evaluation.png`
+```text
+07-mlflow-evaluation-1.png
+07-mlflow-evaluation-2.png
+07-mlflow-evaluation-3.png
+07-mlflow-evaluation-4.png
+```
 
-Capture the final managed E1/E2 evaluation run `spiffy-rat-765`, ideally showing the
-run name/status plus the strongest part of the metrics table.
+Use the four images as one ordered evidence set for the final managed E1/E2 evaluation
+run `spiffy-rat-765`. Splitting the Databricks metrics table across several readable
+screenshots is preferred to shrinking the whole table into one unreadable image.
+
+The first image should ideally establish the run identity/status and begin the metrics
+table; the remaining images should continue the metric list with as little overlap as
+practical.
 
 Key values worth keeping visible:
 
@@ -164,9 +174,10 @@ Why it matters:
 Shows measured grounding/safety/relevance quality and also preserves the honest
 retrieval-precision tradeoff instead of presenting only perfect scores.
 
-Prefer a crop centered on the run name/status and metrics. The `Created by` email,
+Prefer crops centered on the run name/status and metrics. The `Created by` email,
 workspace navigation, and other account details add little portfolio value and may be
-cropped out.
+cropped out. Keep the four screenshots at a consistent zoom/width so they read like a
+single paginated metric table.
 
 ### 8. Optional scope-refusal evidence
 
