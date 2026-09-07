@@ -307,6 +307,11 @@ class AppPresenterTests(unittest.TestCase):
             for metric in company.fundamental_metrics
             if metric.label == "Latest FY net income change"
         )
+        ttm_derivation = next(
+            metric
+            for metric in company.fundamental_metrics
+            if metric.label == "TTM derivation"
+        )
 
         self.assertEqual(
             revenue.value,
@@ -315,6 +320,10 @@ class AppPresenterTests(unittest.TestCase):
         self.assertEqual(
             net_income_change.value,
             "USD 18.27B",
+        )
+        self.assertEqual(
+            ttm_derivation.value,
+            "Annual + current YTD - prior YTD",
         )
 
 
