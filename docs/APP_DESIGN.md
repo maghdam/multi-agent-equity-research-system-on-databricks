@@ -88,9 +88,41 @@ preserving the provider-content/publication boundary.
 
 ### Follow-up research
 
-Uses the active research session: selected symbols/window, Supervisor state, final
-validated report, structured references, evidence IDs, and bounded conversation
-history.
+Follow-up is session-bound rather than a new unrestricted research agent.
+
+After a successful live research run, `app_followup.py` builds a JSON-safe context
+from:
+
+- the active one/two-company scope and exact selected market window;
+- final cited worker findings from the validated Supervisor state;
+- controlled structured values already surfaced by the app;
+- validated final report sections and limitations;
+- publication-safe evidence metadata and original-source links.
+
+Raw retrieved news/filing chunk text and news headlines are not copied into the
+browser follow-up context.
+
+The browser-held context is HMAC-signed with an ephemeral process key. Every Ask
+callback verifies the signature and schema before the context is trusted. Client-side
+tampering therefore fails closed. A process restart or instance change may invalidate
+an existing conversation; the user simply reruns research to create a fresh signed
+session. This avoids maintaining a server-side cache or persisting chat state for the
+MVP.
+
+Conversation history is bounded to the six most recent question/answer turns. A new
+research run resets the history so a previous company/window can never silently carry
+into a new research session.
+
+Follow-up synthesis uses `system.ai.gpt-oss-120b` with strict JSON output. Runtime
+validation requires every substantive answer to cite only source IDs from the signed
+context; evidence IDs must be linked to a cited source. Numerical claims must already
+exist in cited source text, and guarded comparative/directional terms must already be
+grounded there. One bounded repair is allowed after deterministic validation failure;
+a second failure returns a deterministic grounded-failure response instead of an
+unsupported answer.
+
+The UI renders source IDs as chips and safe evidence citations as links to the
+original source. Local preview mode does not enable follow-up chat.
 
 ## Thin application layer
 
