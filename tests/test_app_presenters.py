@@ -92,7 +92,7 @@ def _fundamental_metric() -> GoldFundamentalMetric:
         net_margin_ttm=Decimal("0.25"),
         assets_latest=Decimal("350000000000"),
         revenue_growth_latest_fy=Decimal("0.08"),
-        net_income_change_latest_fy=Decimal("0.10"),
+        net_income_change_latest_fy=Decimal("18274000000"),
         latest_fy_end=date(2025, 9, 27),
         prior_fy_end=date(2024, 9, 28),
         ttm_derivation_method="annual_plus_ytd_delta",
