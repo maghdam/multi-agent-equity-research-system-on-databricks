@@ -58,15 +58,15 @@ The MVP will not include trading execution, price prediction, portfolio optimiza
 
 ![Validated AAPL vs MSFT research report](docs/screenshots/03-research-report.png)
 
-## Databricks implementation evidence
+## Databricks platform architecture in practice
 
-### Databricks Workflows — daily market & news refresh
+### Automated daily market & news pipeline
 
 Bronze ingestion → Silver transformation → Gold market metrics → automated verification.
 
 ![Databricks daily market and news refresh workflow](docs/screenshots/08-databricks-daily-refresh-workflow.png)
 
-### Databricks Workflows — weekly fundamentals & SEC filings refresh
+### Automated weekly fundamentals & SEC filings pipeline
 
 Company facts + SEC filings → Silver transformations → Gold fundamentals → automated verification.
 
