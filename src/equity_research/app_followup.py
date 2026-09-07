@@ -9,6 +9,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 from typing import Any, Callable
 
 import mlflow
@@ -982,18 +983,24 @@ def run_followup_turn(
             AgentModelResponseError,
             FollowupAnswerContractError,
         ):
-            answer = FollowupAnswer(
-                answer=(
-                    "I could not produce a response that passed the "
-                    "active-session grounding checks. Please rephrase the "
-                    "question using the current research evidence."
-                ),
-                source_ids=(),
-                evidence_ids=(),
-                limitation=(
-                    "Follow-up response failed deterministic grounding "
-                    "validation after one bounded repair."
-                ),
+            answer = (
+                _deterministic_market_comparison_answer(
+                    question=normalized_question,
+                    session_payload=session_payload,
+                )
+                or FollowupAnswer(
+                    answer=(
+                        "I could not produce a response that passed the "
+                        "active-session grounding checks. Please rephrase the "
+                        "question using the current research evidence."
+                    ),
+                    source_ids=(),
+                    evidence_ids=(),
+                    limitation=(
+                        "Follow-up response failed deterministic grounding "
+                        "validation after one bounded repair."
+                    ),
+                )
             )
 
     conversation = [
@@ -1022,6 +1029,221 @@ def run_followup_turn(
             signing_key=signing_key,
         ),
         answer=answer,
+    )
+
+
+def _deterministic_market_comparison_answer(
+    *,
+    question: str,
+    session_payload: Mapping[str, Any],
+) -> FollowupAnswer | None:
+    """Answer bounded market comparisons from signed structured return metrics."""
+
+    research = session_payload.get(
+        "research"
+    )
+    sources = session_payload.get(
+        "sources"
+    )
+
+    if (
+        not isinstance(research, Mapping)
+        or not isinstance(sources, list)
+        or research.get("mode") != "comparison"
+    ):
+        return None
+
+    symbols_raw = research.get(
+        "symbols"
+    )
+    window = research.get(
+        "market_window_sessions"
+    )
+
+    if (
+        not isinstance(symbols_raw, list)
+        or len(symbols_raw) != 2
+        or not all(
+            isinstance(symbol, str)
+            and symbol.strip()
+            for symbol in symbols_raw
+        )
+        or not isinstance(window, int)
+        or isinstance(window, bool)
+    ):
+        return None
+
+    normalized_question = question.casefold()
+    comparison_terms = (
+        "stronger",
+        "weaker",
+        "better",
+        "worse",
+        "higher",
+        "lower",
+        "outperform",
+        "underperform",
+        "market performance",
+    )
+
+    if not any(
+        term in normalized_question
+        for term in comparison_terms
+    ):
+        return None
+
+    symbols = tuple(
+        symbol.strip().upper()
+        for symbol in symbols_raw
+    )
+    metric_label = (
+        f"{window}-session return"
+    )
+    values: dict[
+        str,
+        tuple[
+            Decimal,
+            str,
+            str,
+        ],
+    ] = {}
+
+    for source in sources:
+        if not isinstance(
+            source,
+            Mapping,
+        ) or source.get(
+            "source_type"
+        ) != "structured_metric":
+            continue
+
+        source_symbols = source.get(
+            "symbols"
+        )
+        source_text = source.get(
+            "text"
+        )
+        source_id = source.get(
+            "source_id"
+        )
+
+        if (
+            not isinstance(source_symbols, list)
+            or len(source_symbols) != 1
+            or not isinstance(source_text, str)
+            or not isinstance(source_id, str)
+        ):
+            continue
+
+        symbol = source_symbols[
+            0
+        ]
+
+        if (
+            not isinstance(symbol, str)
+            or symbol.strip().upper()
+            not in symbols
+        ):
+            continue
+
+        normalized_symbol = (
+            symbol.strip().upper()
+        )
+        prefix = (
+            f"{normalized_symbol} "
+            f"{metric_label}:"
+        )
+
+        if not source_text.startswith(
+            prefix
+        ):
+            continue
+
+        match = re.search(
+            r":\s*([+-]?\d+(?:\.\d+)?)%",
+            source_text,
+        )
+
+        if match is None:
+            continue
+
+        exact_value = (
+            f"{match.group(1)}%"
+        )
+        values[
+            normalized_symbol
+        ] = (
+            Decimal(
+                match.group(1)
+            ),
+            exact_value,
+            source_id,
+        )
+
+    if any(
+        symbol not in values
+        for symbol in symbols
+    ):
+        return None
+
+    left_symbol, right_symbol = (
+        symbols
+    )
+    left_value, left_text, left_source = (
+        values[
+            left_symbol
+        ]
+    )
+    right_value, right_text, right_source = (
+        values[
+            right_symbol
+        ]
+    )
+
+    if left_value == right_value:
+        answer_text = (
+            f"Using the active {metric_label}, neither company was stronger: "
+            f"{left_symbol} and {right_symbol} were both {left_text}."
+        )
+    else:
+        asks_for_weaker = any(
+            term in normalized_question
+            for term in (
+                "weaker",
+                "worse",
+                "lower",
+                "underperform",
+            )
+        )
+        if asks_for_weaker:
+            selected_symbol = (
+                left_symbol
+                if left_value < right_value
+                else right_symbol
+            )
+            relation = "weaker"
+        else:
+            selected_symbol = (
+                left_symbol
+                if left_value > right_value
+                else right_symbol
+            )
+            relation = "stronger"
+
+        answer_text = (
+            f"Using the active {metric_label}, {selected_symbol} showed the "
+            f"{relation} market performance: {left_symbol} {left_text} versus "
+            f"{right_symbol} {right_text}."
+        )
+
+    return FollowupAnswer(
+        answer=answer_text,
+        source_ids=(
+            left_source,
+            right_source,
+        ),
+        evidence_ids=(),
+        limitation=None,
     )
 
 
