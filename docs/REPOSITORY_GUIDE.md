@@ -115,6 +115,7 @@ The project separates **factual authority** from **language generation**:
 | `docs/APP_DESIGN.md` | Databricks App product, presentation, runtime, and session-bound follow-up design |
 | `docs/APP_OPERATIONS.md` | Privacy-safe APP_EVENT telemetry, feedback, and secure runtime operations |
 | `docs/APP_RELEASE_RUNBOOK.md` | App release, verification, rollback/redeployment, and reproduction procedure |
+| `docs/PORTFOLIO_DEMO.md` | Concise employer-facing end-to-end demo walkthrough and derived example output |
 | `docs/DATA_USAGE_PERMISSIONS.md` | Private-runtime and public-portfolio source-content boundary plus automated publication audit |
 | `docs/BUILD_GUIDE.md` | Build/development guidance |
 | `docs/REPOSITORY_GUIDE.md` | This cross-folder component map |
