@@ -245,6 +245,53 @@ class AppPresenterTests(unittest.TestCase):
             ("news:e1", "filing:e2"),
         )
 
+    def test_unavailable_market_result_does_not_render_stale_values(self) -> None:
+        session = _session()
+        stale_market = MarketMetricsToolResult(
+            symbol="AAPL",
+            display_name="Apple Inc.",
+            status="unavailable",
+            reason_code="stale",
+            limitation="AAPL market data is stale.",
+            metric=_market_metric(),
+        )
+        stale_session = AppResearchSession(
+            selection=session.selection,
+            request_text=session.request_text,
+            structured=AppStructuredSnapshot(
+                market_results=(stale_market,),
+                fundamental_results=(
+                    session.structured.fundamental_results[0],
+                ),
+            ),
+            research=session.research,
+        )
+
+        presentation = build_app_research_presentation(
+            stale_session
+        )
+        market_metrics = presentation.companies[0].market_metrics
+
+        self.assertEqual(
+            len(market_metrics),
+            1,
+        )
+        self.assertEqual(
+            market_metrics[0].label,
+            "Availability",
+        )
+        self.assertEqual(
+            market_metrics[0].value,
+            "AAPL market data is stale.",
+        )
+        self.assertNotIn(
+            "USD 250.00",
+            tuple(
+                metric.value
+                for metric in market_metrics
+            ),
+        )
+
     def test_money_values_are_compact_and_readable(self) -> None:
         presentation = build_app_research_presentation(
             _session()
