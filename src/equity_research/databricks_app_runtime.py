@@ -10,10 +10,37 @@ from typing import Any
 
 from databricks.sdk import WorkspaceClient
 
+from equity_research.app_contracts import AppResearchSelection
+from equity_research.app_service import AppStructuredSnapshot
+from equity_research.company_researcher import (
+    CompanyResearcherResult,
+    ResearchTopic,
+)
+from equity_research.config import Equity, load_equities
 from equity_research.databricks_cli_runtime import (
     RUNNING_SQL_STATES,
     TERMINAL_SQL_STATES,
     ControlledToolExecutionError,
+)
+from equity_research.market_analyst import MarketAnalystResult
+from equity_research.mlflow_tracing import (
+    MlflowTracingConfig,
+    run_traced_supervisor_research_graph,
+)
+from equity_research.supervisor_report_runtime import (
+    run_supervisor_report_synthesis,
+)
+from equity_research.supervisor_research_graph import (
+    SupervisorResearchResult,
+    run_supervisor_research_graph,
+)
+from equity_research.supervisor_worker_runtime import (
+    DatabricksSupervisorWorkers,
+    SupervisorWorkerRuntimeConfig,
+)
+from equity_research.worker_agent_runtime import (
+    run_company_researcher,
+    run_market_analyst,
 )
 
 
@@ -258,6 +285,169 @@ class DatabricksAppTransport:
             )
 
         return dict(response)
+
+
+class DatabricksAppResearchRuntime:
+    """Run the existing research graph through Databricks Apps auth."""
+
+    def __init__(
+        self,
+        *,
+        config: DatabricksAppRuntimeConfig,
+        transport: DatabricksAppTransport | None = None,
+        equities: Mapping[str, Equity] | None = None,
+    ) -> None:
+        if not isinstance(
+            config,
+            DatabricksAppRuntimeConfig,
+        ):
+            raise TypeError(
+                "config must be DatabricksAppRuntimeConfig."
+            )
+
+        self._config = config
+        self._transport = (
+            DatabricksAppTransport()
+            if transport is None
+            else transport
+        )
+        self._equities = (
+            dict(load_equities())
+            if equities is None
+            else dict(equities)
+        )
+
+    def run_research(
+        self,
+        *,
+        selection: AppResearchSelection,
+        request_text: str,
+    ) -> tuple[AppStructuredSnapshot, SupervisorResearchResult]:
+        """Run one request without cross-session mutable runtime state."""
+
+        if not isinstance(
+            selection,
+            AppResearchSelection,
+        ):
+            raise TypeError(
+                "selection must be AppResearchSelection."
+            )
+
+        if not isinstance(request_text, str) or not request_text.strip():
+            raise ValueError(
+                "request_text must be a nonblank string."
+            )
+
+        structured_snapshot: AppStructuredSnapshot | None = None
+
+        def market_agent_runner(
+            *,
+            requested_symbols,
+            market_results,
+            fundamental_results,
+            profile=None,
+            equities=None,
+        ) -> MarketAnalystResult:
+            nonlocal structured_snapshot
+
+            _require_no_profile(profile)
+            structured_snapshot = AppStructuredSnapshot(
+                market_results=tuple(
+                    market_results
+                ),
+                fundamental_results=tuple(
+                    fundamental_results
+                ),
+            )
+
+            return run_market_analyst(
+                requested_symbols=requested_symbols,
+                market_results=market_results,
+                fundamental_results=fundamental_results,
+                profile=None,
+                equities=equities,
+                model_query=self._transport.query_chat_completions,
+            )
+
+        def company_agent_runner(
+            *,
+            topic: ResearchTopic,
+            requested_symbols,
+            evidence,
+            profile=None,
+            equities=None,
+        ) -> CompanyResearcherResult:
+            _require_no_profile(profile)
+
+            return run_company_researcher(
+                topic=topic,
+                requested_symbols=requested_symbols,
+                evidence=evidence,
+                profile=None,
+                equities=equities,
+                model_query=self._transport.query_chat_completions,
+            )
+
+        worker_config = SupervisorWorkerRuntimeConfig(
+            warehouse_id=self._config.warehouse_id,
+            gold_schema=self._config.gold_schema,
+            index_name=self._config.index_name,
+            profile=None,
+            catalog=self._config.catalog,
+        )
+        workers = DatabricksSupervisorWorkers(
+            config=worker_config,
+            equities=self._equities,
+            statement_executor=self._transport.execute_statement,
+            vector_query=self._transport.query_vector_index,
+            market_agent_runner=market_agent_runner,
+            company_agent_runner=company_agent_runner,
+        )
+
+        def report_synthesizer(
+            *,
+            state,
+        ):
+            return run_supervisor_report_synthesis(
+                state=state,
+                profile=None,
+                model_query=self._transport.query_chat_completions,
+            )
+
+        if self._config.mlflow_experiment is not None:
+            tracing_config = MlflowTracingConfig(
+                experiment_name=self._config.mlflow_experiment,
+                profile=None,
+                environment="databricks_app",
+            )
+            result = run_traced_supervisor_research_graph(
+                request_text=request_text.strip(),
+                requested_symbols=selection.requested_symbols,
+                market_worker=workers.market_worker,
+                company_worker=workers.company_worker,
+                report_synthesizer=report_synthesizer,
+                tracing_config=tracing_config,
+                equities=self._equities,
+            )
+        else:
+            result = run_supervisor_research_graph(
+                request_text=request_text.strip(),
+                requested_symbols=selection.requested_symbols,
+                market_worker=workers.market_worker,
+                company_worker=workers.company_worker,
+                report_synthesizer=report_synthesizer,
+                equities=self._equities,
+            )
+
+        if structured_snapshot is None:
+            raise RuntimeError(
+                "Market Analyst path did not capture structured app data."
+            )
+
+        return (
+            structured_snapshot,
+            result,
+        )
 
 
 def _required_environment_value(
