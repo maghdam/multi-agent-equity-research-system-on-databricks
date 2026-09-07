@@ -604,13 +604,17 @@ class AppFollowupTests(unittest.TestCase):
         )
 
     def test_system_prompt_handles_unsupported_comparison_wording(self) -> None:
+        normalized_prompt = " ".join(
+            FOLLOWUP_SYSTEM_PROMPT.split()
+        )
+
         self.assertIn(
             "do not echo that unsupported wording",
-            FOLLOWUP_SYSTEM_PROMPT,
+            normalized_prompt,
         )
         self.assertIn(
             "explicit qualitative ranking",
-            FOLLOWUP_SYSTEM_PROMPT,
+            normalized_prompt,
         )
 
     def test_turn_repairs_malformed_structured_response(self) -> None:
