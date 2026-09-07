@@ -18,6 +18,25 @@ class PresentationMetric:
 
 
 @dataclass(frozen=True)
+class PresentationPricePoint:
+    """One normalized chart point."""
+
+    trading_date: str
+    indexed_close: float
+
+
+@dataclass(frozen=True)
+class PresentationPriceSeries:
+    """One presentation-safe normalized market-history series."""
+
+    symbol: str
+    display_name: str
+    status: str
+    limitation: str | None
+    points: tuple[PresentationPricePoint, ...]
+
+
+@dataclass(frozen=True)
 class PresentationCompany:
     """Presentation data for one selected company."""
 
@@ -60,6 +79,7 @@ class AppResearchPresentation:
     report_status: str
     synthesis_mode: str
     companies: tuple[PresentationCompany, ...]
+    market_history: tuple[PresentationPriceSeries, ...]
     report_sections: tuple[PresentationReportSection, ...]
     limitations: tuple[str, ...]
     evidence: tuple[PresentationEvidence, ...]
@@ -123,6 +143,9 @@ def build_app_research_presentation(
         report_status=report.status,
         synthesis_mode=report.synthesis_mode,
         companies=companies,
+        market_history=_market_history_presentation(
+            session.structured.market_history
+        ),
         report_sections=tuple(
             PresentationReportSection(
                 section=section.section,
@@ -142,6 +165,60 @@ def build_app_research_presentation(
             for item in report.evidence
         ),
     )
+
+
+def _market_history_presentation(
+    market_history,
+) -> tuple[PresentationPriceSeries, ...]:
+    series_values: list[PresentationPriceSeries] = []
+
+    for series in market_history:
+        if series.status != "ready" or not series.points:
+            series_values.append(
+                PresentationPriceSeries(
+                    symbol=series.symbol,
+                    display_name=series.display_name,
+                    status="unavailable",
+                    limitation=series.limitation or "Unavailable",
+                    points=(),
+                )
+            )
+            continue
+
+        base_close = series.points[0].close
+
+        if base_close <= 0:
+            raise ValueError(
+                "Ready market-history series must start with a positive close."
+            )
+
+        points = tuple(
+            PresentationPricePoint(
+                trading_date=point.trading_date.isoformat(),
+                indexed_close=float(
+                    (
+                        point.close
+                        / base_close
+                        * Decimal("100")
+                    ).quantize(
+                        Decimal("0.01")
+                    )
+                ),
+            )
+            for point in series.points
+        )
+
+        series_values.append(
+            PresentationPriceSeries(
+                symbol=series.symbol,
+                display_name=series.display_name,
+                status="ready",
+                limitation=None,
+                points=points,
+            )
+        )
+
+    return tuple(series_values)
 
 
 def _company_presentation(
