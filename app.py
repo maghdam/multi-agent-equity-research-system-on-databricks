@@ -59,7 +59,6 @@ from equity_research.config import load_equities  # noqa: E402
 from equity_research.databricks_app_runtime import (  # noqa: E402
     FUNDAMENTAL_METRICS_TABLE_ENV,
     MARKET_METRICS_TABLE_ENV,
-    MLFLOW_EXPERIMENT_ID_ENV,
     VECTOR_INDEX_ENV,
     WAREHOUSE_ENV,
     DatabricksAppResearchRuntime,
