@@ -188,7 +188,7 @@ def _session() -> AppResearchSession:
                     document_version_id="news-version",
                     source_type="news",
                     source_system="alpaca",
-                    configured_symbols=("AAPL",),
+                    configured_symbols=("AAPL", "MSFT"),
                     title="Synthetic licensed headline",
                     evidence_date=date(2026, 8, 30),
                     source_url="https://www.benzinga.com/news/example",
