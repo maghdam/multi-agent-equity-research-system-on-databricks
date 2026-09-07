@@ -45,8 +45,10 @@ from equity_research.worker_agent_runtime import (
 
 
 WAREHOUSE_ENV = "EQUITY_RESEARCH_WAREHOUSE_ID"
-GOLD_SCHEMA_ENV = "EQUITY_RESEARCH_GOLD_SCHEMA"
+MARKET_METRICS_TABLE_ENV = "EQUITY_RESEARCH_MARKET_METRICS_TABLE"
+FUNDAMENTAL_METRICS_TABLE_ENV = "EQUITY_RESEARCH_FUNDAMENTAL_METRICS_TABLE"
 VECTOR_INDEX_ENV = "EQUITY_RESEARCH_VECTOR_SEARCH_INDEX"
+GOLD_SCHEMA_ENV = "EQUITY_RESEARCH_GOLD_SCHEMA"
 CATALOG_ENV = "EQUITY_RESEARCH_CATALOG"
 MLFLOW_EXPERIMENT_ENV = "EQUITY_RESEARCH_MLFLOW_EXPERIMENT"
 
@@ -95,24 +97,21 @@ class DatabricksAppRuntimeConfig:
 
         values = os.environ if environment is None else environment
 
+        catalog, gold_schema = _resolve_gold_location(
+            values
+        )
+
         return cls(
             warehouse_id=_required_environment_value(
                 values,
                 WAREHOUSE_ENV,
             ),
-            gold_schema=_required_environment_value(
-                values,
-                GOLD_SCHEMA_ENV,
-            ),
+            gold_schema=gold_schema,
             index_name=_required_environment_value(
                 values,
                 VECTOR_INDEX_ENV,
             ),
-            catalog=_optional_environment_value(
-                values,
-                CATALOG_ENV,
-                DEFAULT_CATALOG,
-            ),
+            catalog=catalog,
             mlflow_experiment=_optional_environment_value(
                 values,
                 MLFLOW_EXPERIMENT_ENV,
@@ -448,6 +447,82 @@ class DatabricksAppResearchRuntime:
             structured_snapshot,
             result,
         )
+
+
+def _resolve_gold_location(
+    environment: Mapping[str, str],
+) -> tuple[str, str]:
+    market_table = environment.get(
+        MARKET_METRICS_TABLE_ENV
+    )
+    fundamental_table = environment.get(
+        FUNDAMENTAL_METRICS_TABLE_ENV
+    )
+
+    if market_table is None and fundamental_table is None:
+        return (
+            _optional_environment_value(
+                environment,
+                CATALOG_ENV,
+                DEFAULT_CATALOG,
+            ),
+            _required_environment_value(
+                environment,
+                GOLD_SCHEMA_ENV,
+            ),
+        )
+
+    market_parts = _bound_table_parts(
+        market_table,
+        environment_name=MARKET_METRICS_TABLE_ENV,
+        expected_table="market_metrics",
+    )
+    fundamental_parts = _bound_table_parts(
+        fundamental_table,
+        environment_name=FUNDAMENTAL_METRICS_TABLE_ENV,
+        expected_table="fundamental_metrics",
+    )
+
+    if market_parts[:2] != fundamental_parts[:2]:
+        raise ValueError(
+            "Bound market_metrics and fundamental_metrics tables "
+            "must share the same catalog and schema."
+        )
+
+    return (
+        market_parts[0],
+        market_parts[1],
+    )
+
+
+def _bound_table_parts(
+    value: object,
+    *,
+    environment_name: str,
+    expected_table: str,
+) -> tuple[str, str, str]:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(
+            f"Missing required Databricks App environment value: "
+            f"{environment_name}."
+        )
+
+    parts = tuple(
+        part.strip()
+        for part in value.split(".")
+    )
+
+    if (
+        len(parts) != 3
+        or any(not part for part in parts)
+        or parts[2] != expected_table
+    ):
+        raise ValueError(
+            f"{environment_name} must be a three-level table name ending "
+            f"in {expected_table!r}."
+        )
+
+    return parts
 
 
 def _required_environment_value(
