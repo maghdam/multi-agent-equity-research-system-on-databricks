@@ -13,6 +13,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import app as app_module  # noqa: E402
+from equity_research.databricks_app_runtime import (  # noqa: E402
+    MLFLOW_EXPERIMENT_ID_ENV,
+)
 
 
 def _component_by_id(component, component_id: str):
@@ -528,7 +531,7 @@ class AppShellTests(unittest.TestCase):
                 "workspace.gold.fundamental_metrics"
             ),
             app_module.VECTOR_INDEX_ENV: "workspace.ai.index",
-            app_module.MLFLOW_EXPERIMENT_ID_ENV: "123456789",
+            MLFLOW_EXPERIMENT_ID_ENV: "123456789",
         }
         transport = SimpleNamespace(
             query_chat_completions=object(),
