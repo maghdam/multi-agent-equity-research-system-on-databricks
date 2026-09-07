@@ -27,7 +27,6 @@ from equity_research.mlflow_runtime_spans import (
 )
 from equity_research.retrieval_tools import (
     MAX_RETRIEVAL_RESULTS,
-    EvidenceRecord,
     build_retrieval_query_payload,
     parse_retrieval_response,
 )
