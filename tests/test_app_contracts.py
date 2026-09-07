@@ -1,15 +1,21 @@
 from __future__ import annotations
 
+import sys
 import unittest
+from pathlib import Path
 
-from equity_research.app_contracts import (
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+from equity_research.app_contracts import (  # noqa: E402
     SUPPORTED_MARKET_WINDOWS,
     build_app_research_selection,
     build_research_request_text,
     company_selector_options,
 )
-from equity_research.config import Equity
-from equity_research.tool_scope import ControlledToolRequestError
+from equity_research.config import Equity  # noqa: E402
+from equity_research.tool_scope import ControlledToolRequestError  # noqa: E402
 
 
 EQUITIES = {
