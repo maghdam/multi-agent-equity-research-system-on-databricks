@@ -121,7 +121,7 @@ class AppShellTests(unittest.TestCase):
             )
         )
 
-    def test_live_failure_logs_only_bounded_metadata(self) -> None:
+    def test_optional_daily_prices_resource_does_not_force_preview(self) -> None:
         environment = {
             app_module.WAREHOUSE_ENV: "warehouse-1",
             app_module.MARKET_METRICS_TABLE_ENV: (
@@ -130,8 +130,23 @@ class AppShellTests(unittest.TestCase):
             app_module.FUNDAMENTAL_METRICS_TABLE_ENV: (
                 "workspace.gold.fundamental_metrics"
             ),
-            app_module.DAILY_PRICES_TABLE_ENV: (
-                "workspace.silver.daily_prices"
+            app_module.VECTOR_INDEX_ENV: "workspace.ai.index",
+        }
+
+        self.assertTrue(
+            app_module._databricks_app_resources_available(
+                environment
+            )
+        )
+
+    def test_live_failure_logs_only_bounded_metadata(self) -> None:
+        environment = {
+            app_module.WAREHOUSE_ENV: "warehouse-1",
+            app_module.MARKET_METRICS_TABLE_ENV: (
+                "workspace.gold.market_metrics"
+            ),
+            app_module.FUNDAMENTAL_METRICS_TABLE_ENV: (
+                "workspace.gold.fundamental_metrics"
             ),
             app_module.VECTOR_INDEX_ENV: "workspace.ai.index",
         }
@@ -215,9 +230,6 @@ class AppShellTests(unittest.TestCase):
             ),
             app_module.FUNDAMENTAL_METRICS_TABLE_ENV: (
                 "workspace.gold.fundamental_metrics"
-            ),
-            app_module.DAILY_PRICES_TABLE_ENV: (
-                "workspace.silver.daily_prices"
             ),
             app_module.VECTOR_INDEX_ENV: "workspace.ai.index",
         }
