@@ -4,6 +4,8 @@ command:
 env:
   - name: EQUITY_RESEARCH_WAREHOUSE_ID
     valueFrom: sql-warehouse
+  - name: MLFLOW_TRACING_SQL_WAREHOUSE_ID
+    valueFrom: sql-warehouse
   - name: EQUITY_RESEARCH_MARKET_METRICS_TABLE
     valueFrom: market-metrics
   - name: EQUITY_RESEARCH_FUNDAMENTAL_METRICS_TABLE
