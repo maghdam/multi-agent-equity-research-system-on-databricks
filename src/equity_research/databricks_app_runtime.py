@@ -7,6 +7,7 @@ import os
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
+from threading import Lock
 from typing import Any
 
 from databricks.sdk import WorkspaceClient
@@ -29,6 +30,7 @@ from equity_research.databricks_cli_runtime import (
     ControlledToolExecutionError,
 )
 from equity_research.market_analyst import MarketAnalystResult
+from equity_research.retrieval_tools import EvidenceRecord
 from equity_research.mlflow_tracing import (
     MlflowTracingConfig,
     run_traced_supervisor_research_graph,
@@ -362,6 +364,21 @@ class DatabricksAppResearchRuntime:
             )
 
         structured_snapshot: AppStructuredSnapshot | None = None
+        captured_evidence: dict[str, EvidenceRecord] = {}
+        evidence_lock = Lock()
+
+        def evidence_observer(
+            *,
+            topic,
+            symbol,
+            evidence,
+        ) -> None:
+            del topic, symbol
+
+            with evidence_lock:
+                for item in evidence:
+                    if item.evidence_id not in captured_evidence:
+                        captured_evidence[item.evidence_id] = item
 
         def market_agent_runner(
             *,
@@ -425,6 +442,7 @@ class DatabricksAppResearchRuntime:
             vector_query=self._transport.query_vector_index,
             market_agent_runner=market_agent_runner,
             company_agent_runner=company_agent_runner,
+            evidence_observer=evidence_observer,
         )
 
         def report_synthesizer(
@@ -471,9 +489,37 @@ class DatabricksAppResearchRuntime:
             selection=selection,
             market_results=structured_snapshot.market_results,
         )
+        cited_evidence_ids = tuple(
+            item.evidence_id
+            for item in result.report.evidence
+        )
+
+        with evidence_lock:
+            narrative_evidence = tuple(
+                captured_evidence[evidence_id]
+                for evidence_id in cited_evidence_ids
+                if evidence_id in captured_evidence
+            )
+
+        missing_evidence_count = (
+            len(cited_evidence_ids)
+            - len(narrative_evidence)
+        )
+
+        if missing_evidence_count:
+            logger.warning(
+                (
+                    "App citation metadata incomplete: symbols=%s "
+                    "missing_evidence_count=%s"
+                ),
+                ",".join(selection.requested_symbols),
+                missing_evidence_count,
+            )
+
         structured_snapshot = replace(
             structured_snapshot,
             market_history=market_history,
+            narrative_evidence=narrative_evidence,
         )
 
         return (
