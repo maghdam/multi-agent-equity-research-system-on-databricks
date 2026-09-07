@@ -278,6 +278,14 @@ It must not:
 - infer unsupported causal relationships;
 - provide price forecasts or trading recommendations.
 
+If the Market Analyst model output violates the deterministic application contract,
+the runtime may make one bounded repair attempt. If that repaired output still fails
+model-response or agent-contract validation while controlled Gold rows are ready, the
+runtime must use a deterministic Market Analyst fallback derived only from those same
+ready Gold rows. The fallback must itself pass the normal Market Analyst validator
+before it can reach the Supervisor. A model-formatting failure must not be presented
+as missing structured data when the controlled data is actually ready.
+
 ### 5.3 Company Researcher
 
 The Company Researcher owns evidence retrieval and narrative research.

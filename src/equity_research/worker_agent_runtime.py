@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Mapping, Sequence
 from typing import Any, Callable
 
@@ -19,6 +20,7 @@ from equity_research.databricks_cli_runtime import (
 )
 from equity_research.market_analyst import (
     MarketAnalystResult,
+    build_deterministic_market_analyst_result,
     build_market_analyst_context,
     validate_market_analyst_output,
 )
@@ -35,6 +37,9 @@ from equity_research.worker_agent_prompts import (
     build_market_analyst_model_request,
     build_market_analyst_repair_request,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class AgentModelResponseError(RuntimeError):
@@ -147,11 +152,11 @@ def run_market_analyst(
             ),
         },
     )
-    raw_output = parse_structured_chat_response(
-        response
-    )
 
     try:
+        raw_output = parse_structured_chat_response(
+            response
+        )
         return validate_market_analyst_output(
             raw_output,
             requested_symbols=requested_symbols,
@@ -159,36 +164,54 @@ def run_market_analyst(
             fundamental_results=fundamental_results,
             equities=equities,
         )
-    except AgentContractError as exc:
+    except (AgentContractError, AgentModelResponseError) as exc:
         repair_payload = build_market_analyst_repair_request(
             context,
             validation_error=str(exc),
         )
-        repair_response = run_traced_chat_completion(
-            span_name="market_analyst_20b_repair",
-            component="market_analyst",
-            attempt="repair",
-            payload=repair_payload,
-            profile=profile,
-            model_query=model_query,
-            safe_inputs={
-                "symbols": list(
-                    requested_symbols
-                ),
-                "market_result_count": len(
-                    market_results
-                ),
-                "fundamental_result_count": len(
-                    fundamental_results
-                ),
-            },
-        )
+
+    repair_response = run_traced_chat_completion(
+        span_name="market_analyst_20b_repair",
+        component="market_analyst",
+        attempt="repair",
+        payload=repair_payload,
+        profile=profile,
+        model_query=model_query,
+        safe_inputs={
+            "symbols": list(
+                requested_symbols
+            ),
+            "market_result_count": len(
+                market_results
+            ),
+            "fundamental_result_count": len(
+                fundamental_results
+            ),
+        },
+    )
+
+    try:
         repaired_output = parse_structured_chat_response(
             repair_response
         )
-
         return validate_market_analyst_output(
             repaired_output,
+            requested_symbols=requested_symbols,
+            market_results=market_results,
+            fundamental_results=fundamental_results,
+            equities=equities,
+        )
+    except (AgentContractError, AgentModelResponseError) as exc:
+        logger.warning(
+            (
+                "Market Analyst deterministic fallback used: "
+                "symbols=%s error_type=%s"
+            ),
+            ",".join(requested_symbols),
+            type(exc).__name__,
+        )
+
+        return build_deterministic_market_analyst_result(
             requested_symbols=requested_symbols,
             market_results=market_results,
             fundamental_results=fundamental_results,

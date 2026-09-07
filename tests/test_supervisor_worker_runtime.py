@@ -500,11 +500,13 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
             ]
         )
 
+        evidence_observer = Mock()
         workers = DatabricksSupervisorWorkers(
             config=self.config,
             equities=EQUITIES,
             vector_query=vector_query,
             company_agent_runner=company_agent_runner,
+            evidence_observer=evidence_observer,
         )
 
         with patch(
@@ -593,6 +595,34 @@ class DatabricksSupervisorWorkersTests(unittest.TestCase):
                 "AAPL:recent_developments-AAPL",
                 "MSFT:recent_developments-MSFT",
             ),
+        )
+        self.assertEqual(
+            evidence_observer.call_count,
+            2,
+        )
+        self.assertEqual(
+            tuple(
+                call.kwargs["symbol"]
+                for call in evidence_observer.call_args_list
+            ),
+            ("AAPL", "MSFT"),
+        )
+        self.assertEqual(
+            tuple(
+                call.kwargs["topic"]
+                for call in evidence_observer.call_args_list
+            ),
+            ("recent_developments", "recent_developments"),
+        )
+        self.assertEqual(
+            tuple(
+                tuple(
+                    item.evidence_id
+                    for item in call.kwargs["evidence"]
+                )
+                for call in evidence_observer.call_args_list
+            ),
+            (("a" * 64,), ("b" * 64,)),
         )
 
         filters = [

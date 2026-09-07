@@ -342,6 +342,154 @@ def validate_market_analyst_output(
     )
 
 
+def build_deterministic_market_analyst_result(
+    *,
+    requested_symbols: Sequence[str],
+    market_results: Sequence[MarketMetricsToolResult],
+    fundamental_results: Sequence[FundamentalMetricsToolResult],
+    equities: Mapping[str, Equity] | None = None,
+) -> MarketAnalystResult:
+    """Build a validator-checked fallback from controlled ready Gold rows."""
+
+    requested = resolve_requested_equities(
+        requested_symbols,
+        equities=equities,
+    )
+    symbols = tuple(
+        equity.symbol
+        for equity in requested
+    )
+    market_by_symbol = _index_results(
+        market_results,
+        expected_type=MarketMetricsToolResult,
+        requested_symbols=symbols,
+        dataset="market_metrics",
+    )
+    fundamental_by_symbol = _index_results(
+        fundamental_results,
+        expected_type=FundamentalMetricsToolResult,
+        requested_symbols=symbols,
+        dataset="fundamental_metrics",
+    )
+    findings: list[dict[str, Any]] = []
+
+    for symbol in symbols:
+        market_result = market_by_symbol[symbol]
+
+        if (
+            market_result.status == "ready"
+            and market_result.metric is not None
+        ):
+            metric = market_result.metric
+            findings.append(
+                {
+                    "finding_id": f"M-{symbol}",
+                    "dimension": "market",
+                    "symbols": [symbol],
+                    "statement": (
+                        f"On {metric.as_of_date.isoformat()} {symbol}'s "
+                        "60-session return was "
+                        f"{_format_rate(metric.return_60d)} and its "
+                        "60-session annualized volatility was "
+                        f"{_format_rate(metric.annualized_volatility_60d)}."
+                    ),
+                    "metric_references": [
+                        {
+                            "dataset": "market_metrics",
+                            "symbol": symbol,
+                            "as_of_date": metric.as_of_date.isoformat(),
+                            "fields": [
+                                "return_60d",
+                                "annualized_volatility_60d",
+                            ],
+                        }
+                    ],
+                }
+            )
+
+        fundamental_result = fundamental_by_symbol[symbol]
+
+        if (
+            fundamental_result.status == "ready"
+            and fundamental_result.metric is not None
+        ):
+            metric = fundamental_result.metric
+            findings.append(
+                {
+                    "finding_id": f"F-{symbol}",
+                    "dimension": "fundamental",
+                    "symbols": [symbol],
+                    "statement": (
+                        f"As of {metric.as_of_date.isoformat()} {symbol} had "
+                        "TTM revenue of "
+                        f"{_format_scaled_money(metric.revenue_ttm)} and a "
+                        "TTM net margin of "
+                        f"{_format_rate(metric.net_margin_ttm)}."
+                    ),
+                    "metric_references": [
+                        {
+                            "dataset": "fundamental_metrics",
+                            "symbol": symbol,
+                            "as_of_date": metric.as_of_date.isoformat(),
+                            "fields": [
+                                "revenue_ttm",
+                                "net_margin_ttm",
+                            ],
+                        }
+                    ],
+                }
+            )
+
+    return validate_market_analyst_output(
+        {
+            "findings": findings,
+        },
+        requested_symbols=symbols,
+        market_results=market_results,
+        fundamental_results=fundamental_results,
+        equities=equities,
+    )
+
+
+def _format_rate(
+    value: Decimal,
+) -> str:
+    percentage = (
+        value
+        * Decimal("100")
+    ).quantize(
+        Decimal("0.01")
+    )
+    return f"{percentage}%"
+
+
+def _format_scaled_money(
+    value: Decimal,
+) -> str:
+    absolute = abs(value)
+
+    for threshold, label in (
+        (Decimal("1000000000000"), "trillion"),
+        (Decimal("1000000000"), "billion"),
+        (Decimal("1000000"), "million"),
+        (Decimal("1000"), "thousand"),
+    ):
+        if absolute >= threshold:
+            scaled = (
+                value
+                / threshold
+            ).quantize(
+                Decimal("0.01")
+            )
+            return f"{scaled} {label}"
+
+    return str(
+        value.quantize(
+            Decimal("0.01")
+        )
+    )
+
+
 def _parse_metric_reference(
     raw: object,
     *,

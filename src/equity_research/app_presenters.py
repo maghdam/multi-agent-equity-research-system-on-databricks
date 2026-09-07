@@ -1,0 +1,604 @@
+"""Presentation-safe DTOs for the Databricks equity-research app."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from decimal import Decimal
+from urllib.parse import urlparse
+
+from equity_research.app_service import AppResearchSession
+
+
+@dataclass(frozen=True)
+class PresentationMetric:
+    """One display metric with explicit label/value/status."""
+
+    label: str
+    value: str
+    status: str = "ready"
+
+
+@dataclass(frozen=True)
+class PresentationPricePoint:
+    """One normalized chart point."""
+
+    trading_date: str
+    indexed_close: float
+
+
+@dataclass(frozen=True)
+class PresentationPriceSeries:
+    """One presentation-safe normalized market-history series."""
+
+    symbol: str
+    display_name: str
+    status: str
+    limitation: str | None
+    points: tuple[PresentationPricePoint, ...]
+
+
+@dataclass(frozen=True)
+class PresentationCompany:
+    """Presentation data for one selected company."""
+
+    symbol: str
+    display_name: str
+    market_status: str
+    market_as_of: str | None
+    market_metrics: tuple[PresentationMetric, ...]
+    fundamental_status: str
+    fundamental_as_of: str | None
+    fundamental_metrics: tuple[PresentationMetric, ...]
+
+
+@dataclass(frozen=True)
+class PresentationReportSection:
+    """One validated report section prepared for rendering."""
+
+    section: str
+    title: str
+    status: str
+    text: str
+    source_finding_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PresentationEvidence:
+    """One publication-safe validated citation prepared for rendering."""
+
+    evidence_id: str
+    short_evidence_id: str
+    source_finding_ids: tuple[str, ...]
+    metadata_status: str
+    source_label: str | None
+    symbols: tuple[str, ...]
+    evidence_date: str | None
+    source_domain: str | None
+    source_url: str | None
+    source_business_id: str | None
+    section_label: str | None
+    retrieval_rank: int | None
+    chunk_index: int | None
+
+
+@dataclass(frozen=True)
+class AppResearchPresentation:
+    """Complete JSON-safe presentation contract for one research session."""
+
+    mode: str
+    symbols: tuple[str, ...]
+    market_window_sessions: int
+    report_status: str
+    synthesis_mode: str
+    companies: tuple[PresentationCompany, ...]
+    market_history: tuple[PresentationPriceSeries, ...]
+    report_sections: tuple[PresentationReportSection, ...]
+    limitations: tuple[str, ...]
+    evidence: tuple[PresentationEvidence, ...]
+
+
+SECTION_TITLES = {
+    "market_performance": "Market performance",
+    "fundamental_performance": "Fundamental performance",
+    "recent_developments": "Recent developments",
+    "principal_risks": "Principal risks",
+    "comparative_assessment": "Comparative assessment",
+}
+
+WINDOW_RETURN_FIELDS = {
+    1: "return_1d",
+    5: "return_5d",
+    20: "return_20d",
+    60: "return_60d",
+}
+
+
+def build_app_research_presentation(
+    session: AppResearchSession,
+) -> AppResearchPresentation:
+    """Convert one validated app session into presentation-only DTOs."""
+
+    if not isinstance(session, AppResearchSession):
+        raise TypeError(
+            "session must be AppResearchSession."
+        )
+
+    market_by_symbol = {
+        result.symbol: result
+        for result in session.structured.market_results
+    }
+    fundamentals_by_symbol = {
+        result.symbol: result
+        for result in session.structured.fundamental_results
+    }
+
+    companies = tuple(
+        _company_presentation(
+            symbol=symbol,
+            market_result=market_by_symbol[symbol],
+            fundamental_result=fundamentals_by_symbol[symbol],
+            market_window_sessions=(
+                session.selection.market_window_sessions
+            ),
+        )
+        for symbol in session.selection.requested_symbols
+    )
+
+    report = session.research.report
+
+    return AppResearchPresentation(
+        mode=report.mode,
+        symbols=report.symbols,
+        market_window_sessions=(
+            session.selection.market_window_sessions
+        ),
+        report_status=report.status,
+        synthesis_mode=report.synthesis_mode,
+        companies=companies,
+        market_history=_market_history_presentation(
+            session.structured.market_history
+        ),
+        report_sections=tuple(
+            PresentationReportSection(
+                section=section.section,
+                title=SECTION_TITLES[section.section],
+                status=section.status,
+                text=section.text,
+                source_finding_ids=section.source_finding_ids,
+            )
+            for section in report.sections
+        ),
+        limitations=report.limitations,
+        evidence=_evidence_presentation(
+            report.evidence,
+            session.structured.narrative_evidence,
+            requested_symbols=report.symbols,
+        ),
+    )
+
+
+def _evidence_presentation(
+    citations,
+    narrative_evidence,
+    *,
+    requested_symbols,
+) -> tuple[PresentationEvidence, ...]:
+    evidence_by_id = {
+        item.evidence_id: item
+        for item in narrative_evidence
+    }
+
+    values: list[PresentationEvidence] = []
+
+    for citation in citations:
+        item = evidence_by_id.get(
+            citation.evidence_id
+        )
+
+        if item is None:
+            values.append(
+                PresentationEvidence(
+                    evidence_id=citation.evidence_id,
+                    short_evidence_id=_short_evidence_id(
+                        citation.evidence_id
+                    ),
+                    source_finding_ids=citation.source_finding_ids,
+                    metadata_status="citation_only",
+                    source_label=None,
+                    symbols=(),
+                    evidence_date=None,
+                    source_domain=None,
+                    source_url=None,
+                    source_business_id=None,
+                    section_label=None,
+                    retrieval_rank=None,
+                    chunk_index=None,
+                )
+            )
+            continue
+
+        source_label = (
+            "Alpaca/Benzinga news"
+            if item.source_type == "news"
+            else "SEC filing"
+        )
+        section_label = (
+            item.section_title
+            if item.source_type == "filing"
+            else None
+        )
+
+        values.append(
+            PresentationEvidence(
+                evidence_id=citation.evidence_id,
+                short_evidence_id=_short_evidence_id(
+                    citation.evidence_id
+                ),
+                source_finding_ids=citation.source_finding_ids,
+                metadata_status="ready",
+                source_label=source_label,
+                symbols=tuple(
+                    symbol
+                    for symbol in item.configured_symbols
+                    if symbol in requested_symbols
+                ),
+                evidence_date=item.evidence_date.isoformat(),
+                source_domain=urlparse(
+                    item.source_url
+                ).netloc,
+                source_url=item.source_url,
+                source_business_id=item.source_business_id,
+                section_label=section_label,
+                retrieval_rank=item.retrieval_rank,
+                chunk_index=item.chunk_index,
+            )
+        )
+
+    return tuple(values)
+
+
+def _short_evidence_id(
+    evidence_id: str,
+) -> str:
+    if len(evidence_id) <= 16:
+        return evidence_id
+
+    return f"{evidence_id[:12]}…"
+
+
+def _market_history_presentation(
+    market_history,
+) -> tuple[PresentationPriceSeries, ...]:
+    series_values: list[PresentationPriceSeries] = []
+
+    for series in market_history:
+        if series.status != "ready" or not series.points:
+            series_values.append(
+                PresentationPriceSeries(
+                    symbol=series.symbol,
+                    display_name=series.display_name,
+                    status="unavailable",
+                    limitation=series.limitation or "Unavailable",
+                    points=(),
+                )
+            )
+            continue
+
+        base_close = series.points[0].close
+
+        if base_close <= 0:
+            raise ValueError(
+                "Ready market-history series must start with a positive close."
+            )
+
+        points = tuple(
+            PresentationPricePoint(
+                trading_date=point.trading_date.isoformat(),
+                indexed_close=float(
+                    (
+                        point.close
+                        / base_close
+                        * Decimal("100")
+                    ).quantize(
+                        Decimal("0.01")
+                    )
+                ),
+            )
+            for point in series.points
+        )
+
+        series_values.append(
+            PresentationPriceSeries(
+                symbol=series.symbol,
+                display_name=series.display_name,
+                status="ready",
+                limitation=None,
+                points=points,
+            )
+        )
+
+    return tuple(series_values)
+
+
+def _company_presentation(
+    *,
+    symbol: str,
+    market_result,
+    fundamental_result,
+    market_window_sessions: int,
+) -> PresentationCompany:
+    if market_result.symbol != symbol:
+        raise ValueError(
+            "market result symbol does not match presentation symbol."
+        )
+
+    if fundamental_result.symbol != symbol:
+        raise ValueError(
+            "fundamental result symbol does not match presentation symbol."
+        )
+
+    market_metric = market_result.metric
+    fundamental_metric = fundamental_result.metric
+
+    return PresentationCompany(
+        symbol=symbol,
+        display_name=market_result.display_name,
+        market_status=market_result.status,
+        market_as_of=(
+            market_metric.as_of_date.isoformat()
+            if market_metric is not None
+            else None
+        ),
+        market_metrics=_market_metrics(
+            market_result=market_result,
+            market_window_sessions=market_window_sessions,
+        ),
+        fundamental_status=fundamental_result.status,
+        fundamental_as_of=(
+            fundamental_metric.as_of_date.isoformat()
+            if fundamental_metric is not None
+            else None
+        ),
+        fundamental_metrics=_fundamental_metrics(
+            fundamental_result=fundamental_result,
+        ),
+    )
+
+
+def _market_metrics(
+    *,
+    market_result,
+    market_window_sessions: int,
+) -> tuple[PresentationMetric, ...]:
+    metric = market_result.metric
+
+    if market_result.status != "ready" or metric is None:
+        return (
+            PresentationMetric(
+                label="Availability",
+                value=market_result.limitation or "Unavailable",
+                status="unavailable",
+            ),
+        )
+
+    selected_field = WINDOW_RETURN_FIELDS[
+        market_window_sessions
+    ]
+    selected_return = getattr(
+        metric,
+        selected_field,
+    )
+
+    values = (
+        PresentationMetric(
+            label="Close",
+            value=_money(metric.close, metric.currency),
+            status=market_result.status,
+        ),
+        PresentationMetric(
+            label=f"{market_window_sessions}-session return",
+            value=_percentage(selected_return),
+            status=market_result.status,
+        ),
+        PresentationMetric(
+            label="1-session return",
+            value=_percentage(metric.return_1d),
+            status=market_result.status,
+        ),
+        PresentationMetric(
+            label="5-session return",
+            value=_percentage(metric.return_5d),
+            status=market_result.status,
+        ),
+        PresentationMetric(
+            label="20-session return",
+            value=_percentage(metric.return_20d),
+            status=market_result.status,
+        ),
+        PresentationMetric(
+            label="60-session return",
+            value=_percentage(metric.return_60d),
+            status=market_result.status,
+        ),
+        PresentationMetric(
+            label="20-session annualized volatility",
+            value=_percentage(
+                metric.annualized_volatility_20d
+            ),
+            status=market_result.status,
+        ),
+        PresentationMetric(
+            label="60-session annualized volatility",
+            value=_percentage(
+                metric.annualized_volatility_60d
+            ),
+            status=market_result.status,
+        ),
+        PresentationMetric(
+            label="Current 60-session drawdown",
+            value=_percentage(
+                metric.current_drawdown_60d
+            ),
+            status=market_result.status,
+        ),
+        PresentationMetric(
+            label="Maximum 60-session drawdown",
+            value=_percentage(
+                metric.max_drawdown_60d
+            ),
+            status=market_result.status,
+        ),
+        PresentationMetric(
+            label="SMA 20",
+            value=_money(metric.sma_20, metric.currency),
+            status=market_result.status,
+        ),
+        PresentationMetric(
+            label="SMA 60",
+            value=_money(metric.sma_60, metric.currency),
+            status=market_result.status,
+        ),
+    )
+
+    if market_result.limitation:
+        return (
+            *values,
+            PresentationMetric(
+                label="Market limitation",
+                value=market_result.limitation,
+                status="unavailable",
+            ),
+        )
+
+    return values
+
+
+def _fundamental_metrics(
+    *,
+    fundamental_result,
+) -> tuple[PresentationMetric, ...]:
+    metric = fundamental_result.metric
+
+    if fundamental_result.status != "ready" or metric is None:
+        return (
+            PresentationMetric(
+                label="Availability",
+                value=fundamental_result.limitation or "Unavailable",
+                status="unavailable",
+            ),
+        )
+
+    values = (
+        PresentationMetric(
+            label="Revenue TTM",
+            value=_compact_money(metric.revenue_ttm),
+            status=fundamental_result.status,
+        ),
+        PresentationMetric(
+            label="Net income TTM",
+            value=_compact_money(metric.net_income_ttm),
+            status=fundamental_result.status,
+        ),
+        PresentationMetric(
+            label="Net margin TTM",
+            value=_percentage(metric.net_margin_ttm),
+            status=fundamental_result.status,
+        ),
+        PresentationMetric(
+            label="Assets",
+            value=_compact_money(metric.assets_latest),
+            status=fundamental_result.status,
+        ),
+        PresentationMetric(
+            label="Latest FY revenue growth",
+            value=_percentage(
+                metric.revenue_growth_latest_fy
+            ),
+            status=fundamental_result.status,
+        ),
+        PresentationMetric(
+            label="Latest FY net income change",
+            value=_compact_money(
+                metric.net_income_change_latest_fy
+            ),
+            status=fundamental_result.status,
+        ),
+        PresentationMetric(
+            label="Latest filing",
+            value=(
+                f"{metric.latest_filing_form} · "
+                f"{metric.fundamental_period_end.isoformat()}"
+            ),
+            status=fundamental_result.status,
+        ),
+        PresentationMetric(
+            label="TTM derivation",
+            value=_ttm_derivation_label(
+                metric.ttm_derivation_method
+            ),
+            status=fundamental_result.status,
+        ),
+    )
+
+    if fundamental_result.limitation:
+        return (
+            *values,
+            PresentationMetric(
+                label="Fundamental limitation",
+                value=fundamental_result.limitation,
+                status="unavailable",
+            ),
+        )
+
+    return values
+
+
+def _ttm_derivation_label(
+    method: str,
+) -> str:
+    labels = {
+        "annual": "Latest annual filing",
+        "annual_plus_ytd_minus_prior_ytd": (
+            "Annual + current YTD - prior YTD"
+        ),
+    }
+    return labels.get(
+        method,
+        method.replace("_", " "),
+    )
+
+
+def _percentage(
+    value: Decimal,
+) -> str:
+    percentage = value * Decimal("100")
+    return f"{percentage.quantize(Decimal('0.01'))}%"
+
+
+def _money(
+    value: Decimal,
+    currency: str,
+) -> str:
+    return (
+        f"{currency} "
+        f"{value.quantize(Decimal('0.01')):,.2f}"
+    )
+
+
+def _compact_money(
+    value: Decimal,
+) -> str:
+    absolute = abs(value)
+
+    for threshold, suffix in (
+        (Decimal("1000000000000"), "T"),
+        (Decimal("1000000000"), "B"),
+        (Decimal("1000000"), "M"),
+    ):
+        if absolute >= threshold:
+            scaled = value / threshold
+            return (
+                f"USD {scaled.quantize(Decimal('0.01')):,.2f}{suffix}"
+            )
+
+    return f"USD {value.quantize(Decimal('0.01')):,.2f}"

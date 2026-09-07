@@ -47,5 +47,8 @@ jobs:
           python -m unittest discover -s tests -p "test_mlflow_runtime_spans.py"
           python -m unittest discover -s tests -p "test_mlflow_tracing.py"
 
+      - name: Public portfolio boundary audit
+        run: python scripts/audit_publication_boundary.py
+
       - name: Offline unit and contract tests
         run: python -m unittest discover -s tests -p "test_*.py"

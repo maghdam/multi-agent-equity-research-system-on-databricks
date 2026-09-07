@@ -1,0 +1,181 @@
+"""Framework-independent application service for research sessions."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Protocol
+
+from equity_research.app_contracts import (
+    AppResearchSelection,
+    build_research_request_text,
+)
+from equity_research.app_market_history import (
+    AppMarketHistorySeries,
+)
+from equity_research.config import Equity
+from equity_research.retrieval_tools import EvidenceRecord
+from equity_research.structured_data_tools import (
+    FundamentalMetricsToolResult,
+    MarketMetricsToolResult,
+)
+from equity_research.supervisor_research_graph import (
+    SupervisorResearchResult,
+)
+
+
+@dataclass(frozen=True)
+class AppStructuredSnapshot:
+    """Controlled structured data loaded for one app selection."""
+
+    market_results: tuple[MarketMetricsToolResult, ...]
+    fundamental_results: tuple[FundamentalMetricsToolResult, ...]
+    market_history: tuple[AppMarketHistorySeries, ...] = ()
+    narrative_evidence: tuple[EvidenceRecord, ...] = ()
+
+
+@dataclass(frozen=True)
+class AppResearchSession:
+    """Complete validated application result for one research action."""
+
+    selection: AppResearchSelection
+    request_text: str
+    structured: AppStructuredSnapshot
+    research: SupervisorResearchResult
+
+
+class AppResearchRuntime(Protocol):
+    """Runtime boundary implemented separately for local and Databricks Apps."""
+
+    def run_research(
+        self,
+        *,
+        selection: AppResearchSelection,
+        request_text: str,
+    ) -> tuple[AppStructuredSnapshot, SupervisorResearchResult]:
+        """Return one structured snapshot plus validated Supervisor result."""
+
+
+def run_app_research(
+    *,
+    selection: AppResearchSelection,
+    runtime: AppResearchRuntime,
+    equities: Mapping[str, Equity] | None = None,
+) -> AppResearchSession:
+    """Run one application research action through injected backend runtime."""
+
+    if not isinstance(selection, AppResearchSelection):
+        raise TypeError(
+            "selection must be AppResearchSelection."
+        )
+
+    request_text = build_research_request_text(
+        selection,
+        equities=equities,
+    )
+    structured, research = runtime.run_research(
+        selection=selection,
+        request_text=request_text,
+    )
+    _validate_structured_snapshot(
+        selection=selection,
+        structured=structured,
+    )
+    _validate_research_result(
+        selection=selection,
+        research=research,
+    )
+
+    return AppResearchSession(
+        selection=selection,
+        request_text=request_text,
+        structured=structured,
+        research=research,
+    )
+
+
+def _validate_structured_snapshot(
+    *,
+    selection: AppResearchSelection,
+    structured: AppStructuredSnapshot,
+) -> None:
+    if not isinstance(structured, AppStructuredSnapshot):
+        raise TypeError(
+            "runtime must return AppStructuredSnapshot."
+        )
+
+    expected = selection.requested_symbols
+
+    for name, results in (
+        ("market_results", structured.market_results),
+        ("fundamental_results", structured.fundamental_results),
+    ):
+        symbols = tuple(
+            result.symbol
+            for result in results
+        )
+        if symbols != expected:
+            raise ValueError(
+                f"{name} symbols must exactly match the app selection "
+                f"{expected}; received {symbols}."
+            )
+
+
+    if structured.market_history:
+        history_symbols = tuple(
+            series.symbol
+            for series in structured.market_history
+        )
+
+        if history_symbols != expected:
+            raise ValueError(
+                "market_history symbols must exactly match the app selection "
+                f"{expected}; received {history_symbols}."
+            )
+
+    evidence_ids: set[str] = set()
+
+    for item in structured.narrative_evidence:
+        if not isinstance(
+            item,
+            EvidenceRecord,
+        ):
+            raise TypeError(
+                "narrative_evidence must contain EvidenceRecord values."
+            )
+
+        if item.evidence_id in evidence_ids:
+            raise ValueError(
+                "narrative_evidence evidence IDs must be unique."
+            )
+        evidence_ids.add(
+            item.evidence_id
+        )
+
+        if not set(item.configured_symbols).intersection(
+            expected
+        ):
+            raise ValueError(
+                "narrative_evidence must remain inside the app selection."
+            )
+
+
+def _validate_research_result(
+    *,
+    selection: AppResearchSelection,
+    research: SupervisorResearchResult,
+) -> None:
+    if not isinstance(research, SupervisorResearchResult):
+        raise TypeError(
+            "runtime must return SupervisorResearchResult."
+        )
+
+    if research.report.symbols != selection.requested_symbols:
+        raise ValueError(
+            "Supervisor report symbols must exactly match the app selection."
+        )
+
+    if research.report.mode != selection.mode:
+        raise ValueError(
+            "Supervisor report mode must match the app selection."
+        )

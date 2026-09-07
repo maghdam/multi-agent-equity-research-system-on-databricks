@@ -21,6 +21,7 @@ from equity_research.gold_fundamental_metrics import (  # noqa: E402
 )
 from equity_research.gold_market_metrics import GoldMarketMetric  # noqa: E402
 from equity_research.market_analyst import (  # noqa: E402
+    build_deterministic_market_analyst_result,
     build_market_analyst_context,
     validate_market_analyst_output,
 )
@@ -334,6 +335,44 @@ class MarketAnalystContractTests(unittest.TestCase):
             ("M1", "F1"),
         )
         self.assertEqual(result.limitations, ())
+
+    def test_deterministic_market_fallback_validates_ready_gold(
+        self,
+    ) -> None:
+        result = build_deterministic_market_analyst_result(
+            requested_symbols=("AAPL",),
+            market_results=(_market_result("AAPL"),),
+            fundamental_results=(_fundamental_result("AAPL"),),
+            equities=EQUITIES,
+        )
+
+        self.assertEqual(
+            tuple(
+                finding.finding_id
+                for finding in result.findings
+            ),
+            ("M-AAPL", "F-AAPL"),
+        )
+        self.assertIn(
+            "4.00%",
+            result.findings[0].statement,
+        )
+        self.assertIn(
+            "25.00%",
+            result.findings[0].statement,
+        )
+        self.assertIn(
+            "1.00 billion",
+            result.findings[1].statement,
+        )
+        self.assertIn(
+            "20.00%",
+            result.findings[1].statement,
+        )
+        self.assertEqual(
+            result.limitations,
+            (),
+        )
 
     def test_rejects_silent_omission_of_ready_dimension(self) -> None:
         with self.assertRaisesRegex(
@@ -806,7 +845,9 @@ class WorkerAgentRunnerTests(unittest.TestCase):
             repair_message,
         )
 
-    def test_market_runner_second_contract_violation_still_fails(self) -> None:
+    def test_market_runner_second_contract_violation_uses_fallback(
+        self,
+    ) -> None:
         invalid_response = {
             "choices": [
                 {
@@ -844,11 +885,11 @@ class WorkerAgentRunnerTests(unittest.TestCase):
             )
             return invalid_response
 
-        with self.assertRaisesRegex(
-            AgentContractError,
-            "numerical claims that are not supported",
-        ):
-            run_market_analyst(
+        with self.assertLogs(
+            "equity_research.worker_agent_runtime",
+            level="WARNING",
+        ) as captured:
+            result = run_market_analyst(
                 requested_symbols=("AAPL",),
                 market_results=(_market_result("AAPL"),),
                 fundamental_results=(_fundamental_result("AAPL"),),
@@ -859,6 +900,28 @@ class WorkerAgentRunnerTests(unittest.TestCase):
         self.assertEqual(
             len(calls),
             2,
+        )
+        self.assertEqual(
+            tuple(
+                finding.finding_id
+                for finding in result.findings
+            ),
+            ("M-AAPL", "F-AAPL"),
+        )
+        self.assertEqual(
+            result.limitations,
+            (),
+        )
+        log_text = "\n".join(
+            captured.output
+        )
+        self.assertIn(
+            "deterministic fallback used",
+            log_text,
+        )
+        self.assertIn(
+            "symbols=AAPL",
+            log_text,
         )
 
     def test_company_runner_rejects_model_invented_evidence_id(self) -> None:

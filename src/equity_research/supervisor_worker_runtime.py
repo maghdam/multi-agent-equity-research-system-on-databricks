@@ -142,6 +142,7 @@ class DatabricksSupervisorWorkers:
         company_agent_runner: Callable[..., CompanyResearcherResult] = (
             run_company_researcher
         ),
+        evidence_observer: Callable[..., None] | None = None,
         clock: Callable[[], datetime] = (
             lambda: datetime.now(timezone.utc)
         ),
@@ -166,6 +167,13 @@ class DatabricksSupervisorWorkers:
                     f"{name} must be callable."
                 )
 
+        if evidence_observer is not None and not callable(
+            evidence_observer
+        ):
+            raise TypeError(
+                "evidence_observer must be callable or None."
+            )
+
         self._config = config
         self._equities = (
             dict(load_equities())
@@ -176,6 +184,7 @@ class DatabricksSupervisorWorkers:
         self._vector_query = vector_query
         self._market_agent_runner = market_agent_runner
         self._company_agent_runner = company_agent_runner
+        self._evidence_observer = evidence_observer
         self._clock = clock
 
     def market_worker(
@@ -432,6 +441,13 @@ class DatabricksSupervisorWorkers:
                             ranked_evidence
                         )
                     )
+
+            if self._evidence_observer is not None:
+                self._evidence_observer(
+                    topic=topic,
+                    symbol=symbol,
+                    evidence=ranked_evidence,
+                )
 
             result = self._company_agent_runner(
                 topic=topic,
