@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -71,6 +72,8 @@ window_options = [
     }
     for value in SUPPORTED_MARKET_WINDOWS
 ]
+
+logger = logging.getLogger(__name__)
 
 app = Dash(__name__, title="Equity Research Workspace")
 server = app.server
@@ -407,7 +410,17 @@ def run_research_action(
             runtime=runtime,
             equities=equities,
         )
-    except Exception:
+    except Exception as exc:
+        logger.error(
+            (
+                "Research execution failed safely: mode=%s symbols=%s "
+                "market_window=%s error_type=%s"
+            ),
+            selection.mode,
+            ",".join(selection.requested_symbols),
+            selection.market_window_sessions,
+            type(exc).__name__,
+        )
         return (
             "Research execution failed safely. No partial result is shown. "
             "Check Databricks App logs and the configured workspace resources."
