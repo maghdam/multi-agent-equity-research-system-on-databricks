@@ -15,6 +15,7 @@ from dash import (
     clientside_callback,
     dcc,
     html,
+    no_update,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -28,6 +29,9 @@ from equity_research.app_contracts import (  # noqa: E402
     build_app_research_selection,
     build_research_request_text,
     company_selector_options,
+)
+from equity_research.app_presenters import (  # noqa: E402
+    build_app_research_presentation,
 )
 from equity_research.app_service import run_app_research  # noqa: E402
 from equity_research.config import load_equities  # noqa: E402
@@ -221,6 +225,7 @@ app.layout = html.Div(
                             label="Overview",
                             value="overview",
                             children=html.Div(
+                                id="overview-content",
                                 className="tab-grid",
                                 children=[
                                     placeholder_panel(
@@ -239,11 +244,15 @@ app.layout = html.Div(
                             selected_className="research-tab--selected",
                             label="Market",
                             value="market",
-                            children=placeholder_panel(
-                                "Market performance",
-                                (
-                                    "Normalized price history and exact Gold "
-                                    "market metrics."
+                            children=html.Div(
+                                id="market-content",
+                                children=placeholder_panel(
+                                    "Market performance",
+                                    (
+                                        "Exact controlled Gold market metrics. "
+                                        "Price-history charts are added in the "
+                                        "next structured-data slice."
+                                    ),
                                 ),
                             ),
                         ),
@@ -252,9 +261,15 @@ app.layout = html.Div(
                             selected_className="research-tab--selected",
                             label="Fundamentals",
                             value="fundamentals",
-                            children=placeholder_panel(
-                                "Fundamental performance",
-                                "Controlled fundamentals and comparison tables.",
+                            children=html.Div(
+                                id="fundamentals-content",
+                                children=placeholder_panel(
+                                    "Fundamental performance",
+                                    (
+                                        "Controlled fundamentals and comparison "
+                                        "tables."
+                                    ),
+                                ),
                             ),
                         ),
                         dcc.Tab(
@@ -262,11 +277,14 @@ app.layout = html.Div(
                             selected_className="research-tab--selected",
                             label="Research Report",
                             value="report",
-                            children=placeholder_panel(
-                                "Grounded cited report",
-                                (
-                                    "Validated report sections, citations, and "
-                                    "explicit limitations."
+                            children=html.Div(
+                                id="report-content",
+                                children=placeholder_panel(
+                                    "Grounded cited report",
+                                    (
+                                        "Validated report sections, citations, "
+                                        "and explicit limitations."
+                                    ),
                                 ),
                             ),
                         ),
@@ -275,11 +293,14 @@ app.layout = html.Div(
                             selected_className="research-tab--selected",
                             label="Evidence",
                             value="evidence",
-                            children=placeholder_panel(
-                                "Evidence and provenance",
-                                (
-                                    "Citation-linked news and SEC evidence "
-                                    "metadata."
+                            children=html.Div(
+                                id="evidence-content",
+                                children=placeholder_panel(
+                                    "Evidence and provenance",
+                                    (
+                                        "Validated citation IDs and source "
+                                        "finding provenance."
+                                    ),
                                 ),
                             ),
                         ),
@@ -364,6 +385,11 @@ clientside_callback(
 
 @app.callback(
     Output("selection-status", "children"),
+    Output("overview-content", "children"),
+    Output("market-content", "children"),
+    Output("fundamentals-content", "children"),
+    Output("report-content", "children"),
+    Output("evidence-content", "children"),
     Input("run-research", "n_clicks"),
     State("primary-symbol", "value"),
     State("comparison-symbol", "value"),
@@ -375,7 +401,7 @@ def run_research_action(
     primary_symbol: str,
     comparison_symbol: str,
     market_window: int,
-) -> str:
+) -> tuple:
     """Validate locally or run the real Databricks App research runtime."""
 
     try:
@@ -386,7 +412,14 @@ def run_research_action(
             equities=equities,
         )
     except (ControlledToolRequestError, ValueError) as exc:
-        return f"Selection error: {exc}"
+        return (
+            f"Selection error: {exc}",
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+        )
 
     if not _databricks_app_resources_available():
         request_text = build_research_request_text(
@@ -394,10 +427,17 @@ def run_research_action(
             equities=equities,
         )
         return (
-            f"Valid local preview: mode={selection.mode}; "
-            f"symbols={','.join(selection.requested_symbols)}; "
-            f"market_window={selection.market_window_sessions}. "
-            f"Supervisor request preview: {request_text}"
+            (
+                f"Valid local preview: mode={selection.mode}; "
+                f"symbols={','.join(selection.requested_symbols)}; "
+                f"market_window={selection.market_window_sessions}. "
+                f"Supervisor request preview: {request_text}"
+            ),
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
         )
 
     try:
@@ -422,19 +462,331 @@ def run_research_action(
             type(exc).__name__,
         )
         return (
-            "Research execution failed safely. No partial result is shown. "
-            "Check Databricks App logs and the configured workspace resources."
+            (
+                "Research execution failed safely. No partial result is shown. "
+                "Check Databricks App logs and the configured workspace resources."
+            ),
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
         )
 
-    report = session.research.report
+    presentation = build_app_research_presentation(
+        session
+    )
+
+    status = (
+        f"Research complete: mode={presentation.mode}; "
+        f"symbols={','.join(presentation.symbols)}; "
+        f"status={presentation.report_status}; "
+        f"synthesis_mode={presentation.synthesis_mode}; "
+        f"sections={len(presentation.report_sections)}; "
+        f"evidence={len(presentation.evidence)}."
+    )
 
     return (
-        f"Research complete: mode={report.mode}; "
-        f"symbols={','.join(report.symbols)}; "
-        f"status={report.status}; "
-        f"synthesis_mode={report.synthesis_mode}; "
-        f"sections={len(report.sections)}; "
-        f"evidence={len(report.evidence)}."
+        status,
+        _render_overview(presentation),
+        _render_market(presentation),
+        _render_fundamentals(presentation),
+        _render_report(presentation),
+        _render_evidence(presentation),
+    )
+
+
+def _metric_cards(
+    metrics,
+):
+    return html.Div(
+        className="metric-grid",
+        children=[
+            html.Div(
+                className=(
+                    "metric-card "
+                    f"metric-card--{metric.status}"
+                ),
+                children=[
+                    html.Div(
+                        metric.label,
+                        className="metric-label",
+                    ),
+                    html.Div(
+                        metric.value,
+                        className="metric-value",
+                    ),
+                ],
+            )
+            for metric in metrics
+        ],
+    )
+
+
+def _render_overview(
+    presentation,
+):
+    summary_section = next(
+        (
+            section
+            for section in presentation.report_sections
+            if section.section == "recent_developments"
+        ),
+        presentation.report_sections[0],
+    )
+
+    company_panels = [
+        html.Div(
+            className="placeholder-panel",
+            children=[
+                html.Div(
+                    f"{company.display_name} ({company.symbol})",
+                    className="eyebrow",
+                ),
+                html.H3(
+                    "Research snapshot",
+                    className="panel-title",
+                ),
+                html.P(
+                    (
+                        f"Market as of {company.market_as_of or 'unavailable'} · "
+                        f"Fundamentals as of "
+                        f"{company.fundamental_as_of or 'unavailable'}"
+                    ),
+                    className="panel-copy",
+                ),
+                _metric_cards(
+                    (
+                        *company.market_metrics[:2],
+                        *company.fundamental_metrics[:3],
+                    )
+                ),
+            ],
+        )
+        for company in presentation.companies
+    ]
+
+    summary = html.Div(
+        className="placeholder-panel",
+        children=[
+            html.Div(
+                presentation.report_status,
+                className=(
+                    "status-badge "
+                    f"status-badge--{presentation.report_status}"
+                ),
+            ),
+            html.H3(
+                "Research summary",
+                className="panel-title",
+            ),
+            html.P(
+                summary_section.text,
+                className="report-text",
+            ),
+            *(
+                [
+                    html.Div(
+                        children=[
+                            html.Strong("Limitations"),
+                            html.Ul(
+                                [
+                                    html.Li(item)
+                                    for item in presentation.limitations
+                                ]
+                            ),
+                        ],
+                        className="limitations-box",
+                    )
+                ]
+                if presentation.limitations
+                else []
+            ),
+        ],
+    )
+
+    return [
+        *company_panels,
+        summary,
+    ]
+
+
+def _render_market(
+    presentation,
+):
+    return html.Div(
+        className="result-stack",
+        children=[
+            html.Div(
+                className="placeholder-panel",
+                children=[
+                    html.Div(
+                        f"{company.display_name} ({company.symbol})",
+                        className="eyebrow",
+                    ),
+                    html.H3(
+                        "Controlled market metrics",
+                        className="panel-title",
+                    ),
+                    html.P(
+                        (
+                            f"As of {company.market_as_of or 'unavailable'} · "
+                            f"status={company.market_status}"
+                        ),
+                        className="panel-copy",
+                    ),
+                    _metric_cards(
+                        company.market_metrics
+                    ),
+                ],
+            )
+            for company in presentation.companies
+        ],
+    )
+
+
+def _render_fundamentals(
+    presentation,
+):
+    return html.Div(
+        className="result-stack",
+        children=[
+            html.Div(
+                className="placeholder-panel",
+                children=[
+                    html.Div(
+                        f"{company.display_name} ({company.symbol})",
+                        className="eyebrow",
+                    ),
+                    html.H3(
+                        "Controlled fundamental metrics",
+                        className="panel-title",
+                    ),
+                    html.P(
+                        (
+                            f"As of {company.fundamental_as_of or 'unavailable'} "
+                            f"· status={company.fundamental_status}"
+                        ),
+                        className="panel-copy",
+                    ),
+                    _metric_cards(
+                        company.fundamental_metrics
+                    ),
+                ],
+            )
+            for company in presentation.companies
+        ],
+    )
+
+
+def _render_report(
+    presentation,
+):
+    children = [
+        html.Div(
+            className="report-header card",
+            children=[
+                html.Div(
+                    presentation.report_status,
+                    className=(
+                        "status-badge "
+                        f"status-badge--{presentation.report_status}"
+                    ),
+                ),
+                html.Span(
+                    f"Synthesis: {presentation.synthesis_mode}",
+                    className="report-meta",
+                ),
+            ],
+        )
+    ]
+
+    children.extend(
+        html.Div(
+            className="placeholder-panel report-section",
+            children=[
+                html.Div(
+                    section.status,
+                    className=(
+                        "status-badge "
+                        f"status-badge--{section.status}"
+                    ),
+                ),
+                html.H3(
+                    section.title,
+                    className="panel-title",
+                ),
+                html.P(
+                    section.text,
+                    className="report-text",
+                ),
+                html.Div(
+                    (
+                        "Source findings: "
+                        + ", ".join(section.source_finding_ids)
+                    ),
+                    className="source-findings",
+                ),
+            ],
+        )
+        for section in presentation.report_sections
+    )
+
+    if presentation.limitations:
+        children.append(
+            html.Div(
+                className="placeholder-panel limitations-box",
+                children=[
+                    html.H3(
+                        "Limitations",
+                        className="panel-title",
+                    ),
+                    html.Ul(
+                        [
+                            html.Li(item)
+                            for item in presentation.limitations
+                        ]
+                    ),
+                ],
+            )
+        )
+
+    return html.Div(
+        className="result-stack",
+        children=children,
+    )
+
+
+def _render_evidence(
+    presentation,
+):
+    if not presentation.evidence:
+        return placeholder_panel(
+            "Evidence",
+            "No narrative evidence citations are available for this report.",
+        )
+
+    return html.Div(
+        className="evidence-grid",
+        children=[
+            html.Div(
+                className="evidence-card",
+                children=[
+                    html.Div(
+                        item.evidence_id,
+                        className="evidence-id",
+                    ),
+                    html.Div(
+                        (
+                            "Supports: "
+                            + ", ".join(item.source_finding_ids)
+                        ),
+                        className="source-findings",
+                    ),
+                ],
+            )
+            for item in presentation.evidence
+        ],
     )
 
 
