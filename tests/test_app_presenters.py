@@ -95,7 +95,7 @@ def _fundamental_metric() -> GoldFundamentalMetric:
         net_income_change_latest_fy=Decimal("18274000000"),
         latest_fy_end=date(2025, 9, 27),
         prior_fy_end=date(2024, 9, 28),
-        ttm_derivation_method="annual_plus_ytd_delta",
+        ttm_derivation_method="annual_plus_ytd_minus_prior_ytd",
         latest_source_response_id="fund-response",
         latest_source_fetched_at=NOW,
         latest_source_ingestion_run_id="fund-run",
