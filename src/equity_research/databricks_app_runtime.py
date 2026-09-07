@@ -528,7 +528,10 @@ class DatabricksAppResearchRuntime:
                 market_results=market_results,
                 equities=self._equities,
             )
-        except ControlledToolDataError as exc:
+        except (
+            ControlledToolDataError,
+            ControlledToolExecutionError,
+        ) as exc:
             logger.warning(
                 (
                     "App price-history chart unavailable: symbols=%s "
