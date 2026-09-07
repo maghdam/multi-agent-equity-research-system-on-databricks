@@ -111,6 +111,79 @@ class AppShellTests(unittest.TestCase):
             result,
         )
 
+    def test_live_failure_logs_only_bounded_metadata(self) -> None:
+        environment = {
+            app_module.WAREHOUSE_ENV: "warehouse-1",
+            app_module.MARKET_METRICS_TABLE_ENV: (
+                "workspace.gold.market_metrics"
+            ),
+            app_module.FUNDAMENTAL_METRICS_TABLE_ENV: (
+                "workspace.gold.fundamental_metrics"
+            ),
+            app_module.VECTOR_INDEX_ENV: "workspace.ai.index",
+        }
+
+        with (
+            patch.dict(
+                app_module.os.environ,
+                environment,
+                clear=True,
+            ),
+            patch.object(
+                app_module.DatabricksAppRuntimeConfig,
+                "from_environment",
+                return_value=object(),
+            ),
+            patch(
+                "app.DatabricksAppResearchRuntime",
+                return_value=object(),
+            ),
+            patch(
+                "app.run_app_research",
+                side_effect=RuntimeError(
+                    "sensitive details that must not be logged"
+                ),
+            ),
+            self.assertLogs(
+                app_module.logger,
+                level="ERROR",
+            ) as captured,
+        ):
+            result = app_module.run_research_action(
+                1,
+                "AAPL",
+                "MSFT",
+                60,
+            )
+
+        self.assertIn(
+            "Research execution failed safely",
+            result,
+        )
+        log_text = "\n".join(
+            captured.output
+        )
+        self.assertIn(
+            "mode=comparison",
+            log_text,
+        )
+        self.assertIn(
+            "symbols=AAPL,MSFT",
+            log_text,
+        )
+        self.assertIn(
+            "market_window=60",
+            log_text,
+        )
+        self.assertIn(
+            "error_type=RuntimeError",
+            log_text,
+        )
+        self.assertNotIn(
+            "sensitive details",
+            log_text,
+        )
+
     def test_bound_resources_switch_callback_to_real_runtime(self) -> None:
         environment = {
             app_module.WAREHOUSE_ENV: "warehouse-1",
