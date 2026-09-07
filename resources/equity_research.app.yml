@@ -25,6 +25,13 @@ resources:
             securable_type: TABLE
             permission: SELECT
 
+        - name: daily-prices
+          description: Validated Silver daily prices used for app price-history charts.
+          uc_securable:
+            securable_full_name: ${resources.schemas.silver.catalog_name}.${resources.schemas.silver.name}.daily_prices
+            securable_type: TABLE
+            permission: SELECT
+
         - name: research-index
           description: Managed AI Search index used for grounded company research.
           uc_securable:
