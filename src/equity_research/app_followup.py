@@ -104,10 +104,15 @@ the question is fully answered.
 Do not introduce numerical claims absent from the cited source text. Copy
 numbers with the same magnitude and precision. For provenance/date questions,
 prefer the exact ISO YYYY-MM-DD evidence date from the signed source metadata.
-Do not newly infer qualitative
-or directional relationships such as higher/lower, better/worse, above/below,
-stronger/weaker, outperformed/underperformed unless that exact relationship is
-already stated in a cited source.
+Do not newly infer qualitative or directional relationships such as higher/lower,
+better/worse, above/below, stronger/weaker, outperformed/underperformed unless
+that relationship is already stated in a cited source. If the user asks using
+comparison wording that is absent from the cited sources, do not echo that
+unsupported wording. Prefer the exact supported relationship wording from a
+cited source. If no cited source states a qualitative relationship but comparable
+validated numeric values are available, report those exact cited values and say
+that the active research does not provide an explicit qualitative ranking instead
+of inventing one.
 
 Keep the answer concise and directly responsive. Return only the JSON required
 by the response schema.
@@ -935,8 +940,13 @@ def run_followup_turn(
                     "answer from the same signed context and correct this exact "
                     "issue:\n"
                     f"{str(exc)}\n"
-                    "Do not weaken or bypass the validator. Return only the "
-                    "required JSON."
+                    "For an unsupported relationship, do not repeat comparison "
+                    "wording from the user unless a cited source supports that "
+                    "relationship. Reuse exact supported relationship wording, "
+                    "or report the exact cited comparison values and state that "
+                    "the active research does not provide an explicit qualitative "
+                    "ranking. Do not weaken or bypass the validator. Return only "
+                    "the required JSON."
                 ),
             },
         ]
