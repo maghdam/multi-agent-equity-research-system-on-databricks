@@ -8,5 +8,7 @@ env:
     valueFrom: market-metrics
   - name: EQUITY_RESEARCH_FUNDAMENTAL_METRICS_TABLE
     valueFrom: fundamental-metrics
+  - name: EQUITY_RESEARCH_DAILY_PRICES_TABLE
+    valueFrom: daily-prices
   - name: EQUITY_RESEARCH_VECTOR_SEARCH_INDEX
     valueFrom: research-index
