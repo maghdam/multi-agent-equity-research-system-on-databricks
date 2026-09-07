@@ -158,8 +158,10 @@ of the active AAPL/MSFT evidence context.
 
 ### 2:50–3:30 — Evaluation and operations
 
-Show the reviewed MLflow evaluation screenshot for the final managed E1/E2 run
-`spiffy-rat-765` (run ID `248395fd300d449ab98d496a4a39fcdc`).
+Show the reviewed four-part MLflow evaluation screenshot set for the final managed
+E1/E2 run `spiffy-rat-765` (run ID
+`248395fd300d449ab98d496a4a39fcdc`). The four images together preserve the readable
+Databricks metrics table instead of compressing it into one tiny screenshot.
 
 The strongest final metrics are:
 
