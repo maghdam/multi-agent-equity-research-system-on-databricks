@@ -16,7 +16,9 @@ from equity_research.app_contracts import (  # noqa: E402
 from equity_research.config import Equity  # noqa: E402
 from equity_research.databricks_app_runtime import (  # noqa: E402
     CATALOG_ENV,
+    FUNDAMENTAL_METRICS_TABLE_ENV,
     GOLD_SCHEMA_ENV,
+    MARKET_METRICS_TABLE_ENV,
     MLFLOW_EXPERIMENT_ENV,
     VECTOR_INDEX_ENV,
     WAREHOUSE_ENV,
@@ -125,9 +127,13 @@ class DatabricksAppRuntimeTests(unittest.TestCase):
         config = DatabricksAppRuntimeConfig.from_environment(
             {
                 WAREHOUSE_ENV: " warehouse-1 ",
-                GOLD_SCHEMA_ENV: "gold_schema",
+                MARKET_METRICS_TABLE_ENV: (
+                    "workspace.gold_schema.market_metrics"
+                ),
+                FUNDAMENTAL_METRICS_TABLE_ENV: (
+                    "workspace.gold_schema.fundamental_metrics"
+                ),
                 VECTOR_INDEX_ENV: "workspace.ai.index",
-                CATALOG_ENV: "workspace",
                 MLFLOW_EXPERIMENT_ENV: "/Shared/app-traces",
             }
         )
@@ -164,6 +170,44 @@ class DatabricksAppRuntimeTests(unittest.TestCase):
                     VECTOR_INDEX_ENV: "workspace.ai.index",
                 }
             )
+
+    def test_bound_gold_tables_must_share_catalog_and_schema(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "must share the same catalog and schema",
+        ):
+            DatabricksAppRuntimeConfig.from_environment(
+                {
+                    WAREHOUSE_ENV: "warehouse-1",
+                    MARKET_METRICS_TABLE_ENV: (
+                        "workspace.gold_a.market_metrics"
+                    ),
+                    FUNDAMENTAL_METRICS_TABLE_ENV: (
+                        "workspace.gold_b.fundamental_metrics"
+                    ),
+                    VECTOR_INDEX_ENV: "workspace.ai.index",
+                }
+            )
+
+    def test_legacy_schema_environment_remains_supported_locally(self) -> None:
+        config = DatabricksAppRuntimeConfig.from_environment(
+            {
+                WAREHOUSE_ENV: "warehouse-1",
+                GOLD_SCHEMA_ENV: "gold_schema",
+                CATALOG_ENV: "workspace",
+                VECTOR_INDEX_ENV: "workspace.ai.index",
+            }
+        )
+
+        self.assertEqual(
+            config.catalog,
+            "workspace",
+        )
+        self.assertEqual(
+            config.gold_schema,
+            "gold_schema",
+        )
+
 
     def test_statement_transport_polls_with_authenticated_client(self) -> None:
         workspace = FakeWorkspaceClient(
