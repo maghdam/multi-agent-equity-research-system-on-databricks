@@ -493,7 +493,63 @@ class AppShellTests(unittest.TestCase):
                 result_object.envelope,
                 ["rendered-turn"],
                 "",
+                False,
+                False,
             ),
+        )
+
+    def test_expired_followup_session_disables_controls(self) -> None:
+        environment = {
+            app_module.WAREHOUSE_ENV: "warehouse-1",
+            app_module.MARKET_METRICS_TABLE_ENV: (
+                "workspace.gold.market_metrics"
+            ),
+            app_module.FUNDAMENTAL_METRICS_TABLE_ENV: (
+                "workspace.gold.fundamental_metrics"
+            ),
+            app_module.VECTOR_INDEX_ENV: "workspace.ai.index",
+        }
+
+        with (
+            patch.dict(
+                app_module.os.environ,
+                environment,
+                clear=True,
+            ),
+            patch(
+                "app.DatabricksAppTransport",
+                return_value=SimpleNamespace(
+                    query_chat_completions=object(),
+                ),
+            ),
+            patch(
+                "app.run_followup_turn",
+                side_effect=app_module.FollowupSessionError(
+                    "signature mismatch"
+                ),
+            ),
+        ):
+            result = app_module.run_followup_action(
+                1,
+                "What changed recently?",
+                {
+                    "payload": "tampered",
+                    "signature": "bad",
+                },
+            )
+
+        self.assertIsNone(
+            result[0]
+        )
+        self.assertEqual(
+            result[2],
+            "",
+        )
+        self.assertTrue(
+            result[3]
+        )
+        self.assertTrue(
+            result[4]
         )
 
     def test_evidence_card_renders_publication_safe_metadata(self) -> None:
