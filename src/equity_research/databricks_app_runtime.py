@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from databricks.sdk import WorkspaceClient
 
 from equity_research.app_contracts import AppResearchSelection
+from equity_research.app_market_history import (
+    build_price_history_sql_request,
+    prepare_market_history_series,
+    unavailable_market_history_series,
+)
 from equity_research.app_service import AppStructuredSnapshot
 from equity_research.company_researcher import (
     CompanyResearcherResult,
@@ -42,11 +48,13 @@ from equity_research.worker_agent_runtime import (
     run_company_researcher,
     run_market_analyst,
 )
+from equity_research.structured_data_tools import ControlledToolDataError
 
 
 WAREHOUSE_ENV = "EQUITY_RESEARCH_WAREHOUSE_ID"
 MARKET_METRICS_TABLE_ENV = "EQUITY_RESEARCH_MARKET_METRICS_TABLE"
 FUNDAMENTAL_METRICS_TABLE_ENV = "EQUITY_RESEARCH_FUNDAMENTAL_METRICS_TABLE"
+DAILY_PRICES_TABLE_ENV = "EQUITY_RESEARCH_DAILY_PRICES_TABLE"
 VECTOR_INDEX_ENV = "EQUITY_RESEARCH_VECTOR_SEARCH_INDEX"
 GOLD_SCHEMA_ENV = "EQUITY_RESEARCH_GOLD_SCHEMA"
 CATALOG_ENV = "EQUITY_RESEARCH_CATALOG"
@@ -55,6 +63,8 @@ MLFLOW_EXPERIMENT_ENV = "EQUITY_RESEARCH_MLFLOW_EXPERIMENT"
 DEFAULT_CATALOG = "workspace"
 DEFAULT_SQL_MAX_POLLS = 12
 DEFAULT_SQL_POLL_INTERVAL_SECONDS = 1.0
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -65,6 +75,7 @@ class DatabricksAppRuntimeConfig:
     gold_schema: str
     index_name: str
     catalog: str = DEFAULT_CATALOG
+    daily_prices_table: str | None = None
     mlflow_experiment: str | None = None
 
     def __post_init__(self) -> None:
@@ -79,6 +90,14 @@ class DatabricksAppRuntimeConfig:
                 raise ValueError(
                     f"{name} must be a nonblank string."
                 )
+
+        if self.daily_prices_table is not None and (
+            not isinstance(self.daily_prices_table, str)
+            or not self.daily_prices_table.strip()
+        ):
+            raise ValueError(
+                "daily_prices_table must be None or a nonblank string."
+            )
 
         if self.mlflow_experiment is not None and (
             not isinstance(self.mlflow_experiment, str)
@@ -112,6 +131,11 @@ class DatabricksAppRuntimeConfig:
                 VECTOR_INDEX_ENV,
             ),
             catalog=catalog,
+            daily_prices_table=_optional_environment_value(
+                values,
+                DAILY_PRICES_TABLE_ENV,
+                None,
+            ),
             mlflow_experiment=_optional_environment_value(
                 values,
                 MLFLOW_EXPERIMENT_ENV,
@@ -443,10 +467,85 @@ class DatabricksAppResearchRuntime:
                 "Market Analyst path did not capture structured app data."
             )
 
+        market_history = self._load_market_history(
+            selection=selection,
+            market_results=structured_snapshot.market_results,
+        )
+        structured_snapshot = replace(
+            structured_snapshot,
+            market_history=market_history,
+        )
+
         return (
             structured_snapshot,
             result,
         )
+
+    def _load_market_history(
+        self,
+        *,
+        selection: AppResearchSelection,
+        market_results,
+    ):
+        if self._config.daily_prices_table is None:
+            return unavailable_market_history_series(
+                requested_symbols=selection.requested_symbols,
+                limitation=(
+                    "Price-history resource is not configured for this app."
+                ),
+                equities=self._equities,
+            )
+
+        if any(
+            result.status != "ready" or result.metric is None
+            for result in market_results
+        ):
+            return unavailable_market_history_series(
+                requested_symbols=selection.requested_symbols,
+                limitation=(
+                    "Price history is unavailable because the controlled Gold "
+                    "market snapshot is not ready for every selected company."
+                ),
+                equities=self._equities,
+            )
+
+        try:
+            payload = build_price_history_sql_request(
+                warehouse_id=self._config.warehouse_id,
+                table_full_name=self._config.daily_prices_table,
+                requested_symbols=selection.requested_symbols,
+                market_window_sessions=selection.market_window_sessions,
+                equities=self._equities,
+            )
+            response = self._transport.execute_statement(
+                payload=payload,
+                profile=None,
+            )
+            return prepare_market_history_series(
+                response=response,
+                requested_symbols=selection.requested_symbols,
+                market_window_sessions=selection.market_window_sessions,
+                market_results=market_results,
+                equities=self._equities,
+            )
+        except ControlledToolDataError as exc:
+            logger.warning(
+                (
+                    "App price-history chart unavailable: symbols=%s "
+                    "window=%s error_type=%s"
+                ),
+                ",".join(selection.requested_symbols),
+                selection.market_window_sessions,
+                type(exc).__name__,
+            )
+            return unavailable_market_history_series(
+                requested_symbols=selection.requested_symbols,
+                limitation=(
+                    "Validated price history is unavailable for the selected "
+                    "window."
+                ),
+                equities=self._equities,
+            )
 
 
 def _resolve_gold_location(
