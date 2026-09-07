@@ -76,6 +76,7 @@ class AppShellTests(unittest.TestCase):
             toggle.children,
             "Dark mode",
         )
+
     def test_local_run_research_stays_in_preview_mode(self) -> None:
         environment = {}
 
