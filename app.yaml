@@ -12,3 +12,5 @@ env:
     valueFrom: daily-prices
   - name: EQUITY_RESEARCH_VECTOR_SEARCH_INDEX
     valueFrom: research-index
+  - name: EQUITY_RESEARCH_MLFLOW_EXPERIMENT_ID
+    valueFrom: mlflow-experiment
