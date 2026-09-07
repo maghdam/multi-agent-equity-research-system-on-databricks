@@ -263,6 +263,48 @@ retrieval counts, traces, evaluation scores, and project-authored analysis.
 Avoid screenshots that reproduce substantial portions of licensed news
 articles or expose credentials/raw payloads.
 
+Portfolio images committed to the repository must be placed deliberately under
+`docs/screenshots/` or `docs/images/` so they are easy to review as publication
+artifacts rather than mixed with runtime/data files.
+
+### Automated public-repository audit
+
+The public portfolio boundary is enforced by
+`scripts/audit_publication_boundary.py`, backed by
+`src/equity_research/publication_audit.py` and credential-free tests.
+
+The audit inspects Git-tracked artifacts and fails on obvious publication risks,
+including:
+
+- tracked secret/configuration filenames such as `.env`, `credentials.json`,
+  `secrets.json`, and private-key material;
+- Databricks PAT/private-key signatures in text files without printing the matched
+  secret;
+- binary/exported data formats such as Parquet, Arrow, Feather, Avro, NumPy/pickle,
+  SQLite, and similar portable data artifacts;
+- provider-derived export-style paths for raw news/article/chunk/embedding data;
+- image files committed outside the reviewed documentation image locations.
+
+Synthetic fixtures under `tests/fixtures/` remain allowed. The audit is deliberately
+a guardrail rather than a legal classifier: it cannot determine whether arbitrary
+natural-language text is copyrighted or whether a screenshot reproduces too much
+licensed material. Human review is therefore still required for screenshots and
+project-authored narrative examples.
+
+Run locally before publication:
+
+```powershell
+python scripts/audit_publication_boundary.py
+```
+
+Expected clean result:
+
+```text
+PUBLICATION_BOUNDARY_AUDIT=PASSED
+```
+
+The same audit runs in GitHub Actions on pull requests and pushes to `main`.
+
 ## 8. Application deployment boundary
 
 Milestone 3 is a **private personal Databricks application**.
