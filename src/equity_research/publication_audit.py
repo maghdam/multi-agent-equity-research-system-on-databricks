@@ -361,17 +361,23 @@ def _normalized_repo_path(
     normalized = value.replace(
         "\\",
         "/",
-    ).lstrip(
-        "./"
     )
+
+    while normalized.startswith(
+        "./"
+    ):
+        normalized = normalized[2:]
 
     if not normalized:
         raise ValueError(
             "tracked path must not be blank."
         )
 
-    if normalized.startswith(
-        "../"
+    if (
+        normalized == ".."
+        or normalized.startswith(
+            "../"
+        )
     ):
         raise ValueError(
             "tracked path must remain inside the repository."
