@@ -258,7 +258,18 @@ class AppShellTests(unittest.TestCase):
             evidence=(
                 SimpleNamespace(
                     evidence_id="news:e1",
+                    short_evidence_id="news:e1",
                     source_finding_ids=("recent:r1",),
+                    metadata_status="ready",
+                    source_label="Alpaca/Benzinga news",
+                    symbols=("AAPL",),
+                    evidence_date="2026-08-30",
+                    source_domain="www.benzinga.com",
+                    source_url="https://www.benzinga.com/news/example",
+                    source_business_id="101",
+                    section_label=None,
+                    retrieval_rank=1,
+                    chunk_index=2,
                 ),
             ),
             companies=(),
@@ -336,6 +347,51 @@ class AppShellTests(unittest.TestCase):
         )
         self.assertIsNotNone(
             result[5],
+        )
+
+    def test_evidence_card_renders_publication_safe_metadata(self) -> None:
+        item = SimpleNamespace(
+            evidence_id="a" * 64,
+            short_evidence_id=("a" * 12) + "…",
+            source_finding_ids=("recent:r1",),
+            metadata_status="ready",
+            source_label="Alpaca/Benzinga news",
+            symbols=("AAPL",),
+            evidence_date="2026-08-30",
+            source_domain="www.benzinga.com",
+            source_url="https://www.benzinga.com/news/example",
+            source_business_id="101",
+            section_label=None,
+            retrieval_rank=1,
+            chunk_index=2,
+        )
+
+        card = app_module._evidence_card(
+            item
+        )
+        rendered = repr(
+            card
+        )
+
+        self.assertIn(
+            "Alpaca/Benzinga news",
+            rendered,
+        )
+        self.assertIn(
+            "www.benzinga.com",
+            rendered,
+        )
+        self.assertIn(
+            "retrieval rank 1",
+            rendered,
+        )
+        self.assertIn(
+            "Open source",
+            rendered,
+        )
+        self.assertNotIn(
+            "Synthetic licensed article text",
+            rendered,
         )
 
     def test_market_history_panel_renders_normalized_plot(self) -> None:
