@@ -114,52 +114,53 @@ Bronze
 Silver
 │
 ▼
-Gold metrics
-│
-▼
+┌───────────────────────┴───────────────────────┐
+│                                               │
+▼                                               ▼
+Gold metrics                    RAG corpus (news + filings)
+│                                               │
+└───────────────────────┬───────────────────────┘
+                        │
+                        ▼
 Milestone 2 — AI Engineering ✅
 │
-┌────────────────────────┴────────────────────────┐
-│                                                 │
-▼                                                 ▼
-Controlled Gold tools                    RAG system
-│                                 validated Silver news + filings
-▼                                                 │
-Market Analyst                                    ▼
-GPT OSS 20B                              Vector Search
-│                                                 │
-│                                                 ▼
-│                                       Company Researcher
-│                                          GPT OSS 20B
-│                                                 │
-└────────────────────────┬────────────────────────┘
-                         │
-                         ▼
-               LangGraph Supervisor
-                         │
-                         ▼
-                   GPT OSS 120B
-                         │
-                         ▼
-            deterministic validation
-            numeric fidelity/provenance
-                repair + fallback
-                         │
-                         ▼
-               grounded cited report
-                         │
-                         ▼
-┌────────────────────────┴────────────────────────┐
-│                                                 │
-▼                                                 ▼
-MLflow traces                               MLflow evaluation
-│                                                 │
-└────────────────────────┬────────────────────────┘
-                         │
-                         ▼
-                    CI/regression
-                         │
-                         ▼
+┌───────────────────────┴───────────────────────┐
+│                                               │
+▼                                               ▼
+Controlled Gold tools                      Vector Search / RAG
+│                                               │
+▼                                               ▼
+Market Analyst                            Company Researcher
+GPT OSS 20B                               GPT OSS 20B
+│                                               │
+└───────────────────────┬───────────────────────┘
+                        │
+                        ▼
+              LangGraph Supervisor
+                        │
+                        ▼
+                  GPT OSS 120B
+                        │
+                        ▼
+           deterministic validation
+           numeric fidelity/provenance
+               repair + fallback
+                        │
+                        ▼
+              grounded cited report
+                        │
+                        ▼
+┌───────────────────────┴───────────────────────┐
+│                                               │
+▼                                               ▼
+MLflow traces                              MLflow evaluation
+│                                               │
+└───────────────────────┬───────────────────────┘
+                        │
+                        ▼
+                   CI/regression
+                        │
+                        ▼
 Milestone 3 — Private Databricks App ✅
 charts · cited report · grounded follow-up
 GPT OSS 120B follow-up chat over signed active research context
