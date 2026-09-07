@@ -7,6 +7,8 @@ import os
 import sys
 from pathlib import Path
 
+import plotly.graph_objects as go
+
 from dash import (
     Dash,
     Input,
@@ -36,6 +38,7 @@ from equity_research.app_presenters import (  # noqa: E402
 from equity_research.app_service import run_app_research  # noqa: E402
 from equity_research.config import load_equities  # noqa: E402
 from equity_research.databricks_app_runtime import (  # noqa: E402
+    DAILY_PRICES_TABLE_ENV,
     FUNDAMENTAL_METRICS_TABLE_ENV,
     MARKET_METRICS_TABLE_ENV,
     VECTOR_INDEX_ENV,
@@ -617,30 +620,144 @@ def _render_market(
     return html.Div(
         className="result-stack",
         children=[
-            html.Div(
-                className="placeholder-panel",
-                children=[
-                    html.Div(
-                        f"{company.display_name} ({company.symbol})",
-                        className="eyebrow",
-                    ),
-                    html.H3(
-                        "Controlled market metrics",
-                        className="panel-title",
-                    ),
-                    html.P(
-                        (
-                            f"As of {company.market_as_of or 'unavailable'} · "
-                            f"status={company.market_status}"
+            _market_history_panel(
+                presentation
+            ),
+            *[
+                html.Div(
+                    className="placeholder-panel",
+                    children=[
+                        html.Div(
+                            f"{company.display_name} ({company.symbol})",
+                            className="eyebrow",
                         ),
-                        className="panel-copy",
-                    ),
-                    _metric_cards(
-                        company.market_metrics
-                    ),
+                        html.H3(
+                            "Controlled market metrics",
+                            className="panel-title",
+                        ),
+                        html.P(
+                            (
+                                f"As of {company.market_as_of or 'unavailable'} · "
+                                f"status={company.market_status}"
+                            ),
+                            className="panel-copy",
+                        ),
+                        _metric_cards(
+                            company.market_metrics
+                        ),
+                    ],
+                )
+                for company in presentation.companies
+            ],
+        ],
+    )
+
+
+def _market_history_panel(
+    presentation,
+):
+    series_values = presentation.market_history
+
+    if not series_values:
+        return placeholder_panel(
+            "Normalized price history",
+            "Validated Silver price history is not available for this run.",
+        )
+
+    unavailable = tuple(
+        series
+        for series in series_values
+        if series.status != "ready" or not series.points
+    )
+
+    if unavailable:
+        limitation = unavailable[0].limitation or (
+            "Validated price history is unavailable for the selected window."
+        )
+        return placeholder_panel(
+            "Normalized price history",
+            limitation,
+        )
+
+    figure = go.Figure()
+
+    for series in series_values:
+        figure.add_trace(
+            go.Scatter(
+                x=[
+                    point.trading_date
+                    for point in series.points
                 ],
+                y=[
+                    point.indexed_close
+                    for point in series.points
+                ],
+                mode="lines",
+                name=f"{series.display_name} ({series.symbol})",
+                hovertemplate=(
+                    "%{x}<br>Indexed close: %{y:.2f}"
+                    "<extra>%{fullData.name}</extra>"
+                ),
             )
-            for company in presentation.companies
+        )
+
+    figure.update_layout(
+        title=(
+            f"{presentation.market_window_sessions}-session normalized "
+            "price history"
+        ),
+        xaxis_title="Trading date",
+        yaxis_title="Indexed close (start = 100)",
+        hovermode="x unified",
+        margin={
+            "l": 48,
+            "r": 24,
+            "t": 56,
+            "b": 48,
+        },
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font={
+            "color": "#9aa7c0",
+        },
+        legend={
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "xanchor": "left",
+            "x": 0,
+        },
+    )
+    figure.update_xaxes(
+        gridcolor="rgba(128,128,128,0.18)",
+    )
+    figure.update_yaxes(
+        gridcolor="rgba(128,128,128,0.18)",
+        zeroline=False,
+    )
+
+    return html.Div(
+        className="placeholder-panel market-chart-panel",
+        children=[
+            html.Div(
+                "Validated Silver daily prices",
+                className="eyebrow",
+            ),
+            html.P(
+                (
+                    "Each series is indexed to 100 at the first close so "
+                    "cross-company performance is comparable."
+                ),
+                className="panel-copy",
+            ),
+            dcc.Graph(
+                figure=figure,
+                config={
+                    "displayModeBar": False,
+                    "responsive": True,
+                },
+                className="market-history-chart",
+            ),
         ],
     )
 
@@ -802,6 +919,7 @@ def _databricks_app_resources_available(
             WAREHOUSE_ENV,
             MARKET_METRICS_TABLE_ENV,
             FUNDAMENTAL_METRICS_TABLE_ENV,
+            DAILY_PRICES_TABLE_ENV,
             VECTOR_INDEX_ENV,
         )
     )
