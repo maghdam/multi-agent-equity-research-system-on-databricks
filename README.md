@@ -96,41 +96,75 @@ See the [portfolio demo walkthrough](docs/PORTFOLIO_DEMO.md) for the evidence-pr
 
 ## Architecture
 
-```text
+<div align="center">
+<pre>
 Sources
-  ↓
+│
+├─ Alpaca Market Data API
+├─ Alpaca News API
+├─ SEC Company Facts API
+└─ SEC Filings API
+│
+▼
 Milestone 1 — Data Engineering ✅
-  Bronze → Silver
-          ├─ Gold metrics
-          └─ RAG corpus
-
+│
+Bronze
+│
+▼
+Silver
+│
+▼
+┌───────────────────────┴───────────────────────┐
+│                                               │
+▼                                               ▼
+Gold metrics                                RAG corpus
+│                                               │
+└───────────────────────┬───────────────────────┘
+                        │
+                        ▼
 Milestone 2 — AI Engineering ✅
-  Controlled Gold tools      Vector Search
-          ↓                       ↓
-    Market Analyst          Company Researcher
-      GPT OSS 20B             GPT OSS 20B
-          └──────────────┬──────────────┘
-                         ↓
-               LangGraph Supervisor
-                         ↓
-                   GPT OSS 120B
-                         ↓
-             deterministic validation
-             numeric fidelity/provenance
-             repair + fallback
-                         ↓
-                grounded cited report
-                         ↓
-          ┌──────────────┴──────────────┐
-          ↓                             ↓
-     MLflow traces               MLflow evaluation
-          └──────────────┬──────────────┘
-                         ↓
-                    CI/regression
-                         ↓
+│
+┌───────────────────────┴───────────────────────┐
+│                                               │
+▼                                               ▼
+Controlled Gold tools                      Vector Search
+│                                               │
+▼                                               ▼
+Market Analyst                            Company Researcher
+GPT OSS 20B                               GPT OSS 20B
+│                                               │
+└───────────────────────┬───────────────────────┘
+                        │
+                        ▼
+              LangGraph Supervisor
+                        │
+                        ▼
+                  GPT OSS 120B
+                        │
+                        ▼
+           deterministic validation
+           numeric fidelity/provenance
+               repair + fallback
+                        │
+                        ▼
+              grounded cited report
+                        │
+                        ▼
+┌───────────────────────┴───────────────────────┐
+│                                               │
+▼                                               ▼
+MLflow traces                              MLflow evaluation
+│                                               │
+└───────────────────────┬───────────────────────┘
+                        │
+                        ▼
+                   CI/regression
+                        │
+                        ▼
 Milestone 3 — Private Databricks App ✅
-  charts · cited report · grounded follow-up
-```
+charts · cited report · grounded follow-up
+</pre>
+</div>
 
 Gold is intentionally **not** a one-to-one mirror of Silver. Structured price and fundamental data feed analytical Gold tables, while validated news and filing text primarily become retrieval/indexing assets for the AI layer.
 
