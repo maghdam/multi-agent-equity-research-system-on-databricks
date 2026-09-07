@@ -288,6 +288,37 @@ the portfolio screenshot into a redistribution surface for licensed news content
 SEC filing section labels and official SEC source links remain displayable under the
 project's documented publication boundary.
 
+## Application observability and feedback
+
+Milestone 3 adds a small product-operations telemetry lane in addition to the existing
+MLflow AI tracing/evaluation lane.
+
+`src/equity_research/app_observability.py` emits stable `APP_EVENT` JSON lines to
+Databricks App logs. The event schema is allowlisted and text-free: it can record
+request mode, one/two symbols, selected market window, report/synthesis status, final
+evidence count, callback duration, exception type, follow-up question length,
+bounded turn/source counts, limitation presence, and a fixed feedback category.
+
+The telemetry contract deliberately has no field for prompt text, follow-up question
+text, answer text, retrieved evidence text, provider payloads, exception messages, or
+free-text feedback.
+
+The app exposes optional session-level **Helpful** / **Needs work** controls. A rating
+is accepted only when the browser still holds a valid signed active research session.
+Feedback is written to App logs as bounded telemetry rather than a new writable data
+table, so the MVP does not need additional write grants or credentials.
+
+Operational logs complement, rather than replace, MLflow. MLflow remains the detailed
+AI-engineering lane for controlled TOOL / RETRIEVER / CHAT_MODEL / AGENT traces and
+evaluation evidence; routine App monitoring remains intentionally smaller.
+
+The deployed runtime continues to use Databricks Apps unified authentication and
+read-only bound research resources. The follow-up HMAC signing key is generated only
+in process memory and never exposed to Dash state or telemetry.
+
+See `docs/APP_OPERATIONS.md` for the live inspection commands and operational
+boundary.
+
 ## Implementation slices
 
 1. App selection contract + static Dash shell.
