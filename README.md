@@ -97,49 +97,24 @@ See the [portfolio demo walkthrough](docs/PORTFOLIO_DEMO.md) for the evidence-pr
 ## Architecture
 
 ```mermaid
-flowchart LR
-    SRC["Sources<br/>Alpaca Market + News<br/>SEC EDGAR"]
+flowchart TB
+    SRC["Data Sources<br/>Alpaca Market + News · SEC EDGAR"]
 
-    subgraph DE["Milestone 1 — Data Engineering ✅"]
-        direction TB
-        B["Bronze Delta<br/>raw immutable ingestion"]
-        S["Silver Delta<br/>validated transformations"]
-        G["Gold Delta<br/>market + fundamental metrics"]
-        UC["Unity Catalog<br/>schemas · tables · governed access"]
-        WF["Databricks Workflows<br/>scheduled refresh · DQ/freshness gates"]
+    DE["Milestone 1 — Data Engineering ✅<br/><br/>Bronze → Silver → Gold<br/>Delta Lake · PySpark · SQL<br/>Unity Catalog · Databricks Workflows<br/>DQ · freshness · lineage · replay"]
 
-        B --> S --> G
-        WF -. orchestrates .-> B
-        UC -. governs .-> G
-    end
+    AI["Milestone 2 — AI Engineering ✅<br/><br/>RAG corpus + Vector Search<br/>GTE embeddings · HYBRID retrieval<br/>GPT OSS 20B workers · LangGraph<br/>GPT OSS 120B synthesis<br/>validation · repair · deterministic fallback"]
 
-    subgraph AI["Milestone 2 — AI Engineering ✅"]
-        direction TB
-        R["RAG corpus<br/>research_documents + research_chunks"]
-        VS["Databricks Vector Search<br/>GTE embeddings · HYBRID retrieval"]
-        MA["Market Analyst<br/>GPT OSS 20B"]
-        CR["Company Researcher<br/>GPT OSS 20B"]
-        LG["LangGraph Supervisor<br/>deterministic routing"]
-        SYN["GPT OSS 120B synthesis<br/>validation · repair · fallback"]
+    APP["Milestone 3 — Application Delivery ✅<br/><br/>Databricks Apps · Dash<br/>charts · cited reports · grounded follow-up<br/>unified auth · least privilege"]
 
-        R --> VS --> CR
-        MA --> LG
-        CR --> LG
-        LG --> SYN
-    end
+    OBS["Production controls<br/>MLflow tracing/evaluation · E1–E6 safety tests<br/>GitHub Actions CI/CD · 482-test suite<br/>bundle validate/plan/deploy · publication audit"]
 
-    subgraph APP["Milestone 3 — Application Delivery ✅"]
-        direction TB
-        UI["Databricks App · Dash<br/>charts · cited report · grounded follow-up"]
-        AUTH["Unified auth + least privilege<br/>SQL warehouse · UC tables · AI Search"]
-        AUTH -. secures .-> UI
-    end
-
-    SRC --> B
-    S --> R
-    G --> MA
-    SYN --> UI
+    SRC --> DE --> AI --> APP
+    OBS -. governs and verifies .-> DE
+    OBS -. governs and verifies .-> AI
+    OBS -. governs and verifies .-> APP
 ```
+
+This intentionally keeps the main execution path simple. The detailed technologies and production controls are listed immediately below so hiring managers can scan the engineering depth without decoding a dense diagram.
 
 ### Engineering capabilities demonstrated
 
