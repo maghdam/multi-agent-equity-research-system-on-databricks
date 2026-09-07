@@ -302,10 +302,19 @@ class AppPresenterTests(unittest.TestCase):
             for metric in company.fundamental_metrics
             if metric.label == "Revenue TTM"
         )
+        net_income_change = next(
+            metric
+            for metric in company.fundamental_metrics
+            if metric.label == "Latest FY net income change"
+        )
 
         self.assertEqual(
             revenue.value,
             "USD 400.00B",
+        )
+        self.assertEqual(
+            net_income_change.value,
+            "USD 18.27B",
         )
 
 
