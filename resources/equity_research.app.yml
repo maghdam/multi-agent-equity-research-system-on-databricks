@@ -1,0 +1,33 @@
+resources:
+  apps:
+    equity_research:
+      name: equity-research-${bundle.target}
+      description: Multi-agent equity research workspace with grounded reports.
+      source_code_path: .
+      resources:
+        - name: sql-warehouse
+          description: Read-only SQL compute for controlled Gold queries.
+          sql_warehouse:
+            id: ${var.app_sql_warehouse_id}
+            permission: CAN_USE
+
+        - name: market-metrics
+          description: Controlled Gold market metrics used by the application.
+          uc_securable:
+            securable_full_name: ${resources.schemas.gold.catalog_name}.${resources.schemas.gold.name}.market_metrics
+            securable_type: TABLE
+            permission: SELECT
+
+        - name: fundamental-metrics
+          description: Controlled Gold fundamental metrics used by the application.
+          uc_securable:
+            securable_full_name: ${resources.schemas.gold.catalog_name}.${resources.schemas.gold.name}.fundamental_metrics
+            securable_type: TABLE
+            permission: SELECT
+
+        - name: research-index
+          description: Managed AI Search index used for grounded company research.
+          uc_securable:
+            securable_full_name: ${resources.vector_search_indexes.research_chunks.name}
+            securable_type: TABLE
+            permission: SELECT
