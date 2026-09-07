@@ -130,6 +130,9 @@ class AppShellTests(unittest.TestCase):
             app_module.FUNDAMENTAL_METRICS_TABLE_ENV: (
                 "workspace.gold.fundamental_metrics"
             ),
+            app_module.DAILY_PRICES_TABLE_ENV: (
+                "workspace.silver.daily_prices"
+            ),
             app_module.VECTOR_INDEX_ENV: "workspace.ai.index",
         }
 
@@ -213,6 +216,9 @@ class AppShellTests(unittest.TestCase):
             app_module.FUNDAMENTAL_METRICS_TABLE_ENV: (
                 "workspace.gold.fundamental_metrics"
             ),
+            app_module.DAILY_PRICES_TABLE_ENV: (
+                "workspace.silver.daily_prices"
+            ),
             app_module.VECTOR_INDEX_ENV: "workspace.ai.index",
         }
         session = object()
@@ -244,7 +250,9 @@ class AppShellTests(unittest.TestCase):
                 ),
             ),
             companies=(),
+            market_history=(),
             limitations=(),
+            market_window_sessions=60,
         )
 
         self.assertTrue(
@@ -317,6 +325,72 @@ class AppShellTests(unittest.TestCase):
         self.assertIsNotNone(
             result[5],
         )
+
+    def test_market_history_panel_renders_normalized_plot(self) -> None:
+        presentation = SimpleNamespace(
+            market_window_sessions=5,
+            market_history=(
+                SimpleNamespace(
+                    symbol="AAPL",
+                    display_name="Apple Inc.",
+                    status="ready",
+                    limitation=None,
+                    points=(
+                        SimpleNamespace(
+                            trading_date="2026-09-01",
+                            indexed_close=100.0,
+                        ),
+                        SimpleNamespace(
+                            trading_date="2026-09-04",
+                            indexed_close=104.25,
+                        ),
+                    ),
+                ),
+                SimpleNamespace(
+                    symbol="MSFT",
+                    display_name="Microsoft Corporation",
+                    status="ready",
+                    limitation=None,
+                    points=(
+                        SimpleNamespace(
+                            trading_date="2026-09-01",
+                            indexed_close=100.0,
+                        ),
+                        SimpleNamespace(
+                            trading_date="2026-09-04",
+                            indexed_close=98.5,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        panel = app_module._market_history_panel(
+            presentation
+        )
+        graph = next(
+            child
+            for child in panel.children
+            if isinstance(child, dcc.Graph)
+        )
+
+        self.assertEqual(
+            len(graph.figure.data),
+            2,
+        )
+        self.assertEqual(
+            tuple(graph.figure.data[0].y),
+            (100.0, 104.25),
+        )
+        self.assertEqual(
+            tuple(graph.figure.data[1].y),
+            (100.0, 98.5),
+        )
+        self.assertIn(
+            "5-session normalized",
+            graph.figure.layout.title.text,
+        )
+
 
 
 
