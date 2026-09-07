@@ -2,9 +2,9 @@
 
 Build a small research app that compares AAPL and MSFT using market data, company fundamentals, and cited news/filing evidence. See [README.md](README.md) for the architecture and expected output.
 
-**Current position:** Milestone 1 — Data Engineering is complete and Milestone 2 — AI Engineering is active. The deterministic RAG corpus, managed embeddings/vector index, independent retrieval holdout, controlled structured-data/retrieval tools, both GPT OSS 20B worker agents, deterministic LangGraph Supervisor routing/aggregation, structured final-report/citation validation, and the first MLflow tracing/GenAI-evaluation foundation are implemented and live-verified. The app-facing research graph validates one- or two-company scope before tool access, runs the Market Analyst and two Company Researcher routes through the verified worker subgraph, assembles explicit ready/degraded/unavailable Supervisor state, and invokes `system.ai.gpt-oss-120b` only for terminal synthesis over validated worker findings. Final synthesis uses strict structured output, deterministic provenance/section/numeric validation, one bounded model-repair attempt, and a deterministic validated fallback if both model attempts violate the report contract. Managed MLflow evaluation now covers E1/E2 with deterministic scorers, semantic judges, controlled RETRIEVER spans, and trace-aware narrative-grounding checks. Credential-free GitHub Actions continues to run Ruff correctness lint and the offline test suite on pull requests and pushes to `main`.
+**Current position:** Milestone 1 — Data Engineering and Milestone 2 — AI Engineering are complete. Milestone 3 — Application and end-to-end delivery is active. The repository now has the Dash research-workspace shell, configuration-driven one/two-company selection, exact 1/5/20/60 trading-session market-window controls, browser-persisted Light/Dark themes, a framework-independent application-service boundary, and a Databricks Apps-native runtime that reuses the verified Gold/RAG/worker/Supervisor/report contracts through unified authentication. Bundle-managed app resources now bind the SQL warehouse, Gold market/fundamental tables, and managed research index with least privilege; local execution remains preview-only unless Databricks App resource variables are present.
 
-**Next:** Finish explicit MLflow observability spans for Gold access, worker/Supervisor model calls, repair/fallback outcomes, latency, and safe usage metadata; then add controlled E3–E6 failure-path evaluation cases and rerun the managed regression suite before extending CI/evaluation coverage.
+**Next:** Re-run the focused app/runtime tests and bundle validation after the new resource bindings, inspect the bundle deployment plan, then perform the first controlled Databricks App deployment/restart before rendering the structured dashboard, cited report, evidence view, and session-bound follow-up chat.
 
 ## Implementation roadmap
 
@@ -319,13 +319,13 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
 
 - [ ] Add application logging, monitoring, feedback collection, and secure secret handling.
 
-- [ ] Enforce the portfolio publication boundary: keep the Databricks application private, exclude credentials/raw Alpaca responses/article bodies/real-news chunk exports from the public repository, and use repository code, documentation, tests, screenshots, and non-sensitive evaluation evidence for the employer-facing showcase.
+- [ ] Enforce the portfolio publication boundary: control application access according to `docs/DATA_USAGE_PERMISSIONS.md`, exclude credentials/raw Alpaca responses/article bodies/real-news chunk exports from the public repository, and use repository code, documentation, tests, screenshots, and non-sensitive evaluation evidence for the employer-facing showcase.
 
 - [ ] Deploy the app on Databricks and extend controlled deployment with startup, health, and end-to-end verification.
 
 - [ ] Add screenshots, example output, a short demo, and concise reproduction instructions covering CI, authentication, release checks, and redeploying a known-good version.
 
-**Gate:** The privately deployed application supports the project owner's end-to-end one-stock and comparison research workflow with citations and follow-up chat. The public portfolio repository demonstrates the implementation through code, documentation, tests, CI evidence, screenshots, and reproducible non-sensitive artifacts without redistributing provider source content.
+**Gate:** The deployed Databricks application supports the project owner's end-to-end one-stock and comparison research workflow with citations and follow-up chat. The public portfolio repository demonstrates the implementation through code, documentation, tests, CI evidence, screenshots, and reproducible non-sensitive artifacts without redistributing provider source content.
 
 ## Outside the MVP
 
