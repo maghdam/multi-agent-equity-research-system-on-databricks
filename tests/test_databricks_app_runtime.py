@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from datetime import date, datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -30,6 +31,7 @@ from equity_research.databricks_app_runtime import (  # noqa: E402
 from equity_research.databricks_cli_runtime import (  # noqa: E402
     ControlledToolExecutionError,
 )
+from equity_research.retrieval_tools import EvidenceRecord  # noqa: E402
 from equity_research.structured_data_tools import (  # noqa: E402
     FundamentalMetricsToolResult,
     MarketMetricsToolResult,
@@ -107,6 +109,37 @@ def _market_result(
         reason_code="missing",
         limitation="Synthetic runtime test limitation.",
         metric=None,
+    )
+
+
+def _evidence_record() -> EvidenceRecord:
+    return EvidenceRecord(
+        evidence_id="a" * 64,
+        retrieval_rank=1,
+        chunk_id="a" * 64,
+        document_id="alpaca:news:101",
+        document_version_id="news-version",
+        source_type="news",
+        source_system="alpaca",
+        configured_symbols=("AAPL",),
+        title="Synthetic headline",
+        evidence_date=date(2026, 8, 30),
+        source_url="https://www.benzinga.com/news/example",
+        source_business_id="101",
+        section_code=None,
+        section_title=None,
+        chunk_index=2,
+        text="Synthetic evidence text.",
+        source_response_id="news-response",
+        source_fetched_at=datetime(
+            2026,
+            9,
+            7,
+            8,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        source_ingestion_run_id="news-run",
     )
 
 
@@ -345,10 +378,12 @@ class DatabricksAppRuntimeTests(unittest.TestCase):
                 *,
                 market_agent_runner,
                 company_agent_runner,
+                evidence_observer,
                 **_kwargs,
             ) -> None:
                 self._market_agent_runner = market_agent_runner
                 self._company_agent_runner = company_agent_runner
+                self._evidence_observer = evidence_observer
 
             def market_worker(
                 self,
@@ -375,12 +410,20 @@ class DatabricksAppRuntimeTests(unittest.TestCase):
                 request,
                 topic,
             ):
+                evidence = (
+                    _evidence_record(),
+                )
+                self._evidence_observer(
+                    topic=topic,
+                    symbol=request.requested_symbols[0],
+                    evidence=evidence,
+                )
                 return self._company_agent_runner(
                     topic=topic,
                     requested_symbols=(
                         request.requested_symbols[0],
                     ),
-                    evidence=(),
+                    evidence=evidence,
                     profile=None,
                     equities=EQUITIES,
                 )
@@ -390,6 +433,7 @@ class DatabricksAppRuntimeTests(unittest.TestCase):
             request_text,
             requested_symbols,
             market_worker,
+            company_worker,
             **_kwargs,
         ):
             request = SimpleNamespace(
@@ -400,6 +444,10 @@ class DatabricksAppRuntimeTests(unittest.TestCase):
             market_worker(
                 request=request,
             )
+            company_worker(
+                request=request,
+                topic="recent_developments",
+            )
             return SupervisorResearchResult(
                 state=object(),
                 report=SimpleNamespace(
@@ -407,6 +455,11 @@ class DatabricksAppRuntimeTests(unittest.TestCase):
                         requested_symbols
                     ),
                     mode="comparison",
+                    evidence=(
+                        SimpleNamespace(
+                            evidence_id="a" * 64,
+                        ),
+                    ),
                 ),
             )
 
@@ -464,6 +517,17 @@ class DatabricksAppRuntimeTests(unittest.TestCase):
         self.assertEqual(
             research.report.symbols,
             ("AAPL", "MSFT"),
+        )
+        self.assertEqual(
+            tuple(
+                item.evidence_id
+                for item in structured.narrative_evidence
+            ),
+            ("a" * 64,),
+        )
+        self.assertEqual(
+            structured.narrative_evidence[0].source_url,
+            "https://www.benzinga.com/news/example",
         )
 
 
