@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Callable, Sequence
 
@@ -226,6 +227,11 @@ def configure_databricks_tracking(
         if normalized_profile is not None
         else "databricks"
     )
+
+    if normalized_profile is not None:
+        os.environ[
+            "DATABRICKS_CONFIG_PROFILE"
+        ] = normalized_profile
 
     mlflow.set_tracking_uri(
         tracking_uri
