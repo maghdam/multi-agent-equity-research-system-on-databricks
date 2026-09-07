@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 import sys
 from pathlib import Path
 
@@ -26,6 +27,14 @@ SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
+from equity_research.app_followup import (  # noqa: E402
+    FollowupSessionError,
+    build_followup_session_payload,
+    conversation_from_envelope,
+    run_followup_turn,
+    sign_followup_session,
+    verify_followup_session,
+)
 from equity_research.app_contracts import (  # noqa: E402
     SUPPORTED_MARKET_WINDOWS,
     build_app_research_selection,
@@ -44,6 +53,7 @@ from equity_research.databricks_app_runtime import (  # noqa: E402
     WAREHOUSE_ENV,
     DatabricksAppResearchRuntime,
     DatabricksAppRuntimeConfig,
+    DatabricksAppTransport,
 )
 from equity_research.tool_scope import ControlledToolRequestError  # noqa: E402
 
@@ -80,6 +90,7 @@ window_options = [
 ]
 
 logger = logging.getLogger(__name__)
+FOLLOWUP_SIGNING_KEY = secrets.token_bytes(32)
 
 app = Dash(__name__, title="Equity Research Workspace")
 server = app.server
@@ -103,6 +114,11 @@ app.layout = html.Div(
             id="theme-store",
             storage_type="local",
             data="light",
+        ),
+        dcc.Store(
+            id="followup-session-store",
+            storage_type="memory",
+            data=None,
         ),
         html.Header(
             className="app-header",
@@ -318,11 +334,25 @@ app.layout = html.Div(
                         ),
                         html.P(
                             (
-                                "Follow-up chat will reuse the validated research "
-                                "session rather than become an unrestricted "
-                                "general chatbot."
+                                "Follow-up chat reuses only the active validated "
+                                "research session, its controlled structured facts, "
+                                "report findings, and cited provenance."
                             ),
                             className="section-copy",
+                        ),
+                        dcc.Loading(
+                            type="circle",
+                            children=html.Div(
+                                id="followup-conversation",
+                                className="followup-conversation",
+                                children=html.P(
+                                    (
+                                        "Run research first to create a grounded "
+                                        "follow-up session."
+                                    ),
+                                    className="followup-empty",
+                                ),
+                            ),
                         ),
                         html.Div(
                             className="followup-row",
@@ -330,7 +360,9 @@ app.layout = html.Div(
                                 dcc.Input(
                                     id="followup-input",
                                     type="text",
+                                    value="",
                                     disabled=True,
+                                    debounce=False,
                                     placeholder=(
                                         "Run research first, then ask a grounded "
                                         "follow-up question..."
@@ -339,6 +371,8 @@ app.layout = html.Div(
                                 ),
                                 html.Button(
                                     "Ask",
+                                    id="followup-ask",
+                                    n_clicks=0,
                                     disabled=True,
                                     className="secondary-button",
                                 ),
@@ -392,6 +426,11 @@ clientside_callback(
     Output("fundamentals-content", "children"),
     Output("report-content", "children"),
     Output("evidence-content", "children"),
+    Output("followup-session-store", "data"),
+    Output("followup-input", "disabled"),
+    Output("followup-ask", "disabled"),
+    Output("followup-conversation", "children"),
+    Output("followup-input", "value"),
     Input("run-research", "n_clicks"),
     State("primary-symbol", "value"),
     State("comparison-symbol", "value"),
@@ -421,6 +460,13 @@ def run_research_action(
             no_update,
             no_update,
             no_update,
+            None,
+            True,
+            True,
+            _followup_empty_state(
+                "Run research again after correcting the selection."
+            ),
+            "",
         )
 
     if not _databricks_app_resources_available():
@@ -440,6 +486,13 @@ def run_research_action(
             no_update,
             no_update,
             no_update,
+            None,
+            True,
+            True,
+            _followup_empty_state(
+                "Follow-up chat is available only after a live research run."
+            ),
+            "",
         )
 
     try:
@@ -473,6 +526,13 @@ def run_research_action(
             no_update,
             no_update,
             no_update,
+            None,
+            True,
+            True,
+            _followup_empty_state(
+                "Follow-up chat was reset because the research run failed."
+            ),
+            "",
         )
 
     presentation = build_app_research_presentation(
@@ -488,6 +548,13 @@ def run_research_action(
         f"evidence={len(presentation.evidence)}."
     )
 
+    followup_envelope = sign_followup_session(
+        build_followup_session_payload(
+            session
+        ),
+        signing_key=FOLLOWUP_SIGNING_KEY,
+    )
+
     return (
         status,
         _render_overview(presentation),
@@ -495,7 +562,210 @@ def run_research_action(
         _render_fundamentals(presentation),
         _render_report(presentation),
         _render_evidence(presentation),
+        followup_envelope,
+        False,
+        False,
+        _followup_empty_state(
+            "Active research is ready. Ask a question about this session."
+        ),
+        "",
     )
+
+
+@app.callback(
+    Output(
+        "followup-session-store",
+        "data",
+        allow_duplicate=True,
+    ),
+    Output("followup-conversation", "children"),
+    Output("followup-input", "value"),
+    Input("followup-ask", "n_clicks"),
+    State("followup-input", "value"),
+    State("followup-session-store", "data"),
+    prevent_initial_call=True,
+)
+def run_followup_action(
+    _n_clicks: int,
+    question: str,
+    envelope,
+) -> tuple:
+    """Run one signed, session-bound grounded follow-up turn."""
+
+    if not isinstance(question, str) or not question.strip():
+        return (
+            no_update,
+            no_update,
+            "",
+        )
+
+    if not _databricks_app_resources_available():
+        return (
+            no_update,
+            _followup_empty_state(
+                "Follow-up research requires the deployed Databricks App."
+            ),
+            "",
+        )
+
+    try:
+        transport = DatabricksAppTransport()
+        result = run_followup_turn(
+            envelope,
+            question=question,
+            signing_key=FOLLOWUP_SIGNING_KEY,
+            profile=None,
+            model_query=transport.query_chat_completions,
+        )
+        conversation = _render_followup_conversation(
+            result.envelope
+        )
+    except FollowupSessionError:
+        return (
+            None,
+            _followup_empty_state(
+                "The active research session expired or changed. Run research "
+                "again before asking another question."
+            ),
+            "",
+        )
+    except Exception as exc:
+        logger.error(
+            (
+                "Follow-up execution failed safely: error_type=%s "
+                "question_length=%s"
+            ),
+            type(exc).__name__,
+            len(question.strip()),
+        )
+        return (
+            no_update,
+            _followup_empty_state(
+                "Follow-up execution failed safely. The active research result "
+                "is unchanged; check the Databricks App logs."
+            ),
+            "",
+        )
+
+    return (
+        result.envelope,
+        conversation,
+        "",
+    )
+
+
+def _followup_empty_state(
+    message: str,
+):
+    return html.P(
+        message,
+        className="followup-empty",
+    )
+
+
+def _render_followup_conversation(
+    envelope,
+):
+    payload = verify_followup_session(
+        envelope,
+        signing_key=FOLLOWUP_SIGNING_KEY,
+    )
+    turns = conversation_from_envelope(
+        envelope,
+        signing_key=FOLLOWUP_SIGNING_KEY,
+    )
+    evidence_by_id = {
+        item["evidence_id"]: item
+        for item in payload["evidence"]
+    }
+
+    if not turns:
+        return _followup_empty_state(
+            "Active research is ready. Ask a question about this session."
+        )
+
+    children = []
+
+    for turn in turns:
+        children.append(
+            html.Div(
+                className="followup-message followup-message--user",
+                children=[
+                    html.Div(
+                        "You",
+                        className="followup-message-label",
+                    ),
+                    html.P(
+                        turn["question"],
+                        className="followup-message-text",
+                    ),
+                ],
+            )
+        )
+
+        citation_children = [
+            html.Span(
+                source_id,
+                className="followup-source-chip",
+            )
+            for source_id in turn["source_ids"]
+        ]
+
+        for evidence_id in turn["evidence_ids"]:
+            evidence = evidence_by_id.get(
+                evidence_id
+            )
+
+            if (
+                evidence is not None
+                and evidence.get("source_url")
+            ):
+                citation_children.append(
+                    html.A(
+                        evidence.get("short_evidence_id")
+                        or evidence_id[:12],
+                        href=evidence["source_url"],
+                        target="_blank",
+                        rel="noopener noreferrer",
+                        className="followup-evidence-link",
+                    )
+                )
+
+        assistant_children = [
+            html.Div(
+                "Grounded research",
+                className="followup-message-label",
+            ),
+            html.P(
+                turn["answer"],
+                className="followup-message-text",
+            ),
+        ]
+
+        if turn["limitation"]:
+            assistant_children.append(
+                html.Div(
+                    turn["limitation"],
+                    className="followup-limitation",
+                )
+            )
+
+        if citation_children:
+            assistant_children.append(
+                html.Div(
+                    citation_children,
+                    className="followup-citations",
+                )
+            )
+
+        children.append(
+            html.Div(
+                className="followup-message followup-message--assistant",
+                children=assistant_children,
+            )
+        )
+
+    return children
 
 
 def _metric_cards(
