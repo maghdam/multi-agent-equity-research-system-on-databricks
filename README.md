@@ -117,7 +117,7 @@ Silver
 ┌───────────────────────┴───────────────────────┐
 │                                               │
 ▼                                               ▼
-Gold metrics                                RAG system
+Gold metrics                         Research corpus
 │                                               │
 └───────────────────────┬───────────────────────┘
                         │
@@ -127,7 +127,10 @@ Milestone 2 — AI Engineering ✅
 ┌───────────────────────┴───────────────────────┐
 │                                               │
 ▼                                               ▼
-Controlled Gold tools                      Vector Search / RAG
+Controlled Gold tools                      RAG system
+                                                │
+                                                ▼
+                                          Vector Search
 │                                               │
 ▼                                               ▼
 Market Analyst                            Company Researcher
