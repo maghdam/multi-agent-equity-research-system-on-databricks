@@ -358,9 +358,18 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
   - [x] Run the automated publication gate locally on 2026-09-07: 5 focused `test_publication_audit.py` tests passed, `python scripts/audit_publication_boundary.py` returned `PUBLICATION_BOUNDARY_AUDIT=PASSED`, Ruff passed for the audit implementation/entrypoint/tests, and `git diff --check` was clean.
   - [ ] Review the final screenshot/demo artifact set for substantial licensed text, credentials, raw provider payloads, private workspace tokens, and other non-public material before closing the publication boundary.
 
-- [ ] Deploy the app on Databricks and extend controlled deployment with startup, health, and end-to-end verification.
+- [x] Deploy the app on Databricks and extend controlled deployment with startup, health, and end-to-end verification.
+  - [x] Bundle-manage the private `equity_research` Databricks App with unified-auth service-principal execution and least-privilege bindings for the SQL warehouse, Gold market/fundamental metrics, Silver daily prices, and managed AI Search index.
+  - [x] Live-verify creation/deployment on 2026-09-07: the active deployment reported `SUCCEEDED`, app `RUNNING`, compute `ACTIVE`, and the declared read-only resource bindings. Dash startup listened on `0.0.0.0:8000`, and browser page/layout/dependency requests returned HTTP 200.
+  - [x] Exercise end-to-end single-company and AAPL/MSFT comparison research, normalized market history, controlled fundamentals, validated report/evidence views, signed grounded follow-up, out-of-active-context refusal, fixed feedback, and bounded APP_EVENT telemetry.
+  - [x] Add `docs/APP_RELEASE_RUNBOOK.md` covering credential-free gates, bundle validate/plan/deploy/run, app-state/startup checks, end-to-end research/follow-up/telemetry verification, publication audit, and known-good redeployment without rewriting shared history.
 
 - [ ] Add screenshots, example output, a short demo, and concise reproduction instructions covering CI, authentication, release checks, and redeploying a known-good version.
+  - [x] Add `docs/PORTFOLIO_DEMO.md` with a concise ~3-minute employer-facing walkthrough, derived non-sensitive live example output, engineering talking points, grounded follow-up demonstration, evaluation/operations evidence, and publication-safe reproduction links.
+  - [x] Add `docs/screenshots/README.md` with required capture names/views, publication checks, and image-quality guidance.
+  - [x] Refresh the recruiter-facing README and repository guide so Milestone 3 is described as deployed/live-verified rather than future work, and link the application design, operations, release, publication, and demo documents.
+  - [ ] Capture and commit the final reviewed screenshot set under `docs/screenshots/`, then link the strongest two or three images from README/demo documentation.
+  - [ ] Record the final branch CI result and post-merge known-good deployment evidence.
 
 **Gate:** The deployed Databricks application supports the project owner's end-to-end one-stock and comparison research workflow with citations and follow-up chat. The public portfolio repository demonstrates the implementation through code, documentation, tests, CI evidence, screenshots, and reproducible non-sensitive artifacts without redistributing provider source content.
 
