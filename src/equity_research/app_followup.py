@@ -663,21 +663,21 @@ def validate_followup_output(
             "Follow-up evidence_ids must be linked to cited sources."
         )
 
+    source_texts = tuple(
+        source_by_id[source_id]["text"]
+        for source_id in source_ids
+    )
+    unsupported = unsupported_numeric_claims_from_sources(
+        candidate_text=answer,
+        source_texts=source_texts,
+    )
+
+    if unsupported:
+        raise FollowupAnswerContractError(
+            "Follow-up answer contains an unsupported numerical claim."
+        )
+
     if source_ids:
-        source_texts = tuple(
-            source_by_id[source_id]["text"]
-            for source_id in source_ids
-        )
-        unsupported = unsupported_numeric_claims_from_sources(
-            candidate_text=answer,
-            source_texts=source_texts,
-        )
-
-        if unsupported:
-            raise FollowupAnswerContractError(
-                "Follow-up answer contains an unsupported numerical claim."
-            )
-
         _validate_relation_terms(
             answer,
             source_texts=source_texts,
