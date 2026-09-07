@@ -753,6 +753,106 @@ class AppFollowupTests(unittest.TestCase):
         )
 
 
+    def test_turn_uses_deterministic_market_comparison_after_failed_repair(
+        self,
+    ) -> None:
+        payload = {
+            "version": 1,
+            "research": {
+                "mode": "comparison",
+                "symbols": [
+                    "AAPL",
+                    "MSFT",
+                ],
+                "market_window_sessions": 60,
+                "report_status": "ready",
+                "synthesis_mode": "model",
+            },
+            "sources": [
+                {
+                    "source_id": (
+                        "structured:AAPL:market:60-session-return"
+                    ),
+                    "source_type": "structured_metric",
+                    "symbols": [
+                        "AAPL"
+                    ],
+                    "text": (
+                        "AAPL 60-session return: 9.74%"
+                    ),
+                    "evidence_ids": [],
+                },
+                {
+                    "source_id": (
+                        "structured:MSFT:market:60-session-return"
+                    ),
+                    "source_type": "structured_metric",
+                    "symbols": [
+                        "MSFT"
+                    ],
+                    "text": (
+                        "MSFT 60-session return: 4.25%"
+                    ),
+                    "evidence_ids": [],
+                },
+            ],
+            "evidence": [],
+            "conversation": [],
+        }
+        envelope = sign_followup_session(
+            payload,
+            signing_key=SIGNING_KEY,
+        )
+        malformed = {
+            "choices": [
+                {
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": "not-json",
+                    },
+                }
+            ]
+        }
+        model_query = Mock(
+            side_effect=[
+                malformed,
+                malformed,
+            ]
+        )
+
+        result = run_followup_turn(
+            envelope,
+            question=(
+                "Which company showed the stronger market performance "
+                "in this analysis?"
+            ),
+            signing_key=SIGNING_KEY,
+            model_query=model_query,
+        )
+
+        self.assertEqual(
+            model_query.call_count,
+            2,
+        )
+        self.assertEqual(
+            result.answer.answer,
+            (
+                "Using the active 60-session return, AAPL showed the stronger "
+                "market performance: AAPL 9.74% versus MSFT 4.25%."
+            ),
+        )
+        self.assertEqual(
+            result.answer.source_ids,
+            (
+                "structured:AAPL:market:60-session-return",
+                "structured:MSFT:market:60-session-return",
+            ),
+        )
+        self.assertIsNone(
+            result.answer.limitation,
+        )
+
     def test_traced_turn_records_question_and_validated_answer(self) -> None:
         payload = build_followup_session_payload(
             _session()
