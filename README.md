@@ -358,3 +358,7 @@ Bronze/Silver/Gold pipeline.
 ## Disclaimer
 
 This project is for educational and portfolio demonstration purposes. Its outputs are informational and are not investment advice.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
