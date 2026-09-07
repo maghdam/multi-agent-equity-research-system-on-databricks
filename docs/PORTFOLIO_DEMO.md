@@ -22,6 +22,22 @@ Alpaca/Benzinga source content.
 **Live deployment:** [Equity Research Workspace](https://equity-research-dev-7474654299884940.aws.databricksapps.com/)  
 The URL is included so authorized reviewers can exercise the real deployment. Databricks authentication/app access is required; the screenshots and walkthrough remain the universal public demo surface.
 
+## Reviewed portfolio evidence
+
+The committed publication-safe evidence set is available directly in the repository:
+
+- [Comparison overview](screenshots/01-comparison-overview.png)
+- [Normalized market comparison](screenshots/02-market-comparison.png)
+- [Validated research report](screenshots/03-research-report.png)
+- [Evidence provenance](screenshots/04-evidence-provenance.png)
+- [Grounded follow-up](screenshots/05-grounded-followup.png)
+- [Databricks Catalog / medallion assets](screenshots/06-databricks-catalog.png)
+- Final MLflow E1/E2 evaluation metrics:
+  [part 1](screenshots/07-mlflow-evaluation-1.png),
+  [part 2](screenshots/07-mlflow-evaluation-2.png),
+  [part 3](screenshots/07-mlflow-evaluation-3.png),
+  [part 4](screenshots/07-mlflow-evaluation-4.png)
+
 ## Suggested 3–4 minute walkthrough
 
 ### 0:00–0:25 — Architecture
