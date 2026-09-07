@@ -24,6 +24,7 @@ from equity_research.supervisor_report import (
     build_supervisor_report_context,
 )
 from equity_research.worker_agent_runtime import (
+    AgentModelResponseError,
     parse_structured_chat_response,
 )
 from equity_research.mlflow_runtime_spans import run_traced_chat_completion
@@ -731,16 +732,19 @@ def run_followup_turn(
             ),
         },
     )
-    raw_output = parse_structured_chat_response(
-        response
-    )
 
     try:
+        raw_output = parse_structured_chat_response(
+            response
+        )
         answer = validate_followup_output(
             raw_output,
             session_payload=session_payload,
         )
-    except FollowupAnswerContractError as exc:
+    except (
+        AgentModelResponseError,
+        FollowupAnswerContractError,
+    ) as exc:
         repair_payload = build_followup_model_request(
             session_payload,
             question=normalized_question,
@@ -750,9 +754,10 @@ def run_followup_turn(
             {
                 "role": "user",
                 "content": (
-                    "The previous answer failed deterministic grounding "
-                    "validation. Regenerate the complete answer from the same "
-                    "signed context and correct this exact issue:\n"
+                    "The previous answer failed deterministic grounding or "
+                    "structured-response validation. Regenerate the complete "
+                    "answer from the same signed context and correct this exact "
+                    "issue:\n"
                     f"{str(exc)}\n"
                     "Do not weaken or bypass the validator. Return only the "
                     "required JSON."
@@ -778,16 +783,19 @@ def run_followup_turn(
                 ),
             },
         )
-        repaired_raw = parse_structured_chat_response(
-            repair_response
-        )
 
         try:
+            repaired_raw = parse_structured_chat_response(
+                repair_response
+            )
             answer = validate_followup_output(
                 repaired_raw,
                 session_payload=session_payload,
             )
-        except FollowupAnswerContractError:
+        except (
+            AgentModelResponseError,
+            FollowupAnswerContractError,
+        ):
             answer = FollowupAnswer(
                 answer=(
                     "I could not produce a response that passed the "
