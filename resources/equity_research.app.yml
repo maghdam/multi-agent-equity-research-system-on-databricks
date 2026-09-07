@@ -3,7 +3,7 @@ resources:
     equity_research:
       name: equity-research-${bundle.target}
       description: Multi-agent equity research workspace with grounded reports.
-      source_code_path: .
+      source_code_path: ..
       resources:
         - name: sql-warehouse
           description: Read-only SQL compute for controlled Gold queries.
