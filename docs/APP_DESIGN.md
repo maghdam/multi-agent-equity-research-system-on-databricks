@@ -53,6 +53,15 @@ The initial app exposes only exact windows already supported by Gold `market_met
 The UI must not call these arbitrary calendar periods such as "6 months". Additional
 calendar/custom periods require an explicit backend/data-contract change first.
 
+## Theme
+
+The application supports explicit **Light** and **Dark** themes from the header. The
+selected theme is stored in browser-local Dash state so the preference persists
+across refreshes on the same browser.
+
+The theme is presentation-only: it must not change research/session state, data
+selection, backend routing, or evaluation behavior.
+
 ## Main views
 
 ### Overview
