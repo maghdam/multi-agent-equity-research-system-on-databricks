@@ -613,6 +613,42 @@ class AppShellTests(unittest.TestCase):
             result_object.envelope,
         )
 
+    def test_followup_source_labels_humanize_structured_provenance(self) -> None:
+        source_by_id = {
+            "structured:AAPL:market:60-session-return": {
+                "source_id": "structured:AAPL:market:60-session-return",
+                "source_type": "structured_metric",
+                "text": "AAPL 60-session return: 9.74%",
+            },
+            "report:market_performance": {
+                "source_id": "report:market_performance",
+                "source_type": "validated_report_section",
+                "text": "Validated market section.",
+            },
+        }
+
+        self.assertEqual(
+            app_module._followup_source_label(
+                "structured:AAPL:market:60-session-return",
+                source_by_id=source_by_id,
+            ),
+            "AAPL 60-session return",
+        )
+        self.assertEqual(
+            app_module._followup_source_label(
+                "report:market_performance",
+                source_by_id=source_by_id,
+            ),
+            "Report · market performance",
+        )
+        self.assertEqual(
+            app_module._followup_source_label(
+                "market_analysis:m1",
+                source_by_id=source_by_id,
+            ),
+            "market_analysis:m1",
+        )
+
     def test_expired_followup_session_disables_controls(self) -> None:
         environment = {
             app_module.WAREHOUSE_ENV: "warehouse-1",
