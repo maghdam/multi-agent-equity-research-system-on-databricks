@@ -103,7 +103,7 @@ The project separates **factual authority** from **language generation**:
 | `src/equity_research/` | Reusable clients, transformations, RAG, tools, agents, Supervisor, report contracts |
 | `src/*.py` | Databricks job entry points and operational verification runners |
 | `resources/*.yml` | Databricks schemas, jobs, schedules, and Vector Search resources |
-| `scripts/` | Local provider diagnostics, live tool/agent/graph/report smoke runners, retrieval evaluation |
+| `scripts/` | Local provider diagnostics, live tool/agent/graph/report smoke runners, retrieval evaluation, publication audit |
 | `tests/` | Credential-free unit, contract, parser, orchestration, and integration-style tests |
 | `.github/workflows/ci.yml` | Pull-request and `main` CI |
 | `databricks.yml` | Asset Bundle root configuration and target variables |
@@ -112,7 +112,10 @@ The project separates **factual authority** from **language generation**:
 | `docs/AI_RESEARCH_CONTRACT.md` | Required AI behavior, evidence rules, failure behavior, evaluation cases |
 | `docs/MODEL_STRATEGY.md` | Model allocation, retrieval/model baselines, evaluation strategy |
 | `docs/EVALUATION_RUNBOOK.md` | Credential-free CI versus credentialed live-evaluation execution boundary |
-| `docs/DATA_USAGE_PERMISSIONS.md` | Private-runtime and public-portfolio source-content boundary |
+| `docs/APP_DESIGN.md` | Databricks App product, presentation, runtime, and session-bound follow-up design |
+| `docs/APP_OPERATIONS.md` | Privacy-safe APP_EVENT telemetry, feedback, and secure runtime operations |
+| `docs/APP_RELEASE_RUNBOOK.md` | App release, verification, rollback/redeployment, and reproduction procedure |
+| `docs/DATA_USAGE_PERMISSIONS.md` | Private-runtime and public-portfolio source-content boundary plus automated publication audit |
 | `docs/BUILD_GUIDE.md` | Build/development guidance |
 | `docs/REPOSITORY_GUIDE.md` | This cross-folder component map |
 
@@ -1361,32 +1364,164 @@ Post-merge `main` CI also passed.
 
 ------
 
-# Next Component
+# Application Delivery
 
-## 29. Milestone 3 application delivery
+## 29. Milestone 3 Databricks application
 
-The next component will turn the validated research graph into the user-facing
-Databricks application.
+### Question solved
 
-The first implementation slice will answer:
+How does the completed data/AI stack become a private end-to-end research product
+without duplicating data authority, retrieval logic, agent validation, or security
+rules inside Dash callbacks?
 
-> How does a user select the configured stock scope and research period, run the
-> existing Supervisor research graph, inspect structured comparison metrics/charts,
-> read the cited report, and continue with evidence-grounded follow-up questions?
+### User-facing entry points
 
-Planned Milestone 3 responsibilities include:
+- `app.py` — Dash application, callbacks, signed-session stores, view rendering,
+  feedback controls, and privacy-safe lifecycle instrumentation.
+- `app.yaml` — Databricks Apps process command plus environment variables populated
+  from resource bindings.
+- `assets/app.css` — responsive Light/Dark application styling.
 
-- configured stock and period selection;
-- market/fundamental charts and comparison metrics;
-- cited report rendering with explicit limitations;
-- evidence-grounded follow-up chat routed through the existing research boundary;
-- application logging, monitoring and feedback collection;
-- secure secret handling and private Databricks deployment;
-- startup/health/end-to-end deployment verification;
-- screenshots, example output and non-sensitive portfolio demonstration artifacts.
+### Framework-independent application contracts
 
-The application should reuse the completed Milestone 1 data products and Milestone 2
-research/evaluation layers rather than duplicating business logic inside UI code.
+- `src/equity_research/app_contracts.py` — configured selector options, exact
+  1/5/20/60-session selection validation, and deterministic Supervisor request text.
+- `src/equity_research/app_service.py` — thin application-service boundary that
+  connects a validated UI selection to structured data and the existing Supervisor
+  research graph.
+- `src/equity_research/app_presenters.py` — publication-safe presentation DTOs for
+  Overview, Market, Fundamentals, Research Report, Evidence, comparison-safe labels,
+  compact financial values, statuses, limitations, and source metadata.
+- `src/equity_research/app_market_history.py` — controlled Silver daily-price
+  presentation query/validation and normalized comparison-series construction.
+
+### Deployed Databricks runtime
+
+- `src/equity_research/databricks_app_runtime.py` — Databricks Apps-native runtime
+  using `WorkspaceClient()` unified authentication for Statement Execution, managed
+  AI Search, and Foundation Model requests while preserving Milestone 2 contracts.
+- `resources/equity_research.app.yml` — bundle-managed private app resource with
+  least-privilege bindings.
+- `databricks.yml` — bundle variable for the application SQL warehouse.
+- `requirements.txt` — Dash, Plotly, Databricks SDK, and existing AI/runtime
+  dependencies.
+
+The app service principal receives only:
+
+- SQL warehouse — `CAN_USE`;
+- Gold `market_metrics` — `SELECT`;
+- Gold `fundamental_metrics` — `SELECT`;
+- Silver `daily_prices` — `SELECT`;
+- managed research index — `SELECT`.
+
+The deployed runtime does not depend on the developer's local CLI profile or PAT.
+
+### Research presentation
+
+The app renders:
+
+- configuration-driven primary and optional comparison selectors;
+- exact Gold-supported 1/5/20/60 trading-session windows;
+- Overview snapshots from controlled structured data;
+- normalized Silver price-history charts aligned to the authoritative Gold as-of date;
+- controlled market/fundamental metric cards with readiness/as-of semantics;
+- the existing validated Supervisor report;
+- only final-citation evidence provenance cards.
+
+Evidence cards deliberately omit retrieved article/chunk bodies and news headlines.
+They expose only publication-safe metadata such as company, date, source family/domain,
+retrieval rank, chunk position, source record, stable evidence identity, supported
+finding IDs, and original-source links.
+
+### Session-bound follow-up
+
+- `src/equity_research/app_followup.py` — builds a bounded active-research context
+  from validated report findings, controlled structured facts, safe evidence metadata,
+  and limitations; signs browser-held state with an ephemeral process HMAC key; runs
+  GPT OSS 120B follow-up synthesis; validates source/evidence allowlists, numerical
+  fidelity, provenance dates, and guarded relationship language; permits one bounded
+  repair before deterministic grounded failure.
+- `tests/test_app_followup.py`
+- `tests/test_app_followup_provenance.py`
+
+Follow-up is not a new unrestricted agent. A research rerun resets the session, and
+tampered/expired state fails closed.
+
+### Application observability and feedback
+
+- `src/equity_research/app_observability.py` — allowlisted `APP_EVENT` telemetry
+  dataclasses/serialization.
+- `docs/APP_OPERATIONS.md` — live log-inspection and secure-runtime operations.
+- `tests/test_app_observability.py`.
+
+Routine application logs may contain bounded mode/symbol/window/status/count/latency
+metadata, exception type, question length, bounded source/turn counts, and fixed
+`helpful` / `needs_work` feedback. They do not contain question/answer text,
+provider text, exception messages, raw payloads, credentials, or free-text feedback.
+
+### Publication boundary enforcement
+
+- `src/equity_research/publication_audit.py` — deterministic Git-tracked artifact
+  audit.
+- `scripts/audit_publication_boundary.py` — CI/local entry point.
+- `tests/test_publication_audit.py` — current-repository self-audit plus synthetic
+  violation cases.
+- `docs/DATA_USAGE_PERMISSIONS.md` — private processing versus public redistribution
+  policy.
+- `docs/screenshots/README.md` — reviewed screenshot capture checklist.
+
+GitHub Actions runs the publication audit before the complete offline suite. Synthetic
+fixtures remain allowed; obvious secret files/signatures, portable provider-data
+exports, suspicious raw news/chunk/embedding export paths, and unreviewed image
+locations fail the audit.
+
+### Release and reproduction
+
+- `docs/APP_RELEASE_RUNBOOK.md` — stable credential-free gates, bundle
+  validate/plan/deploy/run flow, app-state/startup checks, end-to-end single/comparison
+  research, grounded follow-up, telemetry inspection, publication audit, and
+  known-good redeployment procedure.
+- `PLAN.md` — chronological live deployment/research evidence.
+
+### Main app tests
+
+- `tests/test_app_contracts.py`
+- `tests/test_app_service.py`
+- `tests/test_app_presenters.py`
+- `tests/test_app_market_history.py`
+- `tests/test_app_followup.py`
+- `tests/test_app_followup_provenance.py`
+- `tests/test_app_observability.py`
+- `tests/test_app_shell.py`
+- `tests/test_databricks_app_runtime.py`
+- `tests/test_publication_audit.py`
+
+### Live verification checkpoint
+
+On 2026-09-07 the bundle-managed private app was created/deployed successfully and
+reported app `RUNNING`, compute `ACTIVE`, and deployment `SUCCEEDED`. Browser
+requests returned HTTP 200 for the Dash page/layout/dependency endpoints.
+
+Live research verification covered:
+
+- ready AAPL single-company research;
+- ready AAPL/MSFT 60-session comparison research;
+- normalized market-history charts;
+- controlled market/fundamental views;
+- validated report/evidence rendering;
+- grounded factual and provenance follow-up;
+- an out-of-active-context NVDA recommendation refusal;
+- fixed-category feedback;
+- privacy-safe `research_completed`, `followup_completed`, and
+  `feedback_submitted` APP_EVENT lines.
+
+The final operations comparison completed with `synthesis_mode=model`, 14 final
+citations, and bounded telemetry only. The automated public-repository audit later
+passed locally with five focused tests, Ruff clean, and `git diff --check` clean.
+
+The remaining milestone work is portfolio packaging: manually reviewed screenshots /
+short demo plus final CI/merge/release evidence.
+
 
 ---
 
