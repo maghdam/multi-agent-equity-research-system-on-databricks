@@ -1,3 +1,12 @@
 command:
   - python
   - app.py
+env:
+  - name: EQUITY_RESEARCH_WAREHOUSE_ID
+    valueFrom: sql-warehouse
+  - name: EQUITY_RESEARCH_MARKET_METRICS_TABLE
+    valueFrom: market-metrics
+  - name: EQUITY_RESEARCH_FUNDAMENTAL_METRICS_TABLE
+    valueFrom: fundamental-metrics
+  - name: EQUITY_RESEARCH_VECTOR_SEARCH_INDEX
+    valueFrom: research-index
