@@ -17,6 +17,7 @@ from mlflow.entities import SpanType  # noqa: E402
 
 from equity_research.app_contracts import AppResearchSelection  # noqa: E402
 from equity_research.app_followup import (  # noqa: E402
+    FOLLOWUP_SYSTEM_PROMPT,
     FollowupAnswerContractError,
     FollowupSessionError,
     MAX_FOLLOWUP_TURNS,
@@ -520,6 +521,97 @@ class AppFollowupTests(unittest.TestCase):
                 },
                 session_payload=payload,
             )
+
+    def test_turn_repairs_unsupported_relationship_with_exact_values(
+        self,
+    ) -> None:
+        payload = build_followup_session_payload(
+            _session()
+        )
+        envelope = sign_followup_session(
+            payload,
+            signing_key=SIGNING_KEY,
+        )
+        model_query = Mock(
+            side_effect=[
+                _response(
+                    {
+                        "answer": (
+                            "AAPL had a higher 60-session return of 9.74%."
+                        ),
+                        "source_ids": [
+                            "market_analysis:m1"
+                        ],
+                        "evidence_ids": [],
+                        "limitation": "",
+                    }
+                ),
+                _response(
+                    {
+                        "answer": (
+                            "AAPL 60-session return was 9.74%. "
+                            "The active research does not provide an explicit "
+                            "qualitative ranking."
+                        ),
+                        "source_ids": [
+                            "market_analysis:m1"
+                        ],
+                        "evidence_ids": [],
+                        "limitation": "",
+                    }
+                ),
+            ]
+        )
+
+        result = run_followup_turn(
+            envelope,
+            question="Was AAPL's 60-session return higher?",
+            signing_key=SIGNING_KEY,
+            model_query=model_query,
+        )
+
+        self.assertEqual(
+            model_query.call_count,
+            2,
+        )
+        self.assertIn(
+            "explicit qualitative ranking",
+            result.answer.answer,
+        )
+        repair_payload = (
+            model_query.call_args_list[
+                1
+            ].kwargs[
+                "payload"
+            ]
+        )
+        repair_instruction = (
+            repair_payload[
+                "messages"
+            ][
+                -1
+            ][
+                "content"
+            ]
+        )
+        self.assertIn(
+            "unsupported relationship",
+            repair_instruction,
+        )
+        self.assertIn(
+            "exact cited comparison values",
+            repair_instruction,
+        )
+
+    def test_system_prompt_handles_unsupported_comparison_wording(self) -> None:
+        self.assertIn(
+            "do not echo that unsupported wording",
+            FOLLOWUP_SYSTEM_PROMPT,
+        )
+        self.assertIn(
+            "explicit qualitative ranking",
+            FOLLOWUP_SYSTEM_PROMPT,
+        )
 
     def test_turn_repairs_malformed_structured_response(self) -> None:
         payload = build_followup_session_payload(
