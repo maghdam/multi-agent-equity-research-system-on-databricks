@@ -19,7 +19,7 @@ system in which:
 The public portfolio demonstrates the implementation without publishing raw
 Alpaca/Benzinga source content.
 
-## Suggested 3-minute walkthrough
+## Suggested 3–4 minute walkthrough
 
 ### 0:00–0:25 — Architecture
 
@@ -37,7 +37,24 @@ Mention that the app is only the presentation/runtime layer; it does not reimple
 financial calculations, retrieval policy, or citation selection inside Dash
 callbacks.
 
-### 0:25–0:55 — Run comparison research
+### 0:25–0:45 — Prove the lakehouse assets exist
+
+Open the reviewed Databricks Catalog screenshot.
+
+Show the implemented Unity Catalog layers and tables:
+
+- Bronze: `price_responses`, `news_responses`, `company_facts_responses`,
+  `filing_documents`;
+- Silver: `daily_prices`, `news_articles`, `company_facts`,
+  `filing_sections`;
+- Gold: `market_metrics`, `fundamental_metrics`;
+- AI/RAG: `research_documents`, `research_chunks`,
+  `research_chunks_index`, `supervisor_evaluation_dataset`.
+
+The point is to connect the README architecture directly to real governed Databricks
+assets rather than treating Bronze/Silver/Gold/RAG as conceptual boxes.
+
+### 0:45–1:10 — Run comparison research
 
 In the private app select:
 
@@ -59,7 +76,7 @@ evidence_count=14
 
 This is a live controlled Databricks run, not a static mock.
 
-### 0:55–1:20 — Structured analytics and market chart
+### 1:10–1:35 — Structured analytics and market chart
 
 Open **Overview** and **Market**.
 
@@ -76,7 +93,7 @@ The Market tab also renders validated Silver daily prices normalized to 100 at t
 first aligned close. This makes cross-company performance visually comparable while
 Gold remains the authority for report return/volatility metrics.
 
-### 1:20–1:45 — Validated research report
+### 1:35–2:00 — Validated research report
 
 Open **Research Report**.
 
@@ -93,7 +110,7 @@ Point out:
 The report is generated from validated worker findings. The final GPT OSS 120B model
 does not receive raw provider payloads.
 
-### 1:45–2:05 — Evidence provenance
+### 2:00–2:20 — Evidence provenance
 
 Open **Evidence**.
 
@@ -110,7 +127,7 @@ Show that each final citation is represented by publication-safe metadata such a
 The UI intentionally excludes retrieved news article/chunk bodies and headlines from
 the evidence presentation contract.
 
-### 2:05–2:35 — Grounded follow-up
+### 2:20–2:50 — Grounded follow-up
 
 Ask:
 
@@ -139,12 +156,36 @@ general knowledge.
 The verified app refused to invent an NVDA recommendation because NVDA was not part
 of the active AAPL/MSFT evidence context.
 
-### 2:35–3:00 — Evaluation and operations
+### 2:50–3:30 — Evaluation and operations
 
-Show either the privacy-safe MLflow evaluation view or bounded Databricks App logs.
+Show the reviewed MLflow evaluation screenshot for the final managed E1/E2 run
+`spiffy-rat-765` (run ID `248395fd300d449ab98d496a4a39fcdc`).
 
-The final Milestone 2 managed E1/E2 baseline passed the configured behavioral,
-grounding, safety, relevance, project-guideline, and retrieval-sufficiency gates.
+The strongest final metrics are:
+
+| Metric | Mean |
+| --- | ---: |
+| Report section grounding contract | 1.000 |
+| Safety | 1.000 |
+| Retrieval trace sufficiency | 1.000 |
+| Relevance to query | 1.000 |
+| Narrative trace groundedness | 1.000 |
+| Required report sections | 1.000 |
+| Expected request mode | 1.000 |
+| Expected symbol scope | 1.000 |
+| Overall retrieval relevance | 0.861 |
+| AAPL recent-development retrieval relevance | 0.775 |
+| MSFT recent-development retrieval relevance | 0.333 |
+| Retrieval empty-route count | 0 |
+| Evidence count mean | 11 |
+
+All configured project guideline means were also `1.000`.
+
+The non-perfect MSFT recent-development relevance score is useful portfolio evidence:
+the project reports the measured precision/recall tradeoff rather than hiding it behind
+only perfect aggregate metrics.
+
+Then show bounded Databricks App telemetry if time permits.
 
 The 2026-09-07 app operations verification emitted bounded:
 
