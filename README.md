@@ -117,7 +117,7 @@ Silver
 ┌───────────────────────┴───────────────────────┐
 │                                               │
 ▼                                               ▼
-Gold metrics                                RAG corpus
+Gold metrics                                RAG system
 │                                               │
 └───────────────────────┬───────────────────────┘
                         │
@@ -127,7 +127,7 @@ Milestone 2 — AI Engineering ✅
 ┌───────────────────────┴───────────────────────┐
 │                                               │
 ▼                                               ▼
-Controlled Gold tools                      Vector Search
+Controlled Gold tools                      Vector Search / RAG
 │                                               │
 ▼                                               ▼
 Market Analyst                            Company Researcher
@@ -163,6 +163,7 @@ MLflow traces                              MLflow evaluation
                         ▼
 Milestone 3 — Private Databricks App ✅
 charts · cited report · grounded follow-up
+GPT OSS 120B follow-up chat over signed active research context
 </pre>
 </div>
 
