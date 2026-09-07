@@ -15,7 +15,8 @@ from equity_research.app_followup import (  # noqa: E402
 
 
 EVIDENCE_ID = "a" * 64
-SOURCE_ID = f"evidence:{EVIDENCE_ID}"
+FINDING_SOURCE_ID = "recent_developments:AAPL:fd1"
+EVIDENCE_SOURCE_ID = f"evidence:{EVIDENCE_ID}"
 
 
 def _session_payload() -> dict:
@@ -30,7 +31,16 @@ def _session_payload() -> dict:
         },
         "sources": [
             {
-                "source_id": SOURCE_ID,
+                "source_id": FINDING_SOURCE_ID,
+                "source_type": "worker_finding",
+                "symbols": ["AAPL"],
+                "text": (
+                    "Apple announced a device leasing strategy."
+                ),
+                "evidence_ids": [EVIDENCE_ID],
+            },
+            {
+                "source_id": EVIDENCE_SOURCE_ID,
                 "source_type": "evidence_metadata",
                 "symbols": ["AAPL"],
                 "text": (
@@ -38,7 +48,7 @@ def _session_payload() -> dict:
                     "from www.benzinga.com · source record 101"
                 ),
                 "evidence_ids": [EVIDENCE_ID],
-            }
+            },
         ],
         "evidence": [
             {
@@ -65,7 +75,7 @@ class AppFollowupProvenanceTests(unittest.TestCase):
                     "The supporting Benzinga source was published on "
                     "August 30, 2026."
                 ),
-                "source_ids": [SOURCE_ID],
+                "source_ids": [FINDING_SOURCE_ID],
                 "evidence_ids": [EVIDENCE_ID],
                 "limitation": "",
             },
@@ -74,7 +84,7 @@ class AppFollowupProvenanceTests(unittest.TestCase):
 
         self.assertEqual(
             result.source_ids,
-            (SOURCE_ID,),
+            (FINDING_SOURCE_ID,),
         )
         self.assertEqual(
             result.evidence_ids,
@@ -92,7 +102,7 @@ class AppFollowupProvenanceTests(unittest.TestCase):
                         "The supporting Benzinga source was published on "
                         "August 31, 2026."
                     ),
-                    "source_ids": [SOURCE_ID],
+                    "source_ids": [FINDING_SOURCE_ID],
                     "evidence_ids": [EVIDENCE_ID],
                     "limitation": "",
                 },
