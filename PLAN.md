@@ -4,7 +4,7 @@ Build a small research app that compares AAPL and MSFT using market data, compan
 
 **Current position:** Milestone 1 — Data Engineering and Milestone 2 — AI Engineering are complete. Milestone 3 — Application and end-to-end delivery is active. The repository now has the Dash research-workspace shell, configuration-driven one/two-company selection, exact 1/5/20/60 trading-session market-window controls, browser-persisted Light/Dark themes, a framework-independent application-service boundary, and a Databricks Apps-native runtime that reuses the verified Gold/RAG/worker/Supervisor/report contracts through unified authentication. Bundle-managed app resources now bind the SQL warehouse, Gold market/fundamental tables, and managed research index with least privilege; local execution remains preview-only unless Databricks App resource variables are present.
 
-**Next:** Re-run the focused app/runtime tests and bundle validation after the new resource bindings, inspect the bundle deployment plan, then perform the first controlled Databricks App deployment/restart before rendering the structured dashboard, cited report, evidence view, and session-bound follow-up chat.
+**Next:** Verify the rendered-result corrections and Market Analyst deterministic fallback, redeploy the app, then live-check AAPL and AAPL/MSFT research before adding normalized price-history charts, richer evidence metadata, and session-bound follow-up chat.
 
 ## Implementation roadmap
 
@@ -325,6 +325,10 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
   - [ ] Render Overview/Market/Fundamentals from controlled data with exact as-of/status semantics and comparison-safe charts/tables.
     - [x] Add `app_presenters.py` and connect the deployed research callback to render controlled Gold market/fundamental metrics, validated report sections/limitations, and evidence citation/source-finding IDs into the five app tabs. The first renderer intentionally does not invent daily price history or full evidence metadata that the current session contract does not yet carry.
     - [ ] Offline-verify and redeploy the rendered-result slice, then live-check AAPL and AAPL/MSFT tab output. Add normalized price-history chart data in a separate controlled structured-data adapter.
+      - [x] First live rendered AAPL run on 2026-09-07 populated Overview, Market, Fundamentals, Research Report, and Evidence. Controlled Market/Fundamental cards were ready and showed exact as-of dates. The live check exposed two follow-up defects: `net_income_change_latest_fy` was incorrectly formatted as a percentage in the presenter, and the GPT OSS 20B Market Analyst still failed its contract after repair, causing the report to mark otherwise-ready structured sections unavailable.
+      - [x] Correct `net_income_change_latest_fy` presentation to compact USD money, humanize the TTM derivation label, and add regression tests.
+      - [x] Add a deterministic validator-checked Market Analyst fallback after one bounded model repair so model-contract/structured-response failures cannot falsely convert ready Gold data into unavailable report sections. The fallback uses only ready Gold rows, logs only bounded fallback metadata, and still passes the normal Market Analyst numeric/provenance validator.
+      - [ ] Re-run focused presenter/worker/app tests and Ruff, redeploy, and verify that AAPL no longer reports market/fundamental sections unavailable solely because of a Market Analyst contract error.
   - [ ] Render the validated cited report and evidence/provenance views.
   - [ ] Add session-bound evidence-grounded follow-up chat over the active validated research context.
 
