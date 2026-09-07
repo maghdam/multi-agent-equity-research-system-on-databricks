@@ -28,7 +28,16 @@ from equity_research.app_contracts import (  # noqa: E402
     build_research_request_text,
     company_selector_options,
 )
+from equity_research.app_service import run_app_research  # noqa: E402
 from equity_research.config import load_equities  # noqa: E402
+from equity_research.databricks_app_runtime import (  # noqa: E402
+    FUNDAMENTAL_METRICS_TABLE_ENV,
+    MARKET_METRICS_TABLE_ENV,
+    VECTOR_INDEX_ENV,
+    WAREHOUSE_ENV,
+    DatabricksAppResearchRuntime,
+    DatabricksAppRuntimeConfig,
+)
 from equity_research.tool_scope import ControlledToolRequestError  # noqa: E402
 
 
@@ -185,12 +194,16 @@ app.layout = html.Div(
                                 ),
                             ],
                         ),
-                        html.Div(
-                            id="selection-status",
-                            className="selection-status",
-                            children=(
-                                "The shell is ready. Live research execution "
-                                "will be connected in the next slice."
+                        dcc.Loading(
+                            type="circle",
+                            children=html.Div(
+                                id="selection-status",
+                                className="selection-status",
+                                children=(
+                                    "The research workspace is ready. Local runs "
+                                    "stay in preview mode unless Databricks App "
+                                    "resources are available."
+                                ),
                             ),
                         ),
                     ],
@@ -354,13 +367,13 @@ clientside_callback(
     State("market-window", "value"),
     prevent_initial_call=True,
 )
-def preview_research_selection(
+def run_research_action(
     _n_clicks: int,
     primary_symbol: str,
     comparison_symbol: str,
     market_window: int,
 ) -> str:
-    """Validate UI state without invoking SQL, retrieval, or model services."""
+    """Validate locally or run the real Databricks App research runtime."""
 
     try:
         selection = build_app_research_selection(
@@ -372,16 +385,60 @@ def preview_research_selection(
     except (ControlledToolRequestError, ValueError) as exc:
         return f"Selection error: {exc}"
 
-    request_text = build_research_request_text(
-        selection,
-        equities=equities,
-    )
+    if not _databricks_app_resources_available():
+        request_text = build_research_request_text(
+            selection,
+            equities=equities,
+        )
+        return (
+            f"Valid local preview: mode={selection.mode}; "
+            f"symbols={','.join(selection.requested_symbols)}; "
+            f"market_window={selection.market_window_sessions}. "
+            f"Supervisor request preview: {request_text}"
+        )
+
+    try:
+        runtime = DatabricksAppResearchRuntime(
+            config=DatabricksAppRuntimeConfig.from_environment(),
+            equities=equities,
+        )
+        session = run_app_research(
+            selection=selection,
+            runtime=runtime,
+            equities=equities,
+        )
+    except Exception:
+        return (
+            "Research execution failed safely. No partial result is shown. "
+            "Check Databricks App logs and the configured workspace resources."
+        )
+
+    report = session.research.report
 
     return (
-        f"Valid selection: mode={selection.mode}; "
-        f"symbols={','.join(selection.requested_symbols)}; "
-        f"market_window={selection.market_window_sessions}. "
-        f"Supervisor request preview: {request_text}"
+        f"Research complete: mode={report.mode}; "
+        f"symbols={','.join(report.symbols)}; "
+        f"status={report.status}; "
+        f"synthesis_mode={report.synthesis_mode}; "
+        f"sections={len(report.sections)}; "
+        f"evidence={len(report.evidence)}."
+    )
+
+
+def _databricks_app_resources_available(
+    environment: dict[str, str] | None = None,
+) -> bool:
+    values = os.environ if environment is None else environment
+
+    return all(
+        isinstance(values.get(name), str)
+        and bool(values[name].strip())
+        for name in (
+            WAREHOUSE_ENV,
+            MARKET_METRICS_TABLE_ENV,
+            FUNDAMENTAL_METRICS_TABLE_ENV,
+            VECTOR_INDEX_ENV,
+        )
     )
 
 
