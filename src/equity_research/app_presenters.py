@@ -172,6 +172,7 @@ def build_app_research_presentation(
         evidence=_evidence_presentation(
             report.evidence,
             session.structured.narrative_evidence,
+            requested_symbols=report.symbols,
         ),
     )
 
@@ -179,6 +180,8 @@ def build_app_research_presentation(
 def _evidence_presentation(
     citations,
     narrative_evidence,
+    *,
+    requested_symbols,
 ) -> tuple[PresentationEvidence, ...]:
     evidence_by_id = {
         item.evidence_id: item
@@ -234,7 +237,11 @@ def _evidence_presentation(
                 source_finding_ids=citation.source_finding_ids,
                 metadata_status="ready",
                 source_label=source_label,
-                symbols=item.configured_symbols,
+                symbols=tuple(
+                    symbol
+                    for symbol in item.configured_symbols
+                    if symbol in requested_symbols
+                ),
                 evidence_date=item.evidence_date.isoformat(),
                 source_domain=urlparse(
                     item.source_url
