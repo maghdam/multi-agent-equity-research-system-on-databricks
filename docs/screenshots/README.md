@@ -92,30 +92,97 @@ Capture at least:
 - one structured factual follow-up;
 - one source/provenance follow-up with a safe clickable citation.
 
-A second optional image may show an out-of-scope refusal, for example the verified
-NVDA recommendation request:
-
-`06-followup-scope-refusal.png`
-
 Why it matters:
 
 Shows multi-turn behavior that remains attached to the signed active research
 context instead of becoming an unrestricted chatbot.
 
-### 6. Evaluation / observability evidence
+### 6. Databricks Catalog / medallion assets
 
-Optional but valuable:
+Suggested filename:
+
+`06-databricks-catalog.png`
+
+Capture the Catalog Explorer with enough of the schema/table tree visible to show the
+implemented data architecture:
+
+- Bronze:
+  - `price_responses`;
+  - `news_responses`;
+  - `company_facts_responses`;
+  - `filing_documents`;
+- Silver:
+  - `daily_prices`;
+  - `news_articles`;
+  - `company_facts`;
+  - `filing_sections`;
+- Gold:
+  - `market_metrics`;
+  - `fundamental_metrics`;
+- AI/RAG:
+  - `research_documents`;
+  - `research_chunks`;
+  - `research_chunks_index`;
+  - `supervisor_evaluation_dataset`.
+
+Why it matters:
+
+Shows that Bronze/Silver/Gold/RAG are real Unity Catalog assets behind the app rather
+than architecture-diagram labels.
+
+Crop or resize the Catalog Explorer so schema/table names are legible. The owner email
+column is not needed for the portfolio and should be excluded from the crop when
+possible.
+
+### 7. Final MLflow evaluation metrics
+
+Suggested filename:
 
 `07-mlflow-evaluation.png`
 
-or
+Capture the final managed E1/E2 evaluation run `spiffy-rat-765`, ideally showing the
+run name/status plus the strongest part of the metrics table.
 
-`07-app-observability.png`
+Key values worth keeping visible:
 
-Use a screenshot of:
+- report section grounding contract = `1`;
+- safety = `1`;
+- retrieval trace sufficiency = `1`;
+- relevance to query = `1`;
+- narrative trace groundedness = `1`;
+- required report sections = `1`;
+- expected request mode/symbol scope = `1`;
+- all configured project guideline means = `1`;
+- retrieval empty-route count = `0`;
+- overall retrieval relevance = `0.8611`;
+- AAPL recent-development retrieval relevance = `0.775`;
+- MSFT recent-development retrieval relevance = `0.3333`;
+- evidence count mean = `11`.
 
-- privacy-safe MLflow evaluation metrics/spans; or
-- bounded `APP_EVENT` output showing research/follow-up/feedback lifecycle.
+Why it matters:
+
+Shows measured grounding/safety/relevance quality and also preserves the honest
+retrieval-precision tradeoff instead of presenting only perfect scores.
+
+Prefer a crop centered on the run name/status and metrics. The `Created by` email,
+workspace navigation, and other account details add little portfolio value and may be
+cropped out.
+
+### 8. Optional scope-refusal evidence
+
+Suggested filename:
+
+`08-followup-scope-refusal.png`
+
+Capture the verified out-of-active-context NVDA recommendation refusal.
+
+### 9. Optional application observability
+
+Suggested filename:
+
+`09-app-observability.png`
+
+Capture bounded `APP_EVENT` output showing research/follow-up/feedback lifecycle.
 
 Make sure no raw prompts, provider text, credentials, or unrestricted trace payloads
 are visible.
