@@ -919,7 +919,6 @@ def _databricks_app_resources_available(
             WAREHOUSE_ENV,
             MARKET_METRICS_TABLE_ENV,
             FUNDAMENTAL_METRICS_TABLE_ENV,
-            DAILY_PRICES_TABLE_ENV,
             VECTOR_INDEX_ENV,
         )
     )
