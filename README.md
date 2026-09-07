@@ -96,39 +96,41 @@ See the [portfolio demo walkthrough](docs/PORTFOLIO_DEMO.md) for the evidence-pr
 
 ## Architecture
 
-```mermaid
-flowchart TB
-    SRC["Data Sources<br/>Alpaca Market + News · SEC EDGAR"]
+```text
+Sources
+  ↓
+Milestone 1 — Data Engineering ✅
+  Bronze → Silver
+          ├─ Gold metrics
+          └─ RAG corpus
 
-    DE["Milestone 1 — Data Engineering ✅<br/><br/>Bronze → Silver → Gold<br/>Delta Lake · PySpark · SQL<br/>Unity Catalog · Databricks Workflows<br/>DQ · freshness · lineage · replay"]
-
-    AI["Milestone 2 — AI Engineering ✅<br/><br/>RAG corpus + Vector Search<br/>GTE embeddings · HYBRID retrieval<br/>GPT OSS 20B workers · LangGraph<br/>GPT OSS 120B synthesis<br/>validation · repair · deterministic fallback"]
-
-    APP["Milestone 3 — Application Delivery ✅<br/><br/>Databricks Apps · Dash<br/>charts · cited reports · grounded follow-up<br/>unified auth · least privilege"]
-
-    OBS["Production controls<br/>MLflow tracing/evaluation · E1–E6 safety tests<br/>GitHub Actions CI/CD · 482-test suite<br/>bundle validate/plan/deploy · publication audit"]
-
-    SRC --> DE --> AI --> APP
-    OBS -. governs and verifies .-> DE
-    OBS -. governs and verifies .-> AI
-    OBS -. governs and verifies .-> APP
+Milestone 2 — AI Engineering ✅
+  Controlled Gold tools      Vector Search
+          ↓                       ↓
+    Market Analyst          Company Researcher
+      GPT OSS 20B             GPT OSS 20B
+          └──────────────┬──────────────┘
+                         ↓
+               LangGraph Supervisor
+                         ↓
+                   GPT OSS 120B
+                         ↓
+             deterministic validation
+             numeric fidelity/provenance
+             repair + fallback
+                         ↓
+                grounded cited report
+                         ↓
+          ┌──────────────┴──────────────┐
+          ↓                             ↓
+     MLflow traces               MLflow evaluation
+          └──────────────┬──────────────┘
+                         ↓
+                    CI/regression
+                         ↓
+Milestone 3 — Private Databricks App ✅
+  charts · cited report · grounded follow-up
 ```
-
-This intentionally keeps the main execution path simple. The detailed technologies and production controls are listed immediately below so hiring managers can scan the engineering depth without decoding a dense diagram.
-
-### Engineering capabilities demonstrated
-
-| Data Engineering | AI Engineering / GenAI | Production & Delivery |
-| --- | --- | --- |
-| Databricks, Delta Lake, Bronze/Silver/Gold | RAG over validated news + SEC evidence | Databricks Apps + Dash |
-| PySpark, Python, SQL | Databricks Vector Search + GTE embeddings | Unified authentication + least-privilege bindings |
-| Unity Catalog governance | LangGraph multi-agent orchestration | GitHub Actions CI/CD |
-| Databricks Workflows scheduling | GPT OSS 20B worker agents | MLflow 3 tracing + GenAI evaluation |
-| Incremental ingestion + replay-safe pipelines | GPT OSS 120B terminal synthesis | 482-test credential-free repository suite |
-| Data quality, freshness, coverage, lineage gates | Numeric fidelity + citation/provenance validation | Ruff, publication-boundary audit, release runbook |
-| Alpaca + SEC EDGAR source integration | Bounded repair + deterministic fallback | Bundle validate/plan/deploy + post-merge smoke verification |
-
-**Cross-cutting controls:** MLflow tracing and GenAI evaluation, E1–E6 controlled failure/security cases, credential-free CI, numeric/provenance validation, bounded repair with deterministic fallback, unified authentication, least-privilege Databricks App resource bindings, and publication-boundary auditing.
 
 Gold is intentionally **not** a one-to-one mirror of Silver. Structured price and fundamental data feed analytical Gold tables, while validated news and filing text primarily become retrieval/indexing assets for the AI layer.
 
