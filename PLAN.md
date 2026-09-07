@@ -303,6 +303,11 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
 - [x] Select the initial app-facing chat-model baseline and multi-turn evaluation strategy. The application will route user requests directly to the LangGraph Supervisor using `system.ai.gpt-oss-120b`; evaluation will compare that configuration with a GPT OSS 20B Supervisor using the same worker agents. See `docs/MODEL_STRATEGY.md`.
 
 - [ ] Build configured stock/period selection, charts, comparison metrics, a cited report, and evidence-grounded follow-up chat.
+  - [x] Define the app product/UX architecture and add the first Dash shell. The configuration-driven searchable selector supports one company or an optional two-company comparison, and the initial market-window control is deliberately limited to the exact Gold-supported 1/5/20/60 trading-session windows. `src/equity_research/app_contracts.py` owns the credential-free selection/request contract; `app.py`, `app.yaml`, and `assets/app.css` provide the Databricks App shell; `docs/APP_DESIGN.md` records the scalable research-workspace design. The shell does not yet invoke SQL, Vector Search, or models.
+  - [ ] Add the application service boundary that resolves the validated UI selection into controlled structured data, chart data, and the existing Supervisor research graph without duplicating business/retrieval logic in Dash callbacks.
+  - [ ] Render Overview/Market/Fundamentals from controlled data with exact as-of/status semantics and comparison-safe charts/tables.
+  - [ ] Render the validated cited report and evidence/provenance views.
+  - [ ] Add session-bound evidence-grounded follow-up chat over the active validated research context.
 
 - [ ] Add application logging, monitoring, feedback collection, and secure secret handling.
 
