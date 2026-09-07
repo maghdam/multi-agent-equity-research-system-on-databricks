@@ -173,7 +173,7 @@ MLflow traces                              MLflow evaluation
                    CI/regression
                         │
                         ▼
-Milestone 3 — Private Databricks App ✅
+Milestone 3 — Databricks App ✅
 charts · cited report · grounded follow-up
 GPT OSS 120B follow-up chat over signed active research context
 </pre>
