@@ -515,6 +515,60 @@ class AppFollowupTests(unittest.TestCase):
                 session_payload=payload,
             )
 
+    def test_turn_repairs_malformed_structured_response(self) -> None:
+        payload = build_followup_session_payload(
+            _session()
+        )
+        envelope = sign_followup_session(
+            payload,
+            signing_key=SIGNING_KEY,
+        )
+        model_query = Mock(
+            side_effect=[
+                {
+                    "choices": [
+                        {
+                            "finish_reason": "stop",
+                            "message": {
+                                "role": "assistant",
+                                "content": "not-json",
+                            },
+                        }
+                    ]
+                },
+                _response(
+                    {
+                        "answer": (
+                            "Apple announced a device leasing strategy."
+                        ),
+                        "source_ids": [
+                            "recent_developments:fd1"
+                        ],
+                        "evidence_ids": [
+                            EVIDENCE_ID
+                        ],
+                        "limitation": "",
+                    }
+                ),
+            ]
+        )
+
+        result = run_followup_turn(
+            envelope,
+            question="What changed recently?",
+            signing_key=SIGNING_KEY,
+            model_query=model_query,
+        )
+
+        self.assertEqual(
+            model_query.call_count,
+            2,
+        )
+        self.assertEqual(
+            result.answer.evidence_ids,
+            (EVIDENCE_ID,),
+        )
+
     def test_turn_repairs_once_and_preserves_bounded_history(self) -> None:
         payload = build_followup_session_payload(
             _session()
