@@ -80,6 +80,33 @@ python scripts/inspect_mlflow_evaluation_run.py `
 Semantic/LLM-judge free-text rationales are suppressed from terminal output.
 Only bounded deterministic rationales intended for safe diagnostics are shown.
 
+## 3. Live application production monitoring
+
+The deployed Databricks App writes live `research_request` and
+`followup_question` traces to the bundle-managed production trace experiment.
+That experiment is intentionally separate from the controlled offline evaluation
+experiment and from the curated `supervisor_evaluation_dataset`.
+
+After deploying the app trace experiment, register automatic built-in MLflow
+production scorers against its experiment ID:
+
+```powershell
+python scripts/configure_app_production_monitoring.py `
+  --profile free-edition-us-east-2 `
+  --experiment-id <APP_PRODUCTION_TRACE_EXPERIMENT_ID>
+```
+
+The production monitoring baseline scores every successful app interaction for
+Safety and RelevanceToQuery. RetrievalRelevance and RetrievalGroundedness are
+restricted to `interaction_type=research_request`, because follow-up turns use
+the already signed research context rather than running a new retrieval route.
+
+Production scoring is asynchronous. Databricks attaches scorer feedback to
+matching future traces; it does not require or automatically grow the curated
+offline evaluation dataset. Keep interesting production failures as traces first,
+then deliberately promote sanitized cases into the regression dataset when they
+are valuable as permanent test cases.
+
 ## Policy
 
 Do not add Databricks credentials to the normal PR CI path merely to automate
