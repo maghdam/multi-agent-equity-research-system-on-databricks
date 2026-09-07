@@ -578,8 +578,16 @@ def run_research_action(
         "data",
         allow_duplicate=True,
     ),
-    Output("followup-conversation", "children"),
-    Output("followup-input", "value"),
+    Output(
+        "followup-conversation",
+        "children",
+        allow_duplicate=True,
+    ),
+    Output(
+        "followup-input",
+        "value",
+        allow_duplicate=True,
+    ),
     Input("followup-ask", "n_clicks"),
     State("followup-input", "value"),
     State("followup-session-store", "data"),
