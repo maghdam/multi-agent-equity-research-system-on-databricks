@@ -107,6 +107,27 @@ offline evaluation dataset. Keep interesting production failures as traces first
 then deliberately promote sanitized cases into the regression dataset when they
 are valuable as permanent test cases.
 
+### Free Edition production-tracing limitation
+
+The Free Edition deployment can create MLflow trace metadata from the Databricks
+App, but the app runtime currently cannot persist the experiment-backed span
+artifact because outbound access to the workspace storage endpoint is refused.
+This leaves visible trace rows with missing span data, which prevents production
+scorers from evaluating those traces.
+
+Unity Catalog trace storage is the preferred production architecture, but current
+Databricks limitations prevent traces from being written to a default-storage
+catalog. Free Edition does not support custom workspace storage locations, so the
+project cannot provision the non-default managed storage required for UC-backed
+trace tables in this workspace.
+
+Treat automatic live production scoring as implemented but environment-blocked in
+Free Edition. Controlled MLflow evaluation remains fully verifiable through the
+offline/live evaluation experiment. In a paid workspace with supported managed
+storage, create the production experiment with a Unity Catalog trace location from
+the outset, grant the app MODIFY and SELECT on the four OTel tables, and persist
+the monitoring SQL warehouse ID before enabling production scorers.
+
 ## Policy
 
 Do not add Databricks credentials to the normal PR CI path merely to automate
