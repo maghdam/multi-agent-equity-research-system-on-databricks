@@ -19,6 +19,9 @@ system in which:
 The public portfolio demonstrates the implementation without publishing raw
 Alpaca/Benzinga source content.
 
+**Live deployment:** [Equity Research Workspace](https://equity-research-dev-7474654299884940.aws.databricksapps.com/)  
+The URL is included so authorized reviewers can exercise the real deployment. Databricks authentication/app access is required; the screenshots and walkthrough remain the universal public demo surface.
+
 ## Suggested 3–4 minute walkthrough
 
 ### 0:00–0:25 — Architecture
