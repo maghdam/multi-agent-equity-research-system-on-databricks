@@ -14,6 +14,7 @@ from equity_research.app_market_history import (
     AppMarketHistorySeries,
 )
 from equity_research.config import Equity
+from equity_research.retrieval_tools import EvidenceRecord
 from equity_research.structured_data_tools import (
     FundamentalMetricsToolResult,
     MarketMetricsToolResult,
@@ -30,6 +31,7 @@ class AppStructuredSnapshot:
     market_results: tuple[MarketMetricsToolResult, ...]
     fundamental_results: tuple[FundamentalMetricsToolResult, ...]
     market_history: tuple[AppMarketHistorySeries, ...] = ()
+    narrative_evidence: tuple[EvidenceRecord, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -129,6 +131,32 @@ def _validate_structured_snapshot(
             raise ValueError(
                 "market_history symbols must exactly match the app selection "
                 f"{expected}; received {history_symbols}."
+            )
+
+    evidence_ids: set[str] = set()
+
+    for item in structured.narrative_evidence:
+        if not isinstance(
+            item,
+            EvidenceRecord,
+        ):
+            raise TypeError(
+                "narrative_evidence must contain EvidenceRecord values."
+            )
+
+        if item.evidence_id in evidence_ids:
+            raise ValueError(
+                "narrative_evidence evidence IDs must be unique."
+            )
+        evidence_ids.add(
+            item.evidence_id
+        )
+
+        if not set(item.configured_symbols).intersection(
+            expected
+        ):
+            raise ValueError(
+                "narrative_evidence must remain inside the app selection."
             )
 
 
