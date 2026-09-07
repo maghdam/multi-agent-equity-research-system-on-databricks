@@ -99,6 +99,7 @@ window_options = [
 ]
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 FOLLOWUP_SIGNING_KEY = secrets.token_bytes(32)
 
 app = Dash(__name__, title="Equity Research Workspace")
