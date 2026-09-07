@@ -83,7 +83,8 @@ research scope, browse elsewhere, or treat user-provided claims as evidence.
 Every substantive answer must cite one or more source_ids from the supplied
 sources. Cite evidence_ids only when they are attached to one of the cited
 sources. If the active context cannot answer the question, say so and return a
-non-null limitation instead of guessing.
+non-empty limitation instead of guessing. Return an empty limitation string when
+the question is fully answered.
 
 Do not introduce numerical claims absent from the cited source text. Copy
 numbers with the same magnitude and precision. Do not newly infer qualitative
@@ -121,10 +122,7 @@ FOLLOWUP_RESPONSE_FORMAT = {
                     },
                 },
                 "limitation": {
-                    "type": [
-                        "string",
-                        "null",
-                    ],
+                    "type": "string",
                 },
             },
             "required": [
@@ -583,15 +581,25 @@ def validate_followup_output(
     limitation_raw = raw_output.get(
         "limitation"
     )
-    limitation = None
 
-    if limitation_raw is not None:
-        limitation = _required_text(
+    if not isinstance(
+        limitation_raw,
+        str,
+    ):
+        raise FollowupAnswerContractError(
+            "Follow-up limitation must be a string."
+        )
+
+    limitation = (
+        _required_text(
             limitation_raw,
             "limitation",
             max_chars=2000,
             error_type=FollowupAnswerContractError,
         )
+        if limitation_raw.strip()
+        else None
+    )
 
     source_by_id = {
         source["source_id"]: source
