@@ -342,7 +342,7 @@ def _fundamental_metrics(
         ),
         PresentationMetric(
             label="Latest FY net income change",
-            value=_percentage(
+            value=_compact_money(
                 metric.net_income_change_latest_fy
             ),
             status=fundamental_result.status,
