@@ -98,72 +98,72 @@ See the [portfolio demo walkthrough](docs/PORTFOLIO_DEMO.md) for the evidence-pr
 
 <div align="center">
 <pre>
-                                Sources
-                                   │
-                       ├─ Alpaca Market Data API
-                           ├─ Alpaca News API
-                        ├─ SEC Company Facts API
-                           └─ SEC Filings API
-                                   │
-                                   ▼
-                    Milestone 1 — Data Engineering ✅
-                                   │
-                                 Bronze
-                                   │
-                                   ▼
-                                 Silver
-                                   │
-                                   ▼
-                 ┌─────────────────┴─────────────────┐
-                 │                                   │                  
-                 ▼                                   ▼                  
-            Gold metrics                RAG corpus (news + filings)     
-                 │                                   │                  
-                 └─────────────────┬─────────────────┘
-                                   │
-                                   ▼
-                     Milestone 2 — AI Engineering ✅
-                                   │
-                 ┌─────────────────┴─────────────────┐
-                 │                                   │                  
-                 ▼                                   ▼                  
-       Controlled Gold tools                Vector Search / RAG         
-                 │                                   │                  
-                 ▼                                   ▼                  
-           Market Analyst                    Company Researcher         
-            GPT OSS 20B                         GPT OSS 20B             
-                 │                                   │                  
-                 └─────────────────┬─────────────────┘
-                                   │
-                                   ▼
-                          LangGraph Supervisor
-                                   │
-                                   ▼
-                              GPT OSS 120B
-                                   │
-                                   ▼
-                        deterministic validation
-                      numeric fidelity/provenance
-                           repair + fallback
-                                   │
-                                   ▼
-                         grounded cited report
-                                   │
-                                   ▼
-                 ┌─────────────────┴─────────────────┐
-                 │                                   │                  
-                 ▼                                   ▼                  
-           MLflow traces                     MLflow evaluation          
-                 │                                   │                  
-                 └─────────────────┬─────────────────┘
-                                   │
-                                   ▼
-                             CI/regression
-                                   │
-                                   ▼
-                 Milestone 3 — Private Databricks App ✅
-               charts · cited report · grounded follow-up
-    GPT OSS 120B follow-up chat over signed active research context
+Sources
+│
+├─ Alpaca Market Data API
+├─ Alpaca News API
+├─ SEC Company Facts API
+└─ SEC Filings API
+│
+▼
+Milestone 1 — Data Engineering ✅
+│
+Bronze
+│
+▼
+Silver
+│
+▼
+┌───────────────────────┴───────────────────────┐
+│                                               │
+▼                                               ▼
+Gold metrics                    RAG corpus (news + filings)
+│                                               │
+└───────────────────────┬───────────────────────┘
+                        │
+                        ▼
+Milestone 2 — AI Engineering ✅
+│
+┌───────────────────────┴───────────────────────┐
+│                                               │
+▼                                               ▼
+Controlled Gold tools                      Vector Search / RAG
+│                                               │
+▼                                               ▼
+Market Analyst                            Company Researcher
+GPT OSS 20B                               GPT OSS 20B
+│                                               │
+└───────────────────────┬───────────────────────┘
+                        │
+                        ▼
+              LangGraph Supervisor
+                        │
+                        ▼
+                  GPT OSS 120B
+                        │
+                        ▼
+           deterministic validation
+           numeric fidelity/provenance
+               repair + fallback
+                        │
+                        ▼
+              grounded cited report
+                        │
+                        ▼
+┌───────────────────────┴───────────────────────┐
+│                                               │
+▼                                               ▼
+MLflow traces                              MLflow evaluation
+│                                               │
+└───────────────────────┬───────────────────────┘
+                        │
+                        ▼
+                   CI/regression
+                        │
+                        ▼
+Milestone 3 — Private Databricks App ✅
+charts · cited report · grounded follow-up
+GPT OSS 120B follow-up chat over signed active research context
 </pre>
 </div>
 
