@@ -8,6 +8,7 @@ import json
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import date
 from typing import Any, Callable
 
 from equity_research.app_contracts import SUPPORTED_MARKET_WINDOWS
@@ -17,6 +18,7 @@ from equity_research.databricks_cli_runtime import (
     query_chat_completions_via_cli,
 )
 from equity_research.numeric_fidelity import (
+    extract_numeric_claims,
     unsupported_numeric_claims_from_sources,
 )
 from equity_research.supervisor_report import (
@@ -88,7 +90,9 @@ non-empty limitation instead of guessing. Return an empty limitation string when
 the question is fully answered.
 
 Do not introduce numerical claims absent from the cited source text. Copy
-numbers with the same magnitude and precision. Do not newly infer qualitative
+numbers with the same magnitude and precision. For provenance/date questions,
+prefer the exact ISO YYYY-MM-DD evidence date from the signed source metadata.
+Do not newly infer qualitative
 or directional relationships such as higher/lower, better/worse, above/below,
 stronger/weaker, outperformed/underperformed unless that exact relationship is
 already stated in a cited source.
@@ -667,7 +671,7 @@ def validate_followup_output(
         source_by_id[source_id]["text"]
         for source_id in source_ids
     )
-    unsupported = unsupported_numeric_claims_from_sources(
+    unsupported = _unsupported_followup_numeric_claims(
         candidate_text=answer,
         source_texts=source_texts,
     )
@@ -1209,6 +1213,150 @@ def _validate_session_payload(
                 max_chars=2000,
                 error_type=FollowupSessionError,
             )
+
+
+_MONTH_NUMBERS = {
+    "january": 1,
+    "jan": 1,
+    "february": 2,
+    "feb": 2,
+    "march": 3,
+    "mar": 3,
+    "april": 4,
+    "apr": 4,
+    "may": 5,
+    "june": 6,
+    "jun": 6,
+    "july": 7,
+    "jul": 7,
+    "august": 8,
+    "aug": 8,
+    "september": 9,
+    "sep": 9,
+    "sept": 9,
+    "october": 10,
+    "oct": 10,
+    "november": 11,
+    "nov": 11,
+    "december": 12,
+    "dec": 12,
+}
+
+_MONTH_PATTERN = (
+    "January|Jan\\.?|February|Feb\\.?|March|Mar\\.?|April|Apr\\.?|May|"
+    "June|Jun\\.?|July|Jul\\.?|August|Aug\\.?|September|Sep\\.?|Sept\\.?|"
+    "October|Oct\\.?|November|Nov\\.?|December|Dec\\.?"
+)
+
+_NATURAL_DATE_PATTERNS = (
+    re.compile(
+        rf"\\b(?P<month>{_MONTH_PATTERN})\\s+"
+        r"(?P<day>\\d{1,2})(?:st|nd|rd|th)?[,]?\\s+"
+        r"(?P<year>\\d{4})\\b",
+        flags=re.IGNORECASE,
+    ),
+    re.compile(
+        r"\\b(?P<day>\\d{1,2})(?:st|nd|rd|th)?\\s+"
+        rf"(?P<month>{_MONTH_PATTERN})[,]?\\s+"
+        r"(?P<year>\\d{4})\\b",
+        flags=re.IGNORECASE,
+    ),
+)
+
+
+def _unsupported_followup_numeric_claims(
+    *,
+    candidate_text: str,
+    source_texts: Sequence[str],
+):
+    source_dates = {
+        claim.value
+        for source_text in source_texts
+        for claim in extract_numeric_claims(
+            source_text
+        )
+        if claim.kind == "date"
+    }
+    natural_dates = _extract_natural_language_dates(
+        candidate_text
+    )
+
+    unsupported_dates = (
+        natural_dates
+        - source_dates
+    )
+
+    if unsupported_dates:
+        raise FollowupAnswerContractError(
+            "Follow-up answer contains an unsupported date claim."
+        )
+
+    source_years = {
+        date.fromisoformat(
+            value
+        ).year
+        for value in source_dates
+        if isinstance(
+            value,
+            str,
+        )
+    }
+    unsupported = unsupported_numeric_claims_from_sources(
+        candidate_text=candidate_text,
+        source_texts=tuple(
+            source_texts
+        ),
+    )
+
+    return tuple(
+        claim
+        for claim in unsupported
+        if not (
+            claim.kind == "year"
+            and int(claim.value) in source_years
+        )
+    )
+
+
+def _extract_natural_language_dates(
+    text: str,
+) -> set[str]:
+    values: set[str] = set()
+
+    for pattern in _NATURAL_DATE_PATTERNS:
+        for match in pattern.finditer(
+            text
+        ):
+            month_name = (
+                match.group("month")
+                .replace(".", "")
+                .casefold()
+            )
+            month = _MONTH_NUMBERS.get(
+                month_name
+            )
+
+            if month is None:
+                continue
+
+            try:
+                parsed = date(
+                    int(
+                        match.group("year")
+                    ),
+                    month,
+                    int(
+                        match.group("day")
+                    ),
+                )
+            except ValueError:
+                continue
+
+            values.add(
+                parsed.isoformat()
+            )
+
+    return values
 
 
 def _validate_relation_terms(
