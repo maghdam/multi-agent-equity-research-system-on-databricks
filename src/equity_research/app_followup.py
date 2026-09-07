@@ -1243,22 +1243,22 @@ _MONTH_NUMBERS = {
 }
 
 _MONTH_PATTERN = (
-    "January|Jan\\.?|February|Feb\\.?|March|Mar\\.?|April|Apr\\.?|May|"
-    "June|Jun\\.?|July|Jul\\.?|August|Aug\\.?|September|Sep\\.?|Sept\\.?|"
-    "October|Oct\\.?|November|Nov\\.?|December|Dec\\.?"
+    r"January|Jan\.?|February|Feb\.?|March|Mar\.?|April|Apr\.?|May|"
+    r"June|Jun\.?|July|Jul\.?|August|Aug\.?|September|Sep\.?|Sept\.?|"
+    r"October|Oct\.?|November|Nov\.?|December|Dec\.?"
 )
 
 _NATURAL_DATE_PATTERNS = (
     re.compile(
-        rf"\\b(?P<month>{_MONTH_PATTERN})\\s+"
-        r"(?P<day>\\d{1,2})(?:st|nd|rd|th)?[,]?\\s+"
-        r"(?P<year>\\d{4})\\b",
+        rf"\b(?P<month>{_MONTH_PATTERN})\s+"
+        r"(?P<day>\d{1,2})(?:st|nd|rd|th)?[,]?\s+"
+        r"(?P<year>\d{4})\b",
         flags=re.IGNORECASE,
     ),
     re.compile(
-        r"\\b(?P<day>\\d{1,2})(?:st|nd|rd|th)?\\s+"
-        rf"(?P<month>{_MONTH_PATTERN})[,]?\\s+"
-        r"(?P<year>\\d{4})\\b",
+        r"\b(?P<day>\d{1,2})(?:st|nd|rd|th)?\s+"
+        rf"(?P<month>{_MONTH_PATTERN})[,]?\s+"
+        r"(?P<year>\d{4})\b",
         flags=re.IGNORECASE,
     ),
 )
