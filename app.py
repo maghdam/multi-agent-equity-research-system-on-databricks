@@ -6,7 +6,15 @@ import os
 import sys
 from pathlib import Path
 
-from dash import Dash, Input, Output, State, dcc, html
+from dash import (
+    Dash,
+    Input,
+    Output,
+    State,
+    clientside_callback,
+    dcc,
+    html,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 SRC_ROOT = PROJECT_ROOT / "src"
@@ -70,19 +78,48 @@ def placeholder_panel(title: str, body: str) -> html.Div:
 
 
 app.layout = html.Div(
-    className="app-shell",
+    id="app-shell",
+    className="app-shell theme-light",
     children=[
+        dcc.Store(
+            id="theme-store",
+            storage_type="local",
+            data="light",
+        ),
         html.Header(
             className="app-header",
             children=[
-                html.Div("Multi-Agent Equity Research", className="eyebrow"),
-                html.H1("Equity Research Workspace", className="app-title"),
-                html.P(
-                    (
-                        "Structured analytics, grounded evidence, multi-agent "
-                        "synthesis, and follow-up research."
-                    ),
-                    className="app-subtitle",
+                html.Div(
+                    className="header-row",
+                    children=[
+                        html.Div(
+                            children=[
+                                html.Div(
+                                    "Multi-Agent Equity Research",
+                                    className="eyebrow",
+                                ),
+                                html.H1(
+                                    "Equity Research Workspace",
+                                    className="app-title",
+                                ),
+                                html.P(
+                                    (
+                                        "Structured analytics, grounded evidence, "
+                                        "multi-agent synthesis, and follow-up "
+                                        "research."
+                                    ),
+                                    className="app-subtitle",
+                                ),
+                            ],
+                        ),
+                        html.Button(
+                            "Dark mode",
+                            id="theme-toggle",
+                            n_clicks=0,
+                            className="theme-toggle",
+                            title="Switch color theme",
+                        ),
+                    ],
                 ),
             ],
         ),
@@ -163,6 +200,8 @@ app.layout = html.Div(
                     className="research-tabs",
                     children=[
                         dcc.Tab(
+                            className="research-tab",
+                            selected_className="research-tab--selected",
                             label="Overview",
                             value="overview",
                             children=html.Div(
@@ -180,6 +219,8 @@ app.layout = html.Div(
                             ),
                         ),
                         dcc.Tab(
+                            className="research-tab",
+                            selected_className="research-tab--selected",
                             label="Market",
                             value="market",
                             children=placeholder_panel(
@@ -191,6 +232,8 @@ app.layout = html.Div(
                             ),
                         ),
                         dcc.Tab(
+                            className="research-tab",
+                            selected_className="research-tab--selected",
                             label="Fundamentals",
                             value="fundamentals",
                             children=placeholder_panel(
@@ -199,6 +242,8 @@ app.layout = html.Div(
                             ),
                         ),
                         dcc.Tab(
+                            className="research-tab",
+                            selected_className="research-tab--selected",
                             label="Research Report",
                             value="report",
                             children=placeholder_panel(
@@ -210,6 +255,8 @@ app.layout = html.Div(
                             ),
                         ),
                         dcc.Tab(
+                            className="research-tab",
+                            selected_className="research-tab--selected",
                             label="Evidence",
                             value="evidence",
                             children=placeholder_panel(
@@ -263,6 +310,39 @@ app.layout = html.Div(
             ],
         ),
     ],
+)
+
+
+clientside_callback(
+    """
+    function(nClicks, currentTheme) {
+        if (!nClicks) {
+            return window.dash_clientside.no_update;
+        }
+
+        return currentTheme === "dark" ? "light" : "dark";
+    }
+    """,
+    Output("theme-store", "data"),
+    Input("theme-toggle", "n_clicks"),
+    State("theme-store", "data"),
+    prevent_initial_call=True,
+)
+
+
+clientside_callback(
+    """
+    function(theme) {
+        const normalized = theme === "dark" ? "dark" : "light";
+        const shellClass = "app-shell theme-" + normalized;
+        const buttonLabel = normalized === "dark" ? "Light mode" : "Dark mode";
+
+        return [shellClass, buttonLabel];
+    }
+    """,
+    Output("app-shell", "className"),
+    Output("theme-toggle", "children"),
+    Input("theme-store", "data"),
 )
 
 
