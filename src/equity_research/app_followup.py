@@ -667,9 +667,10 @@ def validate_followup_output(
             "Follow-up evidence_ids must be linked to cited sources."
         )
 
-    source_texts = tuple(
-        source_by_id[source_id]["text"]
-        for source_id in source_ids
+    source_texts = _grounding_source_texts(
+        source_ids=source_ids,
+        evidence_ids=evidence_ids,
+        source_by_id=source_by_id,
     )
     unsupported = _unsupported_followup_numeric_claims(
         candidate_text=answer,
@@ -692,6 +693,44 @@ def validate_followup_output(
         source_ids=source_ids,
         evidence_ids=evidence_ids,
         limitation=limitation,
+    )
+
+
+def _grounding_source_texts(
+    *,
+    source_ids: Sequence[str],
+    evidence_ids: Sequence[str],
+    source_by_id: Mapping[str, Mapping[str, Any]],
+) -> tuple[str, ...]:
+    """Return cited source text plus safe metadata for cited evidence IDs."""
+
+    texts = [
+        source_by_id[source_id]["text"]
+        for source_id in source_ids
+    ]
+
+    cited_source_ids = set(
+        source_ids
+    )
+
+    for evidence_id in evidence_ids:
+        metadata_source_id = (
+            "evidence:"
+            f"{evidence_id}"
+        )
+
+        if (
+            metadata_source_id in cited_source_ids
+            or metadata_source_id not in source_by_id
+        ):
+            continue
+
+        texts.append(
+            source_by_id[metadata_source_id]["text"]
+        )
+
+    return tuple(
+        texts
     )
 
 
