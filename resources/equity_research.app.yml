@@ -5,12 +5,6 @@ resources:
       description: Multi-agent equity research workspace with grounded reports.
       source_code_path: ..
       resources:
-        - name: mlflow-experiment
-          description: Managed MLflow experiment for production application traces.
-          experiment:
-            experiment_id: ${resources.experiments.app_production_traces.id}
-            permission: CAN_EDIT
-
         - name: sql-warehouse
           description: Read-only SQL compute for controlled Gold queries.
           sql_warehouse:
