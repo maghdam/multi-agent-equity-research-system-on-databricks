@@ -4,6 +4,9 @@
 
 **Status:** Milestone 1 — Data Engineering complete; Milestone 2 — AI Engineering complete; Milestone 3 — Application delivery in progress, with the private Databricks App deployed and live-verified
 
+**Live Databricks App:** [Open the deployed Equity Research Workspace](https://equity-research-dev-7474654299884940.aws.databricksapps.com/)  
+*Databricks authentication and app access are required; anonymous public access is not supported by Databricks Apps.*
+
 ## Overview
 
 Equity research often requires analysts and investors to collect market prices, company fundamentals, regulatory filings, and recent news from separate sources. This project creates a private Databricks application that turns those sources into structured, cited research over US equities.
@@ -12,7 +15,7 @@ The application is designed as a research assistant. It will not execute trades,
 
 ## Target user
 
-The private application is built for the project owner as an individual investor/researcher who wants to research one company or compare two companies without manually assembling information from multiple systems. The public portfolio surface is the GitHub repository, documentation, tests, and selected screenshots rather than a public interactive application.
+The private application is built for the project owner as an individual investor/researcher who wants to research one company or compare two companies without manually assembling information from multiple systems. The public portfolio surface is the GitHub repository, documentation, tests, selected screenshots, and a link to the live private Databricks deployment. Because Databricks Apps do not support anonymous public access, external visitors can open and test the live app only when they have been granted Databricks/app access.
 
 ## MVP
 
