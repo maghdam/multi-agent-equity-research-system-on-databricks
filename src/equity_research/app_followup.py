@@ -169,10 +169,19 @@ def build_followup_session_payload(
                 citation.evidence_id
             )
 
+    cited_finding_ids = {
+        finding_id
+        for section in session.research.report.sections
+        for finding_id in section.source_finding_ids
+    }
     sources: list[dict[str, Any]] = []
 
     for finding in supervisor_context["source_findings"]:
         source_id = finding["source_finding_id"]
+
+        if source_id not in cited_finding_ids:
+            continue
+
         sources.append(
             {
                 "source_id": source_id,
@@ -304,6 +313,52 @@ def build_followup_session_payload(
         }
         for item in presentation.evidence
     ]
+
+    for item in safe_evidence:
+        metadata_parts = [
+            " ".join(item["symbols"]),
+            item["source_label"],
+            (
+                f"dated {item['evidence_date']}"
+                if item["evidence_date"]
+                else None
+            ),
+            (
+                f"from {item['source_domain']}"
+                if item["source_domain"]
+                else None
+            ),
+            (
+                f"section {item['section_label']}"
+                if item["section_label"]
+                else None
+            ),
+            (
+                f"source record {item['source_business_id']}"
+                if item["source_business_id"]
+                else None
+            ),
+        ]
+        sources.append(
+            {
+                "source_id": (
+                    "evidence:"
+                    f"{item['evidence_id']}"
+                ),
+                "source_type": "evidence_metadata",
+                "symbols": list(
+                    item["symbols"]
+                ),
+                "text": " · ".join(
+                    part
+                    for part in metadata_parts
+                    if part
+                ),
+                "evidence_ids": [
+                    item["evidence_id"]
+                ],
+            }
+        )
 
     payload = {
         "version": FOLLOWUP_SESSION_VERSION,
