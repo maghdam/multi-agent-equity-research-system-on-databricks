@@ -26,6 +26,7 @@ from equity_research.gold_fundamental_metrics import (  # noqa: E402
     GoldFundamentalMetric,
 )
 from equity_research.gold_market_metrics import GoldMarketMetric  # noqa: E402
+from equity_research.retrieval_tools import EvidenceRecord  # noqa: E402
 from equity_research.structured_data_tools import (  # noqa: E402
     FundamentalMetricsToolResult,
     MarketMetricsToolResult,
@@ -178,6 +179,50 @@ def _session() -> AppResearchSession:
                     metric=_fundamental_metric(),
                 ),
             ),
+            narrative_evidence=(
+                EvidenceRecord(
+                    evidence_id="news:e1",
+                    retrieval_rank=1,
+                    chunk_id="a" * 64,
+                    document_id="alpaca:news:101",
+                    document_version_id="news-version",
+                    source_type="news",
+                    source_system="alpaca",
+                    configured_symbols=("AAPL",),
+                    title="Synthetic licensed headline",
+                    evidence_date=date(2026, 8, 30),
+                    source_url="https://www.benzinga.com/news/example",
+                    source_business_id="101",
+                    section_code=None,
+                    section_title=None,
+                    chunk_index=2,
+                    text="Synthetic licensed article text.",
+                    source_response_id="news-response",
+                    source_fetched_at=NOW,
+                    source_ingestion_run_id="news-run",
+                ),
+                EvidenceRecord(
+                    evidence_id="filing:e2",
+                    retrieval_rank=2,
+                    chunk_id="b" * 64,
+                    document_id="sec:filing:aapl:item_1a",
+                    document_version_id="filing-version",
+                    source_type="filing",
+                    source_system="sec",
+                    configured_symbols=("AAPL",),
+                    title="Apple Inc. Form 10-K",
+                    evidence_date=date(2025, 10, 31),
+                    source_url="https://www.sec.gov/Archives/example",
+                    source_business_id="0000320193-25-000079",
+                    section_code="item_1a",
+                    section_title="Risk Factors",
+                    chunk_index=4,
+                    text="Synthetic SEC risk-factor text.",
+                    source_response_id="filing-response",
+                    source_fetched_at=NOW,
+                    source_ingestion_run_id="filing-run",
+                ),
+            ),
         ),
         research=SupervisorResearchResult(
             state=object(),
@@ -247,6 +292,73 @@ class AppPresenterTests(unittest.TestCase):
                 for item in presentation.evidence
             ),
             ("news:e1", "filing:e2"),
+        )
+
+    def test_evidence_presentation_exposes_safe_metadata_only(self) -> None:
+        presentation = build_app_research_presentation(
+            _session()
+        )
+        news, filing = presentation.evidence
+
+        self.assertEqual(
+            news.source_label,
+            "Alpaca/Benzinga news",
+        )
+        self.assertEqual(
+            news.symbols,
+            ("AAPL",),
+        )
+        self.assertEqual(
+            news.evidence_date,
+            "2026-08-30",
+        )
+        self.assertEqual(
+            news.source_domain,
+            "www.benzinga.com",
+        )
+        self.assertEqual(
+            news.source_business_id,
+            "101",
+        )
+        self.assertIsNone(
+            news.section_label
+        )
+        self.assertEqual(
+            news.retrieval_rank,
+            1,
+        )
+        self.assertEqual(
+            news.chunk_index,
+            2,
+        )
+
+        self.assertEqual(
+            filing.source_label,
+            "SEC filing",
+        )
+        self.assertEqual(
+            filing.section_label,
+            "Risk Factors",
+        )
+        self.assertEqual(
+            filing.source_domain,
+            "www.sec.gov",
+        )
+
+        serialized = repr(
+            presentation.evidence
+        )
+        self.assertNotIn(
+            "Synthetic licensed headline",
+            serialized,
+        )
+        self.assertNotIn(
+            "Synthetic licensed article text",
+            serialized,
+        )
+        self.assertNotIn(
+            "Synthetic SEC risk-factor text",
+            serialized,
         )
 
     def test_unavailable_market_result_does_not_render_stale_values(self) -> None:
