@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -97,10 +98,23 @@ class ProductionMonitoringTests(unittest.TestCase):
         set_tracking_uri,
         set_experiment,
     ) -> None:
-        result = configure_databricks_tracking(
-            experiment_id="3258224992927820",
-            profile="free-edition-us-east-2",
-        )
+        with patch.dict(
+            os.environ,
+            {
+                "DATABRICKS_CONFIG_PROFILE": "stale-dev",
+            },
+        ):
+            result = configure_databricks_tracking(
+                experiment_id="3258224992927820",
+                profile="free-edition-us-east-2",
+            )
+
+            self.assertEqual(
+                os.environ[
+                    "DATABRICKS_CONFIG_PROFILE"
+                ],
+                "free-edition-us-east-2",
+            )
 
         self.assertEqual(
             result,
