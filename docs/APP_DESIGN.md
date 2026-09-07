@@ -140,6 +140,27 @@ app_service.py
 This keeps application orchestration reusable while allowing deployment-specific
 authentication and transport to change without rewriting UI/business contracts.
 
+## Databricks-native transport
+
+`src/equity_research/databricks_app_runtime.py` keeps the Milestone 2 request and
+validation contracts unchanged while replacing local CLI transport with Databricks
+Apps unified authentication.
+
+The deployed runtime uses `WorkspaceClient()`, which resolves the app service
+principal credentials from the Databricks Apps environment. It sends the existing
+controlled requests through authenticated workspace APIs:
+
+- Statement Execution for Gold access;
+- AI Search query for filtered RAG retrieval;
+- AI Gateway chat completions for GPT OSS 20B/120B.
+
+One atomic runtime call returns both the exact structured snapshot loaded during the
+Market Analyst route and the final Supervisor result. This avoids duplicate Gold SQL
+queries and avoids mutable cross-session caches in a multi-user app process.
+
+Physical warehouse/index values are resolved from environment variables populated by
+Databricks App resource bindings rather than hard-coded in Python.
+
 ## Implementation slices
 
 1. App selection contract + static Dash shell.
