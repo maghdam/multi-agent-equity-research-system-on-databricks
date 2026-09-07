@@ -10,6 +10,9 @@ from equity_research.app_contracts import (
     AppResearchSelection,
     build_research_request_text,
 )
+from equity_research.app_market_history import (
+    AppMarketHistorySeries,
+)
 from equity_research.config import Equity
 from equity_research.structured_data_tools import (
     FundamentalMetricsToolResult,
@@ -26,6 +29,7 @@ class AppStructuredSnapshot:
 
     market_results: tuple[MarketMetricsToolResult, ...]
     fundamental_results: tuple[FundamentalMetricsToolResult, ...]
+    market_history: tuple[AppMarketHistorySeries, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -112,6 +116,19 @@ def _validate_structured_snapshot(
             raise ValueError(
                 f"{name} symbols must exactly match the app selection "
                 f"{expected}; received {symbols}."
+            )
+
+
+    if structured.market_history:
+        history_symbols = tuple(
+            series.symbol
+            for series in structured.market_history
+        )
+
+        if history_symbols != expected:
+            raise ValueError(
+                "market_history symbols must exactly match the app selection "
+                f"{expected}; received {history_symbols}."
             )
 
 
