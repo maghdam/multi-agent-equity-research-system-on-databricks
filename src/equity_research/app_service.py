@@ -41,20 +41,13 @@ class AppResearchSession:
 class AppResearchRuntime(Protocol):
     """Runtime boundary implemented separately for local and Databricks Apps."""
 
-    def load_structured_snapshot(
+    def run_research(
         self,
         *,
         selection: AppResearchSelection,
-    ) -> AppStructuredSnapshot:
-        """Return controlled structured data for rendering."""
-
-    def run_supervisor_research(
-        self,
-        *,
         request_text: str,
-        requested_symbols: tuple[str, ...],
-    ) -> SupervisorResearchResult:
-        """Run the existing validated Supervisor research graph."""
+    ) -> tuple[AppStructuredSnapshot, SupervisorResearchResult]:
+        """Return one structured snapshot plus validated Supervisor result."""
 
 
 def run_app_research(
@@ -74,21 +67,17 @@ def run_app_research(
         selection,
         equities=equities,
     )
-    research = runtime.run_supervisor_research(
+    structured, research = runtime.run_research(
+        selection=selection,
         request_text=request_text,
-        requested_symbols=selection.requested_symbols,
-    )
-    _validate_research_result(
-        selection=selection,
-        research=research,
-    )
-
-    structured = runtime.load_structured_snapshot(
-        selection=selection,
     )
     _validate_structured_snapshot(
         selection=selection,
         structured=structured,
+    )
+    _validate_research_result(
+        selection=selection,
+        research=research,
     )
 
     return AppResearchSession(
