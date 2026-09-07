@@ -35,6 +35,7 @@ from equity_research.app_followup import (  # noqa: E402
     build_followup_session_payload,
     conversation_from_envelope,
     run_followup_turn,
+    run_traced_followup_turn,
     sign_followup_session,
     verify_followup_session,
 )
@@ -58,12 +59,14 @@ from equity_research.config import load_equities  # noqa: E402
 from equity_research.databricks_app_runtime import (  # noqa: E402
     FUNDAMENTAL_METRICS_TABLE_ENV,
     MARKET_METRICS_TABLE_ENV,
+    MLFLOW_EXPERIMENT_ID_ENV,
     VECTOR_INDEX_ENV,
     WAREHOUSE_ENV,
     DatabricksAppResearchRuntime,
     DatabricksAppRuntimeConfig,
     DatabricksAppTransport,
 )
+from equity_research.mlflow_tracing import MlflowTracingConfig  # noqa: E402
 from equity_research.tool_scope import ControlledToolRequestError  # noqa: E402
 
 
@@ -754,14 +757,30 @@ def run_followup_action(
         verified_research = verified_payload[
             "research"
         ]
+        runtime_config = DatabricksAppRuntimeConfig.from_environment()
         transport = DatabricksAppTransport()
-        result = run_followup_turn(
-            envelope,
-            question=question,
-            signing_key=FOLLOWUP_SIGNING_KEY,
-            profile=None,
-            model_query=transport.query_chat_completions,
-        )
+
+        if runtime_config.mlflow_experiment_id is not None:
+            result = run_traced_followup_turn(
+                envelope,
+                question=question,
+                signing_key=FOLLOWUP_SIGNING_KEY,
+                tracing_config=MlflowTracingConfig(
+                    experiment_id=runtime_config.mlflow_experiment_id,
+                    profile=None,
+                    environment="databricks_app",
+                ),
+                profile=None,
+                model_query=transport.query_chat_completions,
+            )
+        else:
+            result = run_followup_turn(
+                envelope,
+                question=question,
+                signing_key=FOLLOWUP_SIGNING_KEY,
+                profile=None,
+                model_query=transport.query_chat_completions,
+            )
         conversation = _render_followup_conversation(
             result.envelope
         )

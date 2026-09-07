@@ -3,13 +3,17 @@ from __future__ import annotations
 import json
 import sys
 import unittest
+from contextlib import nullcontext
 from datetime import date, datetime, timezone
 from pathlib import Path
-from unittest.mock import Mock
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+from mlflow.entities import SpanType  # noqa: E402
 
 from equity_research.app_contracts import AppResearchSelection  # noqa: E402
 from equity_research.app_followup import (  # noqa: E402
@@ -19,6 +23,7 @@ from equity_research.app_followup import (  # noqa: E402
     build_followup_session_payload,
     conversation_from_envelope,
     run_followup_turn,
+    run_traced_followup_turn,
     sign_followup_session,
     validate_followup_output,
     verify_followup_session,
@@ -32,6 +37,7 @@ from equity_research.company_researcher import (  # noqa: E402
     ResearchFinding,
 )
 from equity_research.config import Equity  # noqa: E402
+from equity_research.mlflow_tracing import MlflowTracingConfig  # noqa: E402
 from equity_research.market_analyst import (  # noqa: E402
     MarketAnalystResult,
     MetricReference,
@@ -648,6 +654,110 @@ class AppFollowupTests(unittest.TestCase):
         self.assertEqual(
             conversation[-1]["question"],
             "What was the 60-session return?",
+        )
+
+
+    def test_traced_turn_records_question_and_validated_answer(self) -> None:
+        payload = build_followup_session_payload(
+            _session()
+        )
+        envelope = sign_followup_session(
+            payload,
+            signing_key=SIGNING_KEY,
+        )
+        answer = SimpleNamespace(
+            answer="Apple announced a device leasing strategy.",
+            source_ids=("recent_developments:fd1",),
+            evidence_ids=(EVIDENCE_ID,),
+            limitation=None,
+        )
+        expected = SimpleNamespace(
+            envelope={
+                "payload": "updated",
+                "signature": "fixture",
+            },
+            answer=answer,
+        )
+        span = Mock()
+
+        with (
+            patch(
+                "equity_research.app_followup.configure_mlflow_tracing",
+            ) as configure,
+            patch(
+                "equity_research.app_followup.mlflow.tracing.context",
+                return_value=nullcontext(),
+            ) as tracing_context,
+            patch(
+                "equity_research.app_followup.mlflow.start_span",
+                return_value=nullcontext(
+                    span
+                ),
+            ) as start_span,
+            patch(
+                "equity_research.app_followup.run_followup_turn",
+                return_value=expected,
+            ) as turn_runner,
+        ):
+            result = run_traced_followup_turn(
+                envelope,
+                question="What changed recently?",
+                signing_key=SIGNING_KEY,
+                tracing_config=MlflowTracingConfig(
+                    experiment_id="123456789",
+                    environment="databricks_app",
+                ),
+                model_query=Mock(),
+            )
+
+        self.assertIs(
+            result,
+            expected,
+        )
+        configure.assert_called_once()
+        tracing_kwargs = tracing_context.call_args.kwargs
+        self.assertEqual(
+            tracing_kwargs["tags"]["interaction_type"],
+            "followup_question",
+        )
+        self.assertEqual(
+            tracing_kwargs["tags"]["symbols"],
+            "AAPL",
+        )
+        self.assertEqual(
+            tracing_kwargs["tags"]["request_mode"],
+            "single_company",
+        )
+        self.assertNotIn(
+            "user",
+            tracing_kwargs["tags"],
+        )
+        start_span.assert_called_once_with(
+            name="app_followup_turn",
+            span_type=SpanType.AGENT,
+        )
+        span.set_inputs.assert_called_once()
+        traced_inputs = span.set_inputs.call_args.args[0]
+        self.assertEqual(
+            traced_inputs["question"],
+            "What changed recently?",
+        )
+        self.assertEqual(
+            traced_inputs["market_window_sessions"],
+            60,
+        )
+        turn_runner.assert_called_once()
+        span.set_outputs.assert_called_once_with(
+            {
+                "answer": "Apple announced a device leasing strategy.",
+                "source_ids": [
+                    "recent_developments:fd1"
+                ],
+                "evidence_ids": [
+                    EVIDENCE_ID
+                ],
+                "limitation": None,
+            }
         )
 
 

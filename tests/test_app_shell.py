@@ -518,6 +518,101 @@ class AppShellTests(unittest.TestCase):
             ),
         )
 
+    def test_followup_action_uses_bound_mlflow_experiment(self) -> None:
+        environment = {
+            app_module.WAREHOUSE_ENV: "warehouse-1",
+            app_module.MARKET_METRICS_TABLE_ENV: (
+                "workspace.gold.market_metrics"
+            ),
+            app_module.FUNDAMENTAL_METRICS_TABLE_ENV: (
+                "workspace.gold.fundamental_metrics"
+            ),
+            app_module.VECTOR_INDEX_ENV: "workspace.ai.index",
+            app_module.MLFLOW_EXPERIMENT_ID_ENV: "123456789",
+        }
+        transport = SimpleNamespace(
+            query_chat_completions=object(),
+        )
+        result_object = SimpleNamespace(
+            envelope={
+                "payload": "updated",
+                "signature": "fixture",
+            },
+            answer=SimpleNamespace(
+                source_ids=("recent_developments:fd1",),
+                limitation=None,
+            ),
+        )
+
+        with (
+            patch.dict(
+                app_module.os.environ,
+                environment,
+                clear=True,
+            ),
+            patch(
+                "app.verify_followup_session",
+                return_value={
+                    "research": {
+                        "mode": "comparison",
+                        "symbols": ["AAPL", "MSFT"],
+                        "market_window_sessions": 60,
+                        "report_status": "ready",
+                        "synthesis_mode": "model",
+                    },
+                    "conversation": [],
+                },
+            ),
+            patch(
+                "app.DatabricksAppTransport",
+                return_value=transport,
+            ),
+            patch(
+                "app.run_traced_followup_turn",
+                return_value=result_object,
+            ) as traced_runner,
+            patch(
+                "app.run_followup_turn",
+            ) as untraced_runner,
+            patch(
+                "app._render_followup_conversation",
+                return_value=["rendered-turn"],
+            ),
+        ):
+            result = app_module.run_followup_action(
+                1,
+                "What changed recently?",
+                {
+                    "payload": "current",
+                    "signature": "fixture",
+                },
+            )
+
+        traced_runner.assert_called_once()
+        self.assertEqual(
+            traced_runner.call_args.kwargs[
+                "tracing_config"
+            ].experiment_id,
+            "123456789",
+        )
+        self.assertEqual(
+            traced_runner.call_args.kwargs[
+                "tracing_config"
+            ].environment,
+            "databricks_app",
+        )
+        self.assertIs(
+            traced_runner.call_args.kwargs[
+                "model_query"
+            ],
+            transport.query_chat_completions,
+        )
+        untraced_runner.assert_not_called()
+        self.assertEqual(
+            result[0],
+            result_object.envelope,
+        )
+
     def test_expired_followup_session_disables_controls(self) -> None:
         environment = {
             app_module.WAREHOUSE_ENV: "warehouse-1",

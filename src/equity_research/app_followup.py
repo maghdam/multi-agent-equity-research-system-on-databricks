@@ -11,6 +11,9 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Callable
 
+import mlflow
+from mlflow.entities import SpanType
+
 from equity_research.app_contracts import SUPPORTED_MARKET_WINDOWS
 from equity_research.app_presenters import build_app_research_presentation
 from equity_research.app_service import AppResearchSession
@@ -30,6 +33,10 @@ from equity_research.worker_agent_runtime import (
     parse_structured_chat_response,
 )
 from equity_research.mlflow_runtime_spans import run_traced_chat_completion
+from equity_research.mlflow_tracing import (
+    MlflowTracingConfig,
+    configure_mlflow_tracing,
+)
 
 
 FOLLOWUP_MODEL = "system.ai.gpt-oss-120b"
@@ -39,6 +46,11 @@ FOLLOWUP_SESSION_VERSION = 1
 MAX_FOLLOWUP_QUESTION_CHARS = 1200
 MAX_FOLLOWUP_ANSWER_CHARS = 5000
 MAX_FOLLOWUP_TURNS = 6
+FOLLOWUP_TRACE_PROJECT = "multi-agent-equity-research-system"
+FOLLOWUP_TRACE_COMPONENT = "app_followup"
+FOLLOWUP_TRACE_PRIVACY_BOUNDARY = (
+    "signed_active_research_context_plus_user_question_and_validated_answer"
+)
 
 
 class FollowupSessionError(ValueError):
@@ -732,6 +744,119 @@ def _grounding_source_texts(
     return tuple(
         texts
     )
+
+
+def run_traced_followup_turn(
+    envelope: Mapping[str, Any],
+    *,
+    question: str,
+    signing_key: bytes,
+    tracing_config: MlflowTracingConfig,
+    profile: str | None = None,
+    model_query: Callable[..., Mapping[str, Any]] = (
+        query_chat_completions_via_cli
+    ),
+) -> FollowupTurnResult:
+    """Run one follow-up turn as its own production MLflow trace."""
+
+    if not isinstance(
+        tracing_config,
+        MlflowTracingConfig,
+    ):
+        raise TypeError(
+            "tracing_config must be MlflowTracingConfig."
+        )
+
+    session_payload = verify_followup_session(
+        envelope,
+        signing_key=signing_key,
+    )
+    normalized_question = _required_question(
+        question
+    )
+    research = session_payload[
+        "research"
+    ]
+    symbols = tuple(
+        research[
+            "symbols"
+        ]
+    )
+
+    configure_mlflow_tracing(
+        tracing_config
+    )
+
+    tags = {
+        "project": FOLLOWUP_TRACE_PROJECT,
+        "component": FOLLOWUP_TRACE_COMPONENT,
+        "environment": tracing_config.environment.strip(),
+        "interaction_type": "followup_question",
+        "request_mode": str(
+            research[
+                "mode"
+            ]
+        ),
+        "symbols": ",".join(
+            symbols
+        ),
+    }
+    metadata = {
+        "privacy_boundary": FOLLOWUP_TRACE_PRIVACY_BOUNDARY,
+        "context_authority": "signed_active_research_session",
+        "answer_authority": "deterministically_validated_grounded_followup",
+    }
+
+    with mlflow.tracing.context(
+        tags=tags,
+        metadata=metadata,
+    ):
+        with mlflow.start_span(
+            name="app_followup_turn",
+            span_type=SpanType.AGENT,
+        ) as span:
+            span.set_inputs(
+                {
+                    "question": normalized_question,
+                    "symbols": list(
+                        symbols
+                    ),
+                    "request_mode": research[
+                        "mode"
+                    ],
+                    "market_window_sessions": research[
+                        "market_window_sessions"
+                    ],
+                    "prior_turn_count": len(
+                        session_payload[
+                            "conversation"
+                        ]
+                    ),
+                }
+            )
+
+            result = run_followup_turn(
+                envelope,
+                question=normalized_question,
+                signing_key=signing_key,
+                profile=profile,
+                model_query=model_query,
+            )
+
+            span.set_outputs(
+                {
+                    "answer": result.answer.answer,
+                    "source_ids": list(
+                        result.answer.source_ids
+                    ),
+                    "evidence_ids": list(
+                        result.answer.evidence_ids
+                    ),
+                    "limitation": result.answer.limitation,
+                }
+            )
+
+            return result
 
 
 def run_followup_turn(
