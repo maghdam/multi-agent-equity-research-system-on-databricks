@@ -196,7 +196,7 @@ def _market_metrics(
 ) -> tuple[PresentationMetric, ...]:
     metric = market_result.metric
 
-    if metric is None:
+    if market_result.status != "ready" or metric is None:
         return (
             PresentationMetric(
                 label="Availability",
@@ -303,7 +303,7 @@ def _fundamental_metrics(
 ) -> tuple[PresentationMetric, ...]:
     metric = fundamental_result.metric
 
-    if metric is None:
+    if fundamental_result.status != "ready" or metric is None:
         return (
             PresentationMetric(
                 label="Availability",
