@@ -74,14 +74,6 @@ def run_app_research(
         selection,
         equities=equities,
     )
-    structured = runtime.load_structured_snapshot(
-        selection=selection,
-    )
-    _validate_structured_snapshot(
-        selection=selection,
-        structured=structured,
-    )
-
     research = runtime.run_supervisor_research(
         request_text=request_text,
         requested_symbols=selection.requested_symbols,
@@ -89,6 +81,14 @@ def run_app_research(
     _validate_research_result(
         selection=selection,
         research=research,
+    )
+
+    structured = runtime.load_structured_snapshot(
+        selection=selection,
+    )
+    _validate_structured_snapshot(
+        selection=selection,
+        structured=structured,
     )
 
     return AppResearchSession(
