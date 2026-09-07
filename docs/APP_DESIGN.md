@@ -193,6 +193,23 @@ The callback currently renders only bounded completion metadata. Actual structur
 metrics, charts, report sections, citations, and evidence are added by the next
 presentation slice.
 
+## First rendered research result
+
+The first result renderer uses only data already carried by the validated
+`AppResearchSession`:
+
+- Overview: selected-company Gold snapshot plus a validated research summary;
+- Market: exact Gold market metrics and as-of/readiness state;
+- Fundamentals: exact Gold fundamental metrics and filing/as-of state;
+- Research Report: validated section text, section status, source-finding IDs, and
+  explicit limitations;
+- Evidence: validated evidence IDs and the report finding IDs they support.
+
+Daily normalized price history is not fabricated from aggregate Gold metrics. A chart
+requires a separate controlled price-history presentation query. Likewise, richer
+evidence cards (title/source/date/URL/excerpt) require preserving approved
+`EvidenceRecord` metadata in the application-session boundary.
+
 ## Implementation slices
 
 1. App selection contract + static Dash shell.
