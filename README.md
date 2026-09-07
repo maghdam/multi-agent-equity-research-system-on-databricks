@@ -2,11 +2,11 @@
 
 > A production-oriented portfolio project combining data engineering and AI engineering on Databricks.
 
-**Status:** Milestone 1 — Data Engineering complete; Milestone 2 — AI Engineering complete; Milestone 3 — Application delivery pending
+**Status:** Milestone 1 — Data Engineering complete; Milestone 2 — AI Engineering complete; Milestone 3 — Application delivery in progress, with the private Databricks App deployed and live-verified
 
 ## Overview
 
-Equity research often requires analysts and investors to collect market prices, company fundamentals, regulatory filings, and recent news from separate sources. This project will create a small application that turns those sources into a structured, cited comparison of US equities.
+Equity research often requires analysts and investors to collect market prices, company fundamentals, regulatory filings, and recent news from separate sources. This project creates a private Databricks application that turns those sources into structured, cited research over US equities.
 
 The application is designed as a research assistant. It will not execute trades, predict prices, or provide financial advice.
 
@@ -16,7 +16,7 @@ The private application is built for the project owner as an individual investor
 
 ## MVP
 
-The first version will:
+The MVP:
 
 - Support AAPL and MSFT.
 - Ingest historical market data and recent news from Alpaca.
@@ -24,7 +24,7 @@ The first version will:
 - Process data through Bronze, Silver, and Gold Delta tables.
 - Provide structured financial analytics plus Retrieval-Augmented Generation (RAG) over validated news and SEC filing evidence with citations.
 - Coordinate a Supervisor, Market Analyst, and Company Researcher with LangGraph.
-- Present results in a dashboard with follow-up chat.
+- Presents results in a private Databricks Dash workspace with normalized market charts, validated cited reports, publication-safe evidence provenance, session-bound grounded follow-up chat, and privacy-safe application telemetry.
 
 The MVP will not include trading execution, price prediction, portfolio optimization, GDELT, cTrader, or live Alpaca MCP access.
 
@@ -38,6 +38,7 @@ The MVP will not include trading execution, price prediction, portfolio optimiza
 - **Milestone 1 — Data Engineering:** complete. Bronze, Silver, Gold, CI, scheduled refresh orchestration, quality/freshness/lineage gates, safe replay behavior, and controlled deployment verification are all implemented and verified. The deployment gate was executed from the CI-tested `main` commit `caa3dcb` and completed with a converged bundle plan plus a successful serverless Spark smoke test.
 - **Operational audit policy:** the MVP uses fail-before-publication validation rather than partial publication plus quarantine tables. Immutable Bronze provenance, validation diagnostics, deterministic replay, Databricks job history, and final verification gates provide the required operational evidence; dedicated row-level rejection tables are deferred until a mixed valid/invalid batch workflow requires them.
 - **Milestone 2 — AI Engineering:** complete. The deterministic RAG corpus, managed GTE embeddings/AI Search index, independent retrieval holdout, controlled Gold/retrieval tools, GPT OSS 20B Market Analyst and Company Researcher workers, deterministic LangGraph Supervisor, GPT OSS 120B terminal synthesis, report provenance validation, bounded repair/fallback, MLflow tracing, route-aware retrieval relevance/sufficiency, trace-aware narrative grounding, controlled E3-E6 failure/security evaluation, and the final E1/E2 managed regression baseline are implemented and live-verified. Pull-request CI now exposes a dedicated 107-test credential-free AI-evaluation gate plus the full 482-test repository suite; GitHub Actions run #25 passed both with Ruff clean on Python 3.14.7. Credentialed Databricks SQL, Vector Search, and model evaluations remain deliberately separate, bounded live checks.
+- **Milestone 3 — Application Delivery:** active and substantially implemented. The configuration-driven Dash workspace is deployed privately on Databricks Apps and live-verified for single-company and AAPL/MSFT comparison research. It renders controlled Gold metrics, normalized Silver price history, validated cited reports, publication-safe evidence cards, signed session-bound follow-up answers, fixed-category feedback, and bounded `APP_EVENT` telemetry. The app uses unified authentication plus least-privilege read-only resource bindings rather than a developer PAT. The public-repository publication audit is implemented in CI and passed locally on 2026-09-07; final reviewed screenshots/demo artifacts remain before milestone closure.
 - Detailed implementation evidence and run links are tracked in [PLAN.md](PLAN.md).
 
 ## Architecture
@@ -79,8 +80,8 @@ flowchart TB
         CI["Credential-free CI<br/>107 focused AI-eval tests + 482 total tests"]
     end
 
-    subgraph APP["Milestone 3 — Application Delivery"]
-        UI["Databricks app<br/>stock/period selection + charts<br/>cited report + follow-up chat"]
+    subgraph APP["Milestone 3 — Application Delivery 🟡"]
+        UI["Private Databricks App ✅<br/>stock/period selection + charts<br/>cited report + follow-up chat"]
     end
 
     A1 --> B
@@ -119,7 +120,7 @@ A user can ask:
 
 > Compare Apple and Microsoft over the last six months. Which had stronger market and financial performance, what recent developments matter, and what are the principal risks?
 
-The application will return:
+The application returns:
 
 - Market-return, volatility, drawdown, and trend comparisons.
 - Fundamental-performance comparisons.
@@ -127,7 +128,7 @@ The application will return:
 - A concise research summary and stated limitations.
 - Follow-up answers grounded in the retrieved evidence.
 
-## Planned technology
+## Technology
 
 - Databricks and Delta Lake
 - Bronze-Silver-Gold architecture
@@ -147,9 +148,9 @@ Development follows one end-to-end workflow:
 1. **Project foundations:** scope, architecture, repository, and Databricks smoke test.
 2. **Data Engineering:** source contracts, Bronze/Silver/Gold pipelines, quality, scheduling, and deployment checks.
 3. **AI Engineering:** retrieval and tools, the multi-agent workflow, tracing, and evaluation.
-4. **Application delivery:** UI, monitoring, deployment, and reproducible demonstration.
+4. **Application delivery:** private Databricks App, controlled presentation adapters, signed follow-up sessions, privacy-safe telemetry, publication audit, deployment verification, and reproducible portfolio demonstration.
 
-Each milestone has a tested completion gate. See [PLAN.md](PLAN.md) for progress, [DATA_CONTRACTS.md](DATA_CONTRACTS.md) for data and RAG corpus rules, [docs/AI_RESEARCH_CONTRACT.md](docs/AI_RESEARCH_CONTRACT.md) for behavioral requirements, [docs/MODEL_STRATEGY.md](docs/MODEL_STRATEGY.md) for model allocation, limits, chunking baselines, and MLflow evaluation strategy, [docs/EVALUATION_RUNBOOK.md](docs/EVALUATION_RUNBOOK.md) for the credential-free CI versus credentialed live-evaluation boundary, [docs/REPOSITORY_GUIDE.md](docs/REPOSITORY_GUIDE.md) for the component-by-component map of implementation files, resources, tests, live verification, and robustness layers, and [docs/DATA_USAGE_PERMISSIONS.md](docs/DATA_USAGE_PERMISSIONS.md) for the private-runtime and public-portfolio data-use boundary.
+Each milestone has a tested completion gate. See [PLAN.md](PLAN.md) for progress, [DATA_CONTRACTS.md](DATA_CONTRACTS.md) for data and RAG corpus rules, [docs/AI_RESEARCH_CONTRACT.md](docs/AI_RESEARCH_CONTRACT.md) for behavioral requirements, [docs/MODEL_STRATEGY.md](docs/MODEL_STRATEGY.md) for model allocation and evaluation strategy, [docs/EVALUATION_RUNBOOK.md](docs/EVALUATION_RUNBOOK.md) for the credential-free versus credentialed evaluation boundary, [docs/APP_DESIGN.md](docs/APP_DESIGN.md) for the application product/runtime design, [docs/APP_OPERATIONS.md](docs/APP_OPERATIONS.md) for telemetry and secure-runtime operations, [docs/APP_RELEASE_RUNBOOK.md](docs/APP_RELEASE_RUNBOOK.md) for release/reproduction checks, [docs/REPOSITORY_GUIDE.md](docs/REPOSITORY_GUIDE.md) for the component map, and [docs/DATA_USAGE_PERMISSIONS.md](docs/DATA_USAGE_PERMISSIONS.md) for the private-runtime/public-portfolio publication boundary.
 
 ## Local Alpaca access check
 
