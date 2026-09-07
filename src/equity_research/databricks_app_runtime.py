@@ -60,7 +60,7 @@ DAILY_PRICES_TABLE_ENV = "EQUITY_RESEARCH_DAILY_PRICES_TABLE"
 VECTOR_INDEX_ENV = "EQUITY_RESEARCH_VECTOR_SEARCH_INDEX"
 GOLD_SCHEMA_ENV = "EQUITY_RESEARCH_GOLD_SCHEMA"
 CATALOG_ENV = "EQUITY_RESEARCH_CATALOG"
-MLFLOW_EXPERIMENT_ENV = "EQUITY_RESEARCH_MLFLOW_EXPERIMENT"
+MLFLOW_EXPERIMENT_ID_ENV = "EQUITY_RESEARCH_MLFLOW_EXPERIMENT_ID"
 
 DEFAULT_CATALOG = "workspace"
 DEFAULT_SQL_MAX_POLLS = 12
@@ -78,7 +78,7 @@ class DatabricksAppRuntimeConfig:
     index_name: str
     catalog: str = DEFAULT_CATALOG
     daily_prices_table: str | None = None
-    mlflow_experiment: str | None = None
+    mlflow_experiment_id: str | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -101,12 +101,12 @@ class DatabricksAppRuntimeConfig:
                 "daily_prices_table must be None or a nonblank string."
             )
 
-        if self.mlflow_experiment is not None and (
-            not isinstance(self.mlflow_experiment, str)
-            or not self.mlflow_experiment.strip()
+        if self.mlflow_experiment_id is not None and (
+            not isinstance(self.mlflow_experiment_id, str)
+            or not self.mlflow_experiment_id.strip()
         ):
             raise ValueError(
-                "mlflow_experiment must be None or a nonblank string."
+                "mlflow_experiment_id must be None or a nonblank string."
             )
 
     @classmethod
@@ -138,9 +138,9 @@ class DatabricksAppRuntimeConfig:
                 DAILY_PRICES_TABLE_ENV,
                 None,
             ),
-            mlflow_experiment=_optional_environment_value(
+            mlflow_experiment_id=_optional_environment_value(
                 values,
-                MLFLOW_EXPERIMENT_ENV,
+                MLFLOW_EXPERIMENT_ID_ENV,
                 None,
             ),
         )
@@ -455,9 +455,9 @@ class DatabricksAppResearchRuntime:
                 model_query=self._transport.query_chat_completions,
             )
 
-        if self._config.mlflow_experiment is not None:
+        if self._config.mlflow_experiment_id is not None:
             tracing_config = MlflowTracingConfig(
-                experiment_name=self._config.mlflow_experiment,
+                experiment_id=self._config.mlflow_experiment_id,
                 profile=None,
                 environment="databricks_app",
             )

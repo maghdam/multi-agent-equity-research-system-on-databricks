@@ -80,6 +80,58 @@ python scripts/inspect_mlflow_evaluation_run.py `
 Semantic/LLM-judge free-text rationales are suppressed from terminal output.
 Only bounded deterministic rationales intended for safe diagnostics are shown.
 
+## 3. Live application production monitoring
+
+The repository contains live-app MLflow tracing and production-scorer support for
+`research_request` and `followup_question` interactions. The bundle-managed
+production trace experiment is intentionally separate from the controlled offline
+evaluation experiment and from the curated `supervisor_evaluation_dataset`.
+
+In a workspace that supports complete production trace persistence, bind that
+experiment to the app and register automatic built-in MLflow production scorers
+against its experiment ID:
+
+```powershell
+python scripts/configure_app_production_monitoring.py `
+  --profile free-edition-us-east-2 `
+  --experiment-id <APP_PRODUCTION_TRACE_EXPERIMENT_ID>
+```
+
+The production monitoring baseline scores every successful app interaction for
+Safety and RelevanceToQuery. RetrievalRelevance and RetrievalGroundedness are
+restricted to `interaction_type=research_request`, because follow-up turns use
+the already signed research context rather than running a new retrieval route.
+
+Production scoring is asynchronous. Databricks attaches scorer feedback to
+matching future traces; it does not require or automatically grow the curated
+offline evaluation dataset. Keep interesting production failures as traces first,
+then deliberately promote sanitized cases into the regression dataset when they
+are valuable as permanent test cases.
+
+### Free Edition production-tracing limitation
+
+The Free Edition deployment can create MLflow trace metadata from the Databricks
+App, but the app runtime currently cannot persist the experiment-backed span
+artifact because outbound access to the workspace storage endpoint is refused.
+This leaves visible trace rows with missing span data, which prevents production
+scorers from evaluating those traces.
+
+Unity Catalog trace storage is the preferred production architecture, but current
+Databricks limitations prevent traces from being written to a default-storage
+catalog. Free Edition does not support custom workspace storage locations, so the
+project cannot provision the non-default managed storage required for UC-backed
+trace tables in this workspace.
+
+Treat automatic live production scoring as implemented but environment-blocked in
+Free Edition. The Free Edition app therefore leaves the production experiment
+binding disabled so it does not continuously emit incomplete traces or retain an
+unused CAN_EDIT permission. Controlled MLflow evaluation remains fully verifiable
+through the offline/live evaluation experiment. In a paid workspace with supported
+managed storage, create the production experiment with a Unity Catalog trace
+location from the outset, grant the app MODIFY and SELECT on the four OTel tables,
+persist the monitoring SQL warehouse ID, restore the experiment app binding, and
+then enable production scorers.
+
 ## Policy
 
 Do not add Databricks credentials to the normal PR CI path merely to automate

@@ -35,6 +35,7 @@ from equity_research.app_followup import (  # noqa: E402
     build_followup_session_payload,
     conversation_from_envelope,
     run_followup_turn,
+    run_traced_followup_turn,
     sign_followup_session,
     verify_followup_session,
 )
@@ -64,6 +65,7 @@ from equity_research.databricks_app_runtime import (  # noqa: E402
     DatabricksAppRuntimeConfig,
     DatabricksAppTransport,
 )
+from equity_research.mlflow_tracing import MlflowTracingConfig  # noqa: E402
 from equity_research.tool_scope import ControlledToolRequestError  # noqa: E402
 
 
@@ -754,14 +756,30 @@ def run_followup_action(
         verified_research = verified_payload[
             "research"
         ]
+        runtime_config = DatabricksAppRuntimeConfig.from_environment()
         transport = DatabricksAppTransport()
-        result = run_followup_turn(
-            envelope,
-            question=question,
-            signing_key=FOLLOWUP_SIGNING_KEY,
-            profile=None,
-            model_query=transport.query_chat_completions,
-        )
+
+        if runtime_config.mlflow_experiment_id is not None:
+            result = run_traced_followup_turn(
+                envelope,
+                question=question,
+                signing_key=FOLLOWUP_SIGNING_KEY,
+                tracing_config=MlflowTracingConfig(
+                    experiment_id=runtime_config.mlflow_experiment_id,
+                    profile=None,
+                    environment="databricks_app",
+                ),
+                profile=None,
+                model_query=transport.query_chat_completions,
+            )
+        else:
+            result = run_followup_turn(
+                envelope,
+                question=question,
+                signing_key=FOLLOWUP_SIGNING_KEY,
+                profile=None,
+                model_query=transport.query_chat_completions,
+            )
         conversation = _render_followup_conversation(
             result.envelope
         )
@@ -982,6 +1000,52 @@ def _followup_empty_state(
     )
 
 
+def _followup_source_label(
+    source_id: str,
+    *,
+    source_by_id,
+) -> str:
+    """Return a compact user-facing label while preserving the raw ID in title."""
+
+    source = source_by_id.get(
+        source_id
+    )
+
+    if not isinstance(
+        source,
+        dict,
+    ):
+        return source_id
+
+    source_type = source.get(
+        "source_type"
+    )
+    text = source.get(
+        "text"
+    )
+
+    if (
+        source_type == "structured_metric"
+        and isinstance(text, str)
+        and ":" in text
+    ):
+        return text.split(
+            ":",
+            1,
+        )[0].strip()
+
+    if source_type == "validated_report_section":
+        section = source_id.removeprefix(
+            "report:"
+        ).replace(
+            "_",
+            " ",
+        )
+        return f"Report · {section}"
+
+    return source_id
+
+
 def _render_followup_conversation(
     envelope,
 ):
@@ -996,6 +1060,10 @@ def _render_followup_conversation(
     evidence_by_id = {
         item["evidence_id"]: item
         for item in payload["evidence"]
+    }
+    source_by_id = {
+        item["source_id"]: item
+        for item in payload["sources"]
     }
 
     if not turns:
@@ -1024,8 +1092,12 @@ def _render_followup_conversation(
 
         citation_children = [
             html.Span(
-                source_id,
+                _followup_source_label(
+                    source_id,
+                    source_by_id=source_by_id,
+                ),
                 className="followup-source-chip",
+                title=source_id,
             )
             for source_id in turn["source_ids"]
         ]
@@ -1072,7 +1144,13 @@ def _render_followup_conversation(
         if citation_children:
             assistant_children.append(
                 html.Div(
-                    citation_children,
+                    [
+                        html.Div(
+                            "Sources",
+                            className="followup-citations-label",
+                        ),
+                        *citation_children,
+                    ],
                     className="followup-citations",
                 )
             )

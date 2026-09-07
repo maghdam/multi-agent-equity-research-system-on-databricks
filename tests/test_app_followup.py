@@ -3,22 +3,28 @@ from __future__ import annotations
 import json
 import sys
 import unittest
+from contextlib import nullcontext
 from datetime import date, datetime, timezone
 from pathlib import Path
-from unittest.mock import Mock
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
+from mlflow.entities import SpanType  # noqa: E402
+
 from equity_research.app_contracts import AppResearchSelection  # noqa: E402
 from equity_research.app_followup import (  # noqa: E402
+    FOLLOWUP_SYSTEM_PROMPT,
     FollowupAnswerContractError,
     FollowupSessionError,
     MAX_FOLLOWUP_TURNS,
     build_followup_session_payload,
     conversation_from_envelope,
     run_followup_turn,
+    run_traced_followup_turn,
     sign_followup_session,
     validate_followup_output,
     verify_followup_session,
@@ -32,6 +38,7 @@ from equity_research.company_researcher import (  # noqa: E402
     ResearchFinding,
 )
 from equity_research.config import Equity  # noqa: E402
+from equity_research.mlflow_tracing import MlflowTracingConfig  # noqa: E402
 from equity_research.market_analyst import (  # noqa: E402
     MarketAnalystResult,
     MetricReference,
@@ -515,6 +522,101 @@ class AppFollowupTests(unittest.TestCase):
                 session_payload=payload,
             )
 
+    def test_turn_repairs_unsupported_relationship_with_exact_values(
+        self,
+    ) -> None:
+        payload = build_followup_session_payload(
+            _session()
+        )
+        envelope = sign_followup_session(
+            payload,
+            signing_key=SIGNING_KEY,
+        )
+        model_query = Mock(
+            side_effect=[
+                _response(
+                    {
+                        "answer": (
+                            "AAPL had a higher 60-session return of 9.74%."
+                        ),
+                        "source_ids": [
+                            "market_analysis:m1"
+                        ],
+                        "evidence_ids": [],
+                        "limitation": "",
+                    }
+                ),
+                _response(
+                    {
+                        "answer": (
+                            "AAPL 60-session return was 9.74%. "
+                            "The active research does not provide an explicit "
+                            "qualitative ranking."
+                        ),
+                        "source_ids": [
+                            "market_analysis:m1"
+                        ],
+                        "evidence_ids": [],
+                        "limitation": "",
+                    }
+                ),
+            ]
+        )
+
+        result = run_followup_turn(
+            envelope,
+            question="Was AAPL's 60-session return higher?",
+            signing_key=SIGNING_KEY,
+            model_query=model_query,
+        )
+
+        self.assertEqual(
+            model_query.call_count,
+            2,
+        )
+        self.assertIn(
+            "explicit qualitative ranking",
+            result.answer.answer,
+        )
+        repair_payload = (
+            model_query.call_args_list[
+                1
+            ].kwargs[
+                "payload"
+            ]
+        )
+        repair_instruction = (
+            repair_payload[
+                "messages"
+            ][
+                -1
+            ][
+                "content"
+            ]
+        )
+        self.assertIn(
+            "unsupported relationship",
+            repair_instruction,
+        )
+        self.assertIn(
+            "exact cited comparison values",
+            repair_instruction,
+        )
+
+    def test_system_prompt_handles_unsupported_comparison_wording(self) -> None:
+        normalized_prompt = " ".join(
+            FOLLOWUP_SYSTEM_PROMPT.split()
+        )
+
+        self.assertIn(
+            "do not echo that unsupported wording",
+            normalized_prompt,
+        )
+        self.assertIn(
+            "explicit qualitative ranking",
+            normalized_prompt,
+        )
+
     def test_turn_repairs_malformed_structured_response(self) -> None:
         payload = build_followup_session_payload(
             _session()
@@ -648,6 +750,210 @@ class AppFollowupTests(unittest.TestCase):
         self.assertEqual(
             conversation[-1]["question"],
             "What was the 60-session return?",
+        )
+
+
+    def test_turn_uses_deterministic_market_comparison_after_failed_repair(
+        self,
+    ) -> None:
+        payload = {
+            "version": 1,
+            "research": {
+                "mode": "comparison",
+                "symbols": [
+                    "AAPL",
+                    "MSFT",
+                ],
+                "market_window_sessions": 60,
+                "report_status": "ready",
+                "synthesis_mode": "model",
+            },
+            "sources": [
+                {
+                    "source_id": (
+                        "structured:AAPL:market:60-session-return"
+                    ),
+                    "source_type": "structured_metric",
+                    "symbols": [
+                        "AAPL"
+                    ],
+                    "text": (
+                        "AAPL 60-session return: 9.74%"
+                    ),
+                    "evidence_ids": [],
+                },
+                {
+                    "source_id": (
+                        "structured:MSFT:market:60-session-return"
+                    ),
+                    "source_type": "structured_metric",
+                    "symbols": [
+                        "MSFT"
+                    ],
+                    "text": (
+                        "MSFT 60-session return: 4.25%"
+                    ),
+                    "evidence_ids": [],
+                },
+            ],
+            "evidence": [],
+            "conversation": [],
+        }
+        envelope = sign_followup_session(
+            payload,
+            signing_key=SIGNING_KEY,
+        )
+        malformed = {
+            "choices": [
+                {
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": "not-json",
+                    },
+                }
+            ]
+        }
+        model_query = Mock(
+            side_effect=[
+                malformed,
+                malformed,
+            ]
+        )
+
+        result = run_followup_turn(
+            envelope,
+            question=(
+                "Which company showed the stronger market performance "
+                "in this analysis?"
+            ),
+            signing_key=SIGNING_KEY,
+            model_query=model_query,
+        )
+
+        self.assertEqual(
+            model_query.call_count,
+            2,
+        )
+        self.assertEqual(
+            result.answer.answer,
+            (
+                "Using the active 60-session return, AAPL showed the stronger "
+                "market performance: AAPL 9.74% versus MSFT 4.25%."
+            ),
+        )
+        self.assertEqual(
+            result.answer.source_ids,
+            (
+                "structured:AAPL:market:60-session-return",
+                "structured:MSFT:market:60-session-return",
+            ),
+        )
+        self.assertIsNone(
+            result.answer.limitation,
+        )
+
+    def test_traced_turn_records_question_and_validated_answer(self) -> None:
+        payload = build_followup_session_payload(
+            _session()
+        )
+        envelope = sign_followup_session(
+            payload,
+            signing_key=SIGNING_KEY,
+        )
+        answer = SimpleNamespace(
+            answer="Apple announced a device leasing strategy.",
+            source_ids=("recent_developments:fd1",),
+            evidence_ids=(EVIDENCE_ID,),
+            limitation=None,
+        )
+        expected = SimpleNamespace(
+            envelope={
+                "payload": "updated",
+                "signature": "fixture",
+            },
+            answer=answer,
+        )
+        span = Mock()
+
+        with (
+            patch(
+                "equity_research.app_followup.configure_mlflow_tracing",
+            ) as configure,
+            patch(
+                "equity_research.app_followup.mlflow.tracing.context",
+                return_value=nullcontext(),
+            ) as tracing_context,
+            patch(
+                "equity_research.app_followup.mlflow.start_span",
+                return_value=nullcontext(
+                    span
+                ),
+            ) as start_span,
+            patch(
+                "equity_research.app_followup.run_followup_turn",
+                return_value=expected,
+            ) as turn_runner,
+        ):
+            result = run_traced_followup_turn(
+                envelope,
+                question="What changed recently?",
+                signing_key=SIGNING_KEY,
+                tracing_config=MlflowTracingConfig(
+                    experiment_id="123456789",
+                    environment="databricks_app",
+                ),
+                model_query=Mock(),
+            )
+
+        self.assertIs(
+            result,
+            expected,
+        )
+        configure.assert_called_once()
+        tracing_kwargs = tracing_context.call_args.kwargs
+        self.assertEqual(
+            tracing_kwargs["tags"]["interaction_type"],
+            "followup_question",
+        )
+        self.assertEqual(
+            tracing_kwargs["tags"]["symbols"],
+            "AAPL",
+        )
+        self.assertEqual(
+            tracing_kwargs["tags"]["request_mode"],
+            "single_company",
+        )
+        self.assertNotIn(
+            "user",
+            tracing_kwargs["tags"],
+        )
+        start_span.assert_called_once_with(
+            name="app_followup_turn",
+            span_type=SpanType.AGENT,
+        )
+        span.set_inputs.assert_called_once()
+        traced_inputs = span.set_inputs.call_args.args[0]
+        self.assertEqual(
+            traced_inputs["question"],
+            "What changed recently?",
+        )
+        self.assertEqual(
+            traced_inputs["market_window_sessions"],
+            60,
+        )
+        turn_runner.assert_called_once()
+        span.set_outputs.assert_called_once_with(
+            {
+                "answer": "Apple announced a device leasing strategy.",
+                "source_ids": [
+                    "recent_developments:fd1"
+                ],
+                "evidence_ids": [
+                    EVIDENCE_ID
+                ],
+                "limitation": None,
+            }
         )
 
 

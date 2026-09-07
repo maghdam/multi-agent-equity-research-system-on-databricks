@@ -9,7 +9,11 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 from typing import Any, Callable
+
+import mlflow
+from mlflow.entities import SpanType
 
 from equity_research.app_contracts import SUPPORTED_MARKET_WINDOWS
 from equity_research.app_presenters import build_app_research_presentation
@@ -30,6 +34,10 @@ from equity_research.worker_agent_runtime import (
     parse_structured_chat_response,
 )
 from equity_research.mlflow_runtime_spans import run_traced_chat_completion
+from equity_research.mlflow_tracing import (
+    MlflowTracingConfig,
+    configure_mlflow_tracing,
+)
 
 
 FOLLOWUP_MODEL = "system.ai.gpt-oss-120b"
@@ -39,6 +47,11 @@ FOLLOWUP_SESSION_VERSION = 1
 MAX_FOLLOWUP_QUESTION_CHARS = 1200
 MAX_FOLLOWUP_ANSWER_CHARS = 5000
 MAX_FOLLOWUP_TURNS = 6
+FOLLOWUP_TRACE_PROJECT = "multi-agent-equity-research-system"
+FOLLOWUP_TRACE_COMPONENT = "app_followup"
+FOLLOWUP_TRACE_PRIVACY_BOUNDARY = (
+    "signed_active_research_context_plus_user_question_and_validated_answer"
+)
 
 
 class FollowupSessionError(ValueError):
@@ -92,10 +105,15 @@ the question is fully answered.
 Do not introduce numerical claims absent from the cited source text. Copy
 numbers with the same magnitude and precision. For provenance/date questions,
 prefer the exact ISO YYYY-MM-DD evidence date from the signed source metadata.
-Do not newly infer qualitative
-or directional relationships such as higher/lower, better/worse, above/below,
-stronger/weaker, outperformed/underperformed unless that exact relationship is
-already stated in a cited source.
+Do not newly infer qualitative or directional relationships such as higher/lower,
+better/worse, above/below, stronger/weaker, outperformed/underperformed unless
+that relationship is already stated in a cited source. If the user asks using
+comparison wording that is absent from the cited sources, do not echo that
+unsupported wording. Prefer the exact supported relationship wording from a
+cited source. If no cited source states a qualitative relationship but comparable
+validated numeric values are available, report those exact cited values and say
+that the active research does not provide an explicit qualitative ranking instead
+of inventing one.
 
 Keep the answer concise and directly responsive. Return only the JSON required
 by the response schema.
@@ -734,6 +752,119 @@ def _grounding_source_texts(
     )
 
 
+def run_traced_followup_turn(
+    envelope: Mapping[str, Any],
+    *,
+    question: str,
+    signing_key: bytes,
+    tracing_config: MlflowTracingConfig,
+    profile: str | None = None,
+    model_query: Callable[..., Mapping[str, Any]] = (
+        query_chat_completions_via_cli
+    ),
+) -> FollowupTurnResult:
+    """Run one follow-up turn as its own production MLflow trace."""
+
+    if not isinstance(
+        tracing_config,
+        MlflowTracingConfig,
+    ):
+        raise TypeError(
+            "tracing_config must be MlflowTracingConfig."
+        )
+
+    session_payload = verify_followup_session(
+        envelope,
+        signing_key=signing_key,
+    )
+    normalized_question = _required_question(
+        question
+    )
+    research = session_payload[
+        "research"
+    ]
+    symbols = tuple(
+        research[
+            "symbols"
+        ]
+    )
+
+    configure_mlflow_tracing(
+        tracing_config
+    )
+
+    tags = {
+        "project": FOLLOWUP_TRACE_PROJECT,
+        "component": FOLLOWUP_TRACE_COMPONENT,
+        "environment": tracing_config.environment.strip(),
+        "interaction_type": "followup_question",
+        "request_mode": str(
+            research[
+                "mode"
+            ]
+        ),
+        "symbols": ",".join(
+            symbols
+        ),
+    }
+    metadata = {
+        "privacy_boundary": FOLLOWUP_TRACE_PRIVACY_BOUNDARY,
+        "context_authority": "signed_active_research_session",
+        "answer_authority": "deterministically_validated_grounded_followup",
+    }
+
+    with mlflow.tracing.context(
+        tags=tags,
+        metadata=metadata,
+    ):
+        with mlflow.start_span(
+            name="app_followup_turn",
+            span_type=SpanType.AGENT,
+        ) as span:
+            span.set_inputs(
+                {
+                    "question": normalized_question,
+                    "symbols": list(
+                        symbols
+                    ),
+                    "request_mode": research[
+                        "mode"
+                    ],
+                    "market_window_sessions": research[
+                        "market_window_sessions"
+                    ],
+                    "prior_turn_count": len(
+                        session_payload[
+                            "conversation"
+                        ]
+                    ),
+                }
+            )
+
+            result = run_followup_turn(
+                envelope,
+                question=normalized_question,
+                signing_key=signing_key,
+                profile=profile,
+                model_query=model_query,
+            )
+
+            span.set_outputs(
+                {
+                    "answer": result.answer.answer,
+                    "source_ids": list(
+                        result.answer.source_ids
+                    ),
+                    "evidence_ids": list(
+                        result.answer.evidence_ids
+                    ),
+                    "limitation": result.answer.limitation,
+                }
+            )
+
+            return result
+
+
 def run_followup_turn(
     envelope: Mapping[str, Any],
     *,
@@ -810,8 +941,13 @@ def run_followup_turn(
                     "answer from the same signed context and correct this exact "
                     "issue:\n"
                     f"{str(exc)}\n"
-                    "Do not weaken or bypass the validator. Return only the "
-                    "required JSON."
+                    "For an unsupported relationship, do not repeat comparison "
+                    "wording from the user unless a cited source supports that "
+                    "relationship. Reuse exact supported relationship wording, "
+                    "or report the exact cited comparison values and state that "
+                    "the active research does not provide an explicit qualitative "
+                    "ranking. Do not weaken or bypass the validator. Return only "
+                    "the required JSON."
                 ),
             },
         ]
@@ -847,18 +983,24 @@ def run_followup_turn(
             AgentModelResponseError,
             FollowupAnswerContractError,
         ):
-            answer = FollowupAnswer(
-                answer=(
-                    "I could not produce a response that passed the "
-                    "active-session grounding checks. Please rephrase the "
-                    "question using the current research evidence."
-                ),
-                source_ids=(),
-                evidence_ids=(),
-                limitation=(
-                    "Follow-up response failed deterministic grounding "
-                    "validation after one bounded repair."
-                ),
+            answer = (
+                _deterministic_market_comparison_answer(
+                    question=normalized_question,
+                    session_payload=session_payload,
+                )
+                or FollowupAnswer(
+                    answer=(
+                        "I could not produce a response that passed the "
+                        "active-session grounding checks. Please rephrase the "
+                        "question using the current research evidence."
+                    ),
+                    source_ids=(),
+                    evidence_ids=(),
+                    limitation=(
+                        "Follow-up response failed deterministic grounding "
+                        "validation after one bounded repair."
+                    ),
+                )
             )
 
     conversation = [
@@ -887,6 +1029,221 @@ def run_followup_turn(
             signing_key=signing_key,
         ),
         answer=answer,
+    )
+
+
+def _deterministic_market_comparison_answer(
+    *,
+    question: str,
+    session_payload: Mapping[str, Any],
+) -> FollowupAnswer | None:
+    """Answer bounded market comparisons from signed structured return metrics."""
+
+    research = session_payload.get(
+        "research"
+    )
+    sources = session_payload.get(
+        "sources"
+    )
+
+    if (
+        not isinstance(research, Mapping)
+        or not isinstance(sources, list)
+        or research.get("mode") != "comparison"
+    ):
+        return None
+
+    symbols_raw = research.get(
+        "symbols"
+    )
+    window = research.get(
+        "market_window_sessions"
+    )
+
+    if (
+        not isinstance(symbols_raw, list)
+        or len(symbols_raw) != 2
+        or not all(
+            isinstance(symbol, str)
+            and symbol.strip()
+            for symbol in symbols_raw
+        )
+        or not isinstance(window, int)
+        or isinstance(window, bool)
+    ):
+        return None
+
+    normalized_question = question.casefold()
+    comparison_terms = (
+        "stronger",
+        "weaker",
+        "better",
+        "worse",
+        "higher",
+        "lower",
+        "outperform",
+        "underperform",
+        "market performance",
+    )
+
+    if not any(
+        term in normalized_question
+        for term in comparison_terms
+    ):
+        return None
+
+    symbols = tuple(
+        symbol.strip().upper()
+        for symbol in symbols_raw
+    )
+    metric_label = (
+        f"{window}-session return"
+    )
+    values: dict[
+        str,
+        tuple[
+            Decimal,
+            str,
+            str,
+        ],
+    ] = {}
+
+    for source in sources:
+        if not isinstance(
+            source,
+            Mapping,
+        ) or source.get(
+            "source_type"
+        ) != "structured_metric":
+            continue
+
+        source_symbols = source.get(
+            "symbols"
+        )
+        source_text = source.get(
+            "text"
+        )
+        source_id = source.get(
+            "source_id"
+        )
+
+        if (
+            not isinstance(source_symbols, list)
+            or len(source_symbols) != 1
+            or not isinstance(source_text, str)
+            or not isinstance(source_id, str)
+        ):
+            continue
+
+        symbol = source_symbols[
+            0
+        ]
+
+        if (
+            not isinstance(symbol, str)
+            or symbol.strip().upper()
+            not in symbols
+        ):
+            continue
+
+        normalized_symbol = (
+            symbol.strip().upper()
+        )
+        prefix = (
+            f"{normalized_symbol} "
+            f"{metric_label}:"
+        )
+
+        if not source_text.startswith(
+            prefix
+        ):
+            continue
+
+        match = re.search(
+            r":\s*([+-]?\d+(?:\.\d+)?)%",
+            source_text,
+        )
+
+        if match is None:
+            continue
+
+        exact_value = (
+            f"{match.group(1)}%"
+        )
+        values[
+            normalized_symbol
+        ] = (
+            Decimal(
+                match.group(1)
+            ),
+            exact_value,
+            source_id,
+        )
+
+    if any(
+        symbol not in values
+        for symbol in symbols
+    ):
+        return None
+
+    left_symbol, right_symbol = (
+        symbols
+    )
+    left_value, left_text, left_source = (
+        values[
+            left_symbol
+        ]
+    )
+    right_value, right_text, right_source = (
+        values[
+            right_symbol
+        ]
+    )
+
+    if left_value == right_value:
+        answer_text = (
+            f"Using the active {metric_label}, neither company was stronger: "
+            f"{left_symbol} and {right_symbol} were both {left_text}."
+        )
+    else:
+        asks_for_weaker = any(
+            term in normalized_question
+            for term in (
+                "weaker",
+                "worse",
+                "lower",
+                "underperform",
+            )
+        )
+        if asks_for_weaker:
+            selected_symbol = (
+                left_symbol
+                if left_value < right_value
+                else right_symbol
+            )
+            relation = "weaker"
+        else:
+            selected_symbol = (
+                left_symbol
+                if left_value > right_value
+                else right_symbol
+            )
+            relation = "stronger"
+
+        answer_text = (
+            f"Using the active {metric_label}, {selected_symbol} showed the "
+            f"{relation} market performance: {left_symbol} {left_text} versus "
+            f"{right_symbol} {right_text}."
+        )
+
+    return FollowupAnswer(
+        answer=answer_text,
+        source_ids=(
+            left_source,
+            right_source,
+        ),
+        evidence_ids=(),
+        limitation=None,
     )
 
 

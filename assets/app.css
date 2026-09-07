@@ -473,6 +473,14 @@ body {
   margin-top: 12px;
 }
 
+.followup-citations-label {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 .followup-source-chip,
 .followup-evidence-link {
   display: inline-flex;
