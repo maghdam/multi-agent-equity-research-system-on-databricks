@@ -1,8 +1,8 @@
 # Multi-Agent Equity Research System on Databricks
 
-> A production-oriented portfolio project combining data engineering and AI engineering on Databricks.
+> A production-oriented end-to-end portfolio project combining Databricks data engineering, agentic AI engineering, evaluation, and application delivery.
 
-**Status:** Milestone 1 — Data Engineering complete; Milestone 2 — AI Engineering complete; Milestone 3 — Application delivery in progress, with the private Databricks App deployed and live-verified
+**Status:** ✅ Milestone 1 — Data Engineering complete · ✅ Milestone 2 — AI Engineering complete · ✅ Milestone 3 — Application Delivery complete
 
 **Live Databricks App:** [Open the deployed Equity Research Workspace](https://equity-research-dev-7474654299884940.aws.databricksapps.com/)  
 *Databricks authentication and app access are required; anonymous public access is not supported by Databricks Apps.*
@@ -41,7 +41,7 @@ The MVP will not include trading execution, price prediction, portfolio optimiza
 - **Milestone 1 — Data Engineering:** complete. Bronze, Silver, Gold, CI, scheduled refresh orchestration, quality/freshness/lineage gates, safe replay behavior, and controlled deployment verification are all implemented and verified. The deployment gate was executed from the CI-tested `main` commit `caa3dcb` and completed with a converged bundle plan plus a successful serverless Spark smoke test.
 - **Operational audit policy:** the MVP uses fail-before-publication validation rather than partial publication plus quarantine tables. Immutable Bronze provenance, validation diagnostics, deterministic replay, Databricks job history, and final verification gates provide the required operational evidence; dedicated row-level rejection tables are deferred until a mixed valid/invalid batch workflow requires them.
 - **Milestone 2 — AI Engineering:** complete. The deterministic RAG corpus, managed GTE embeddings/AI Search index, independent retrieval holdout, controlled Gold/retrieval tools, GPT OSS 20B Market Analyst and Company Researcher workers, deterministic LangGraph Supervisor, GPT OSS 120B terminal synthesis, report provenance validation, bounded repair/fallback, MLflow tracing, route-aware retrieval relevance/sufficiency, trace-aware narrative grounding, controlled E3-E6 failure/security evaluation, and the final E1/E2 managed regression baseline are implemented and live-verified. Pull-request CI now exposes a dedicated 107-test credential-free AI-evaluation gate plus the full 482-test repository suite; GitHub Actions run #25 passed both with Ruff clean on Python 3.14.7. Credentialed Databricks SQL, Vector Search, and model evaluations remain deliberately separate, bounded live checks.
-- **Milestone 3 — Application Delivery:** active and substantially implemented. The configuration-driven Dash workspace is deployed privately on Databricks Apps and live-verified for single-company and AAPL/MSFT comparison research. It renders controlled Gold metrics, normalized Silver price history, validated cited reports, publication-safe evidence cards, signed session-bound follow-up answers, fixed-category feedback, and bounded `APP_EVENT` telemetry. The app uses unified authentication plus least-privilege read-only resource bindings rather than a developer PAT. The public-repository publication audit passed locally on 2026-09-07, and the reviewed screenshot set is committed; final branch CI plus post-merge deployment verification remain before milestone closure.
+- **Milestone 3 — Application Delivery:** complete. The configuration-driven Dash workspace is deployed privately on Databricks Apps and live-verified for single-company and AAPL/MSFT comparison research. It renders controlled Gold metrics, normalized Silver price history, validated cited reports, publication-safe evidence cards, signed session-bound follow-up answers, fixed-category feedback, and bounded `APP_EVENT` telemetry. The final PR CI passed, the milestone was merged to `main` as `89bc3df`, and the exact merged snapshot was redeployed and live-smoke-tested successfully on 2026-09-07.
 - Detailed implementation evidence and run links are tracked in [PLAN.md](PLAN.md).
 
 ## Portfolio preview
@@ -58,79 +58,115 @@ The MVP will not include trading execution, price prediction, portfolio optimiza
 
 ![Validated AAPL vs MSFT research report](docs/screenshots/03-research-report.png)
 
-See the [portfolio demo walkthrough](docs/PORTFOLIO_DEMO.md) for the full evidence set, including provenance, grounded follow-up, Unity Catalog assets, and MLflow evaluation results.
+## Databricks implementation evidence
+
+### Unity Catalog — real Bronze, Silver, Gold, and AI/RAG assets
+
+![Databricks Catalog showing the implemented medallion and AI/RAG assets](docs/screenshots/06-databricks-catalog.png)
+
+### MLflow GenAI evaluation — final managed E1/E2 regression baseline
+
+The final managed evaluation run `spiffy-rat-765` (`248395fd300d449ab98d496a4a39fcdc`) keeps the full Databricks metrics table readable across four screenshots. Click any image to inspect it at full resolution.
+
+<table>
+<tr>
+<td width="50%"><a href="docs/screenshots/07-mlflow-evaluation-1.png"><img src="docs/screenshots/07-mlflow-evaluation-1.png" alt="MLflow evaluation metrics part 1"></a></td>
+<td width="50%"><a href="docs/screenshots/07-mlflow-evaluation-2.png"><img src="docs/screenshots/07-mlflow-evaluation-2.png" alt="MLflow evaluation metrics part 2"></a></td>
+</tr>
+<tr>
+<td width="50%"><a href="docs/screenshots/07-mlflow-evaluation-3.png"><img src="docs/screenshots/07-mlflow-evaluation-3.png" alt="MLflow evaluation metrics part 3"></a></td>
+<td width="50%"><a href="docs/screenshots/07-mlflow-evaluation-4.png"><img src="docs/screenshots/07-mlflow-evaluation-4.png" alt="MLflow evaluation metrics part 4"></a></td>
+</tr>
+</table>
+
+| Final evaluation signal | Mean |
+| --- | ---: |
+| Report section grounding contract | 1.000 |
+| Safety | 1.000 |
+| Retrieval trace sufficiency | 1.000 |
+| Relevance to query | 1.000 |
+| Narrative trace groundedness | 1.000 |
+| Required report sections | 1.000 |
+| Overall retrieval relevance | 0.861 |
+| Retrieval empty-route count | 0 |
+
+The non-perfect retrieval-relevance score is retained deliberately: the portfolio shows the measured precision/recall tradeoff rather than hiding it behind only perfect metrics.
+
+See the [portfolio demo walkthrough](docs/PORTFOLIO_DEMO.md) for the evidence-provenance, grounded follow-up, evaluation, operations, and reproduction walkthrough.
 
 ## Architecture
 
-```mermaid
-flowchart TB
-    subgraph SRC["Sources"]
-        direction LR
-        A1["Alpaca Market Data"]
-        A2["Alpaca News"]
-        E1["SEC Company Facts"]
-        E2["SEC Filings"]
-    end
+<div align="center">
+<pre>
+Sources
+│
+├─ Alpaca Market Data API
+├─ Alpaca News API
+├─ SEC Company Facts API
+└─ SEC Filings API
+│
+▼
+Milestone 1 — Data Engineering ✅
+│
+Bronze
+│
+▼
+Silver
+│
+▼
+┌───────────────────────┴───────────────────────┐
+│                                               │
+▼                                               ▼
+Gold metrics                    RAG corpus (news + filings)
+│                                               │
+└───────────────────────┬───────────────────────┘
+                        │
+                        ▼
+Milestone 2 — AI Engineering ✅
+│
+┌───────────────────────┴───────────────────────┐
+│                                               │
+▼                                               ▼
+Controlled Gold tools                      Vector Search / RAG
+│                                               │
+▼                                               ▼
+Market Analyst                            Company Researcher
+GPT OSS 20B                               GPT OSS 20B
+│                                               │
+└───────────────────────┬───────────────────────┘
+                        │
+                        ▼
+              LangGraph Supervisor
+                        │
+                        ▼
+                  GPT OSS 120B
+                        │
+                        ▼
+           deterministic validation
+           numeric fidelity/provenance
+               repair + fallback
+                        │
+                        ▼
+              grounded cited report
+                        │
+                        ▼
+┌───────────────────────┴───────────────────────┐
+│                                               │
+▼                                               ▼
+MLflow traces                              MLflow evaluation
+│                                               │
+└───────────────────────┬───────────────────────┘
+                        │
+                        ▼
+                   CI/regression
+                        │
+                        ▼
+Milestone 3 — Private Databricks App ✅
+charts · cited report · grounded follow-up
+GPT OSS 120B follow-up chat over signed active research context
+</pre>
+</div>
 
-    subgraph DE["Milestone 1 — Data Engineering ✅"]
-        direction TB
-        B["Bronze Delta<br/>raw immutable provider history"]
-        S["Silver Delta<br/>validated business records"]
-        G["Gold metrics<br/>authoritative structured facts"]
-        R["RAG corpus<br/>research_documents + research_chunks"]
-    end
-
-    subgraph AI["Milestone 2 — AI Engineering ✅"]
-        direction TB
-        CT["Controlled Gold tools"]
-        VS["Managed embeddings + Vector Search<br/>HYBRID retrieval"]
-        MA["Market Analyst<br/>GPT OSS 20B"]
-        CR["Company Researcher<br/>GPT OSS 20B"]
-        SUP["Deterministic LangGraph Supervisor"]
-        SYN["GPT OSS 120B terminal synthesis"]
-        VAL["Deterministic report validation<br/>numeric fidelity + provenance<br/>one repair + deterministic fallback"]
-        REP["Grounded cited research report"]
-    end
-
-    subgraph OBS["Observability & Evaluation ✅"]
-        direction TB
-        TR["MLflow traces<br/>TOOL + RETRIEVER + CHAT_MODEL + AGENT spans"]
-        EV["MLflow GenAI evaluation<br/>code scorers + semantic judges + E1–E6"]
-        CI["Credential-free CI<br/>107 focused AI-eval tests + 482 total tests"]
-    end
-
-    subgraph APP["Milestone 3 — Application Delivery 🟡"]
-        UI["Private Databricks App ✅<br/>stock/period selection + charts<br/>cited report + follow-up chat"]
-    end
-
-    A1 --> B
-    A2 --> B
-    E1 --> B
-    E2 --> B
-
-    B --> S
-    S --> G
-    S --> R
-
-    G --> CT --> MA
-    R --> VS --> CR
-
-    MA --> SUP
-    CR --> SUP
-    SUP --> SYN --> VAL --> REP
-
-    CT -. safe spans .-> TR
-    VS -. retriever spans .-> TR
-    MA -. model spans .-> TR
-    CR -. model spans .-> TR
-    SUP -. orchestration spans .-> TR
-    SYN -. synthesis spans .-> TR
-    REP -. evaluated output .-> EV
-    TR --> EV
-    CI -. regression gate .-> EV
-
-    REP --> UI
-```
 Gold is intentionally **not** a one-to-one mirror of Silver. Structured price and fundamental data feed analytical Gold tables, while validated news and filing text primarily become retrieval/indexing assets for the AI layer.
 
 ## Expected output
