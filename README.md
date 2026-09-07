@@ -1,6 +1,6 @@
 # Multi-Agent Equity Research System on Databricks
 
-> A production-oriented portfolio project combining data engineering and AI engineering on Databricks.
+> A production-oriented end-to-end portfolio project combining Databricks data engineering, agentic AI engineering, evaluation, and application delivery.
 
 **Status:** ✅ Milestone 1 — Data Engineering complete · ✅ Milestone 2 — AI Engineering complete · ✅ Milestone 3 — Application Delivery complete
 
@@ -97,25 +97,61 @@ See the [portfolio demo walkthrough](docs/PORTFOLIO_DEMO.md) for the evidence-pr
 ## Architecture
 
 ```mermaid
-flowchart TB
-    SRC["Sources<br/>Alpaca Market + News · SEC Facts + Filings"]
-    B["Bronze Delta<br/>immutable provider history"]
-    S["Silver Delta<br/>validated business records"]
-    G["Gold metrics<br/>authoritative structured facts"]
-    R["RAG corpus + AI Search<br/>validated narrative evidence"]
-    MA["Market Analyst<br/>GPT OSS 20B"]
-    CR["Company Researcher<br/>GPT OSS 20B"]
-    SUP["Deterministic LangGraph Supervisor"]
-    SYN["GPT OSS 120B synthesis<br/>+ deterministic validation"]
-    APP["Private Databricks App<br/>charts · cited report · grounded follow-up"]
+flowchart LR
+    SRC["Sources<br/>Alpaca Market + News<br/>SEC EDGAR"]
 
-    SRC --> B --> S
-    S --> G --> MA
-    S --> R --> CR
-    MA --> SUP
-    CR --> SUP
-    SUP --> SYN --> APP
+    subgraph DE["Milestone 1 — Data Engineering ✅"]
+        direction TB
+        B["Bronze Delta<br/>raw immutable ingestion"]
+        S["Silver Delta<br/>validated transformations"]
+        G["Gold Delta<br/>market + fundamental metrics"]
+        UC["Unity Catalog<br/>schemas · tables · governed access"]
+        WF["Databricks Workflows<br/>scheduled refresh · DQ/freshness gates"]
+
+        B --> S --> G
+        WF -. orchestrates .-> B
+        UC -. governs .-> G
+    end
+
+    subgraph AI["Milestone 2 — AI Engineering ✅"]
+        direction TB
+        R["RAG corpus<br/>research_documents + research_chunks"]
+        VS["Databricks Vector Search<br/>GTE embeddings · HYBRID retrieval"]
+        MA["Market Analyst<br/>GPT OSS 20B"]
+        CR["Company Researcher<br/>GPT OSS 20B"]
+        LG["LangGraph Supervisor<br/>deterministic routing"]
+        SYN["GPT OSS 120B synthesis<br/>validation · repair · fallback"]
+
+        R --> VS --> CR
+        MA --> LG
+        CR --> LG
+        LG --> SYN
+    end
+
+    subgraph APP["Milestone 3 — Application Delivery ✅"]
+        direction TB
+        UI["Databricks App · Dash<br/>charts · cited report · grounded follow-up"]
+        AUTH["Unified auth + least privilege<br/>SQL warehouse · UC tables · AI Search"]
+        AUTH -. secures .-> UI
+    end
+
+    SRC --> B
+    S --> R
+    G --> MA
+    SYN --> UI
 ```
+
+### Engineering capabilities demonstrated
+
+| Data Engineering | AI Engineering / GenAI | Production & Delivery |
+| --- | --- | --- |
+| Databricks, Delta Lake, Bronze/Silver/Gold | RAG over validated news + SEC evidence | Databricks Apps + Dash |
+| PySpark, Python, SQL | Databricks Vector Search + GTE embeddings | Unified authentication + least-privilege bindings |
+| Unity Catalog governance | LangGraph multi-agent orchestration | GitHub Actions CI/CD |
+| Databricks Workflows scheduling | GPT OSS 20B worker agents | MLflow 3 tracing + GenAI evaluation |
+| Incremental ingestion + replay-safe pipelines | GPT OSS 120B terminal synthesis | 482-test credential-free repository suite |
+| Data quality, freshness, coverage, lineage gates | Numeric fidelity + citation/provenance validation | Ruff, publication-boundary audit, release runbook |
+| Alpaca + SEC EDGAR source integration | Bounded repair + deterministic fallback | Bundle validate/plan/deploy + post-merge smoke verification |
 
 **Cross-cutting controls:** MLflow tracing and GenAI evaluation, E1–E6 controlled failure/security cases, credential-free CI, numeric/provenance validation, bounded repair with deterministic fallback, unified authentication, least-privilege Databricks App resource bindings, and publication-boundary auditing.
 
