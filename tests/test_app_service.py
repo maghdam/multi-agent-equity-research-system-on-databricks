@@ -78,37 +78,28 @@ class FakeRuntime:
         self.structured = structured
         self.report_symbols = report_symbols
         self.report_mode = report_mode
-        self.structured_calls: list[object] = []
-        self.research_calls: list[tuple[str, tuple[str, ...]]] = []
-        self.call_order: list[str] = []
+        self.calls: list[tuple[object, str]] = []
 
-    def load_structured_snapshot(
+    def run_research(
         self,
         *,
         selection,
-    ) -> AppStructuredSnapshot:
-        self.call_order.append("structured")
-        self.structured_calls.append(selection)
-        return self.structured
-
-    def run_supervisor_research(
-        self,
-        *,
         request_text: str,
-        requested_symbols: tuple[str, ...],
-    ) -> SupervisorResearchResult:
-        self.call_order.append("research")
-        self.research_calls.append(
+    ) -> tuple[AppStructuredSnapshot, SupervisorResearchResult]:
+        self.calls.append(
             (
+                selection,
                 request_text,
-                requested_symbols,
             )
         )
-        return SupervisorResearchResult(
-            state=object(),
-            report=SimpleNamespace(
-                symbols=self.report_symbols,
-                mode=self.report_mode,
+        return (
+            self.structured,
+            SupervisorResearchResult(
+                state=object(),
+                report=SimpleNamespace(
+                    symbols=self.report_symbols,
+                    mode=self.report_mode,
+                ),
             ),
         )
 
@@ -155,20 +146,17 @@ class AppServiceTests(unittest.TestCase):
             session.request_text,
         )
         self.assertEqual(
-            runtime.structured_calls,
-            [selection],
+            len(runtime.calls),
+            1,
         )
+        runtime_selection, runtime_request = runtime.calls[0]
         self.assertEqual(
-            runtime.call_order,
-            ["research", "structured"],
-        )
-        self.assertEqual(
-            runtime.research_calls[0][1],
-            ("AAPL", "MSFT"),
+            runtime_selection,
+            selection,
         )
         self.assertIn(
             "Compare Apple Inc. (AAPL) and Microsoft Corporation (MSFT).",
-            runtime.research_calls[0][0],
+            runtime_request,
         )
 
     def test_structured_symbols_must_match_selection(self) -> None:
@@ -204,8 +192,8 @@ class AppServiceTests(unittest.TestCase):
             )
 
         self.assertEqual(
-            runtime.call_order,
-            ["research", "structured"],
+            len(runtime.calls),
+            1,
         )
 
     def test_report_symbols_must_match_selection(self) -> None:
