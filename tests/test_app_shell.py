@@ -443,7 +443,10 @@ class AppShellTests(unittest.TestCase):
                 "payload": "updated",
                 "signature": "fixture",
             },
-            answer=object(),
+            answer=SimpleNamespace(
+                source_ids=("recent_developments:fd1",),
+                limitation=None,
+            ),
         )
 
         with (
@@ -451,6 +454,23 @@ class AppShellTests(unittest.TestCase):
                 app_module.os.environ,
                 environment,
                 clear=True,
+            ),
+            patch(
+                "app.verify_followup_session",
+                return_value={
+                    "research": {
+                        "mode": "comparison",
+                        "symbols": ["AAPL", "MSFT"],
+                        "market_window_sessions": 60,
+                        "report_status": "ready",
+                        "synthesis_mode": "model",
+                    },
+                    "conversation": [
+                        {
+                            "question": "What changed recently?",
+                        }
+                    ],
+                },
             ),
             patch(
                 "app.DatabricksAppTransport",
@@ -517,13 +537,7 @@ class AppShellTests(unittest.TestCase):
                 clear=True,
             ),
             patch(
-                "app.DatabricksAppTransport",
-                return_value=SimpleNamespace(
-                    query_chat_completions=object(),
-                ),
-            ),
-            patch(
-                "app.run_followup_turn",
+                "app.verify_followup_session",
                 side_effect=app_module.FollowupSessionError(
                     "signature mismatch"
                 ),
@@ -550,6 +564,90 @@ class AppShellTests(unittest.TestCase):
         )
         self.assertTrue(
             result[4]
+        )
+
+    def test_feedback_controls_start_disabled(self) -> None:
+        helpful = _component_by_id(
+            app_module.app.layout,
+            "feedback-helpful",
+        )
+        needs_work = _component_by_id(
+            app_module.app.layout,
+            "feedback-needs-work",
+        )
+        message = _component_by_id(
+            app_module.app.layout,
+            "feedback-message",
+        )
+
+        self.assertTrue(
+            helpful.disabled
+        )
+        self.assertTrue(
+            needs_work.disabled
+        )
+        self.assertIn(
+            "Run research first",
+            message.children,
+        )
+
+    def test_feedback_callback_logs_fixed_category_only(self) -> None:
+        verified_payload = {
+            "research": {
+                "mode": "comparison",
+                "symbols": ["AAPL", "MSFT"],
+                "market_window_sessions": 60,
+                "report_status": "ready",
+                "synthesis_mode": "model",
+            },
+        }
+
+        with (
+            patch(
+                "app.verify_followup_session",
+                return_value=verified_payload,
+            ),
+            patch(
+                "app.ctx",
+                SimpleNamespace(
+                    triggered_id="feedback-helpful",
+                ),
+            ),
+            patch(
+                "app.log_app_event",
+            ) as event_logger,
+        ):
+            result = app_module.handle_research_feedback(
+                {
+                    "payload": "signed",
+                    "signature": "fixture",
+                },
+                1,
+                0,
+            )
+
+        self.assertEqual(
+            result,
+            (
+                "Thanks — privacy-safe session feedback was recorded.",
+                True,
+                True,
+            ),
+        )
+        event_logger.assert_called_once()
+        event = event_logger.call_args.args[1]
+
+        self.assertEqual(
+            event.event_type,
+            "feedback_submitted",
+        )
+        self.assertEqual(
+            event.feedback,
+            "helpful",
+        )
+        self.assertEqual(
+            event.symbols,
+            ("AAPL", "MSFT"),
         )
 
     def test_evidence_card_renders_publication_safe_metadata(self) -> None:
