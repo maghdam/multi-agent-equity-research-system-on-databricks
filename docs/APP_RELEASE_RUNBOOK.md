@@ -10,6 +10,10 @@ The application is private and personal. The public portfolio surface is the Git
 repository plus reviewed screenshots, documentation, tests, CI evidence, and
 non-sensitive evaluation evidence.
 
+Live deployment URL: [Equity Research Workspace](https://equity-research-dev-7474654299884940.aws.databricksapps.com/)
+
+The URL is intentionally documented for authorized reviewers and reproducibility. It is not an anonymous public endpoint; Databricks authentication and app permissions are required.
+
 ## 1. Release prerequisites
 
 Use the repository root with the project Python environment active.
