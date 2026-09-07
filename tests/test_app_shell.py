@@ -566,6 +566,30 @@ class AppShellTests(unittest.TestCase):
             result[4]
         )
 
+    def test_app_logger_emits_info_with_explicit_handler(self) -> None:
+        self.assertEqual(
+            app_module.logger.name,
+            "equity_research.app",
+        )
+        self.assertEqual(
+            app_module.logger.level,
+            app_module.logging.INFO,
+        )
+        self.assertFalse(
+            app_module.logger.propagate
+        )
+        self.assertTrue(
+            any(
+                isinstance(
+                    handler,
+                    app_module.logging.StreamHandler,
+                )
+                and handler.level
+                <= app_module.logging.INFO
+                for handler in app_module.logger.handlers
+            )
+        )
+
     def test_feedback_controls_start_disabled(self) -> None:
         helpful = _component_by_id(
             app_module.app.layout,
