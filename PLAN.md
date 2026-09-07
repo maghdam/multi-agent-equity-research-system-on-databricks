@@ -355,7 +355,8 @@ This structure adapts the [Databricks medallion architecture](https://docs.datab
   - [x] Keep synthetic fixtures explicitly allowed while requiring committed portfolio images to live under `docs/screenshots/` or `docs/images/`; extend `.gitignore` for common private export directories and portable data formats.
   - [x] Add credential-free publication-audit tests including a self-audit of the current tracked repository, synthetic prohibited export/credential cases, and reviewed screenshot-location behavior; wire the audit into GitHub Actions before the full offline test suite.
   - [x] Update `docs/DATA_USAGE_PERMISSIONS.md` with the automated audit, its limits, and the requirement for human review of screenshots/substantial licensed text.
-  - [ ] Run the publication audit and focused tests locally, then review the final screenshot/demo artifact set before closing the publication boundary.
+  - [x] Run the automated publication gate locally on 2026-09-07: 5 focused `test_publication_audit.py` tests passed, `python scripts/audit_publication_boundary.py` returned `PUBLICATION_BOUNDARY_AUDIT=PASSED`, Ruff passed for the audit implementation/entrypoint/tests, and `git diff --check` was clean.
+  - [ ] Review the final screenshot/demo artifact set for substantial licensed text, credentials, raw provider payloads, private workspace tokens, and other non-public material before closing the publication boundary.
 
 - [ ] Deploy the app on Databricks and extend controlled deployment with startup, health, and end-to-end verification.
 
