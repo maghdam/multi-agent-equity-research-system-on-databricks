@@ -100,7 +100,7 @@ class AppShellTests(unittest.TestCase):
 
         self.assertEqual(
             len(result),
-            6,
+            11,
         )
         self.assertIn(
             "Valid local preview",
@@ -117,8 +117,21 @@ class AppShellTests(unittest.TestCase):
         self.assertTrue(
             all(
                 item is app_module.no_update
-                for item in result[1:]
+                for item in result[1:6]
             )
+        )
+        self.assertIsNone(
+            result[6]
+        )
+        self.assertTrue(
+            result[7]
+        )
+        self.assertTrue(
+            result[8]
+        )
+        self.assertEqual(
+            result[10],
+            "",
         )
 
     def test_optional_daily_prices_resource_does_not_force_preview(self) -> None:
@@ -186,7 +199,7 @@ class AppShellTests(unittest.TestCase):
 
         self.assertEqual(
             len(result),
-            6,
+            11,
         )
         self.assertIn(
             "Research execution failed safely",
@@ -195,8 +208,21 @@ class AppShellTests(unittest.TestCase):
         self.assertTrue(
             all(
                 item is app_module.no_update
-                for item in result[1:]
+                for item in result[1:6]
             )
+        )
+        self.assertIsNone(
+            result[6]
+        )
+        self.assertTrue(
+            result[7]
+        )
+        self.assertTrue(
+            result[8]
+        )
+        self.assertEqual(
+            result[10],
+            "",
         )
         log_text = "\n".join(
             captured.output
@@ -307,6 +333,19 @@ class AppShellTests(unittest.TestCase):
                 "app.build_app_research_presentation",
                 return_value=presentation,
             ) as presenter,
+            patch(
+                "app.build_followup_session_payload",
+                return_value={
+                    "version": 1,
+                },
+            ) as followup_builder,
+            patch(
+                "app.sign_followup_session",
+                return_value={
+                    "payload": "signed-session",
+                    "signature": "fixture",
+                },
+            ) as followup_signer,
         ):
             result = app_module.run_research_action(
                 1,
@@ -321,9 +360,13 @@ class AppShellTests(unittest.TestCase):
         presenter.assert_called_once_with(
             session
         )
+        followup_builder.assert_called_once_with(
+            session
+        )
+        followup_signer.assert_called_once()
         self.assertEqual(
             len(result),
-            6,
+            11,
         )
         self.assertEqual(
             result[0],
@@ -347,6 +390,110 @@ class AppShellTests(unittest.TestCase):
         )
         self.assertIsNotNone(
             result[5],
+        )
+        self.assertEqual(
+            result[6]["payload"],
+            "signed-session",
+        )
+        self.assertFalse(
+            result[7]
+        )
+        self.assertFalse(
+            result[8]
+        )
+        self.assertEqual(
+            result[10],
+            "",
+        )
+
+    def test_followup_store_is_memory_scoped(self) -> None:
+        store = _component_by_id(
+            app_module.app.layout,
+            "followup-session-store",
+        )
+
+        self.assertIsInstance(
+            store,
+            dcc.Store,
+        )
+        self.assertEqual(
+            store.storage_type,
+            "memory",
+        )
+        self.assertIsNone(
+            store.data
+        )
+
+    def test_followup_action_uses_databricks_model_transport(self) -> None:
+        environment = {
+            app_module.WAREHOUSE_ENV: "warehouse-1",
+            app_module.MARKET_METRICS_TABLE_ENV: (
+                "workspace.gold.market_metrics"
+            ),
+            app_module.FUNDAMENTAL_METRICS_TABLE_ENV: (
+                "workspace.gold.fundamental_metrics"
+            ),
+            app_module.VECTOR_INDEX_ENV: "workspace.ai.index",
+        }
+        transport = SimpleNamespace(
+            query_chat_completions=object(),
+        )
+        result_object = SimpleNamespace(
+            envelope={
+                "payload": "updated",
+                "signature": "fixture",
+            },
+            answer=object(),
+        )
+
+        with (
+            patch.dict(
+                app_module.os.environ,
+                environment,
+                clear=True,
+            ),
+            patch(
+                "app.DatabricksAppTransport",
+                return_value=transport,
+            ) as transport_factory,
+            patch(
+                "app.run_followup_turn",
+                return_value=result_object,
+            ) as followup_runner,
+            patch(
+                "app._render_followup_conversation",
+                return_value=["rendered-turn"],
+            ) as renderer,
+        ):
+            result = app_module.run_followup_action(
+                1,
+                "What changed recently?",
+                {
+                    "payload": "current",
+                    "signature": "fixture",
+                },
+            )
+
+        transport_factory.assert_called_once_with()
+        followup_runner.assert_called_once()
+        self.assertEqual(
+            followup_runner.call_args.kwargs["question"],
+            "What changed recently?",
+        )
+        self.assertIs(
+            followup_runner.call_args.kwargs["model_query"],
+            transport.query_chat_completions,
+        )
+        renderer.assert_called_once_with(
+            result_object.envelope
+        )
+        self.assertEqual(
+            result,
+            (
+                result_object.envelope,
+                ["rendered-turn"],
+                "",
+            ),
         )
 
     def test_evidence_card_renders_publication_safe_metadata(self) -> None:
