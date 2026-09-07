@@ -1001,6 +1001,52 @@ def _followup_empty_state(
     )
 
 
+def _followup_source_label(
+    source_id: str,
+    *,
+    source_by_id,
+) -> str:
+    """Return a compact user-facing label while preserving the raw ID in title."""
+
+    source = source_by_id.get(
+        source_id
+    )
+
+    if not isinstance(
+        source,
+        dict,
+    ):
+        return source_id
+
+    source_type = source.get(
+        "source_type"
+    )
+    text = source.get(
+        "text"
+    )
+
+    if (
+        source_type == "structured_metric"
+        and isinstance(text, str)
+        and ":" in text
+    ):
+        return text.split(
+            ":",
+            1,
+        )[0].strip()
+
+    if source_type == "validated_report_section":
+        section = source_id.removeprefix(
+            "report:"
+        ).replace(
+            "_",
+            " ",
+        )
+        return f"Report · {section}"
+
+    return source_id
+
+
 def _render_followup_conversation(
     envelope,
 ):
@@ -1015,6 +1061,10 @@ def _render_followup_conversation(
     evidence_by_id = {
         item["evidence_id"]: item
         for item in payload["evidence"]
+    }
+    source_by_id = {
+        item["source_id"]: item
+        for item in payload["sources"]
     }
 
     if not turns:
@@ -1043,8 +1093,12 @@ def _render_followup_conversation(
 
         citation_children = [
             html.Span(
-                source_id,
+                _followup_source_label(
+                    source_id,
+                    source_by_id=source_by_id,
+                ),
                 className="followup-source-chip",
+                title=source_id,
             )
             for source_id in turn["source_ids"]
         ]
@@ -1091,7 +1145,13 @@ def _render_followup_conversation(
         if citation_children:
             assistant_children.append(
                 html.Div(
-                    citation_children,
+                    [
+                        html.Div(
+                            "Sources",
+                            className="followup-citations-label",
+                        ),
+                        *citation_children,
+                    ],
                     className="followup-citations",
                 )
             )
