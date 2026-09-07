@@ -170,6 +170,7 @@ for research execution:
 - `sql-warehouse` — `CAN_USE`;
 - `market-metrics` — `SELECT`;
 - `fundamental-metrics` — `SELECT`;
+- `daily-prices` — `SELECT`, used only for validated chart presentation;
 - `research-index` — `SELECT`.
 
 `app.yaml` maps those resource keys into environment variables using `valueFrom`.
@@ -189,9 +190,11 @@ deployed Databricks App with bound resource variables
         -> real controlled Gold + RAG + multi-agent research
 ```
 
-The callback currently renders only bounded completion metadata. Actual structured
-metrics, charts, report sections, citations, and evidence are added by the next
-presentation slice.
+The deployed callback now renders the validated structured snapshot, normalized
+Silver price-history chart, final report sections, limitations, and evidence
+provenance. Local execution remains preview-only when the core bound resource
+variables are absent. The optional `daily-prices` binding affects only the chart
+and never disables the core research path.
 
 ## Normalized market-history chart
 
@@ -225,12 +228,33 @@ The first result renderer uses only data already carried by the validated
 - Fundamentals: exact Gold fundamental metrics and filing/as-of state;
 - Research Report: validated section text, section status, source-finding IDs, and
   explicit limitations;
-- Evidence: validated evidence IDs and the report finding IDs they support.
+- Evidence: publication-safe metadata for evidence IDs actually cited by the
+  validated report, including source family, active-scope symbols, evidence date,
+  source domain/link, filing section when applicable, retrieval rank, source record
+  identity, chunk position, and supported report finding IDs.
 
-Daily normalized price history is not fabricated from aggregate Gold metrics. A chart
-requires a separate controlled price-history presentation query. Likewise, richer
-evidence cards (title/source/date/URL/excerpt) require preserving approved
-`EvidenceRecord` metadata in the application-session boundary.
+Daily normalized price history is loaded through its separate controlled Silver
+presentation query rather than fabricated from aggregate Gold metrics.
+
+### Evidence presentation boundary
+
+The Company Researcher still receives the full controlled `EvidenceRecord`, while
+the Supervisor/report contracts continue to pass only evidence IDs. The Databricks
+App runtime observes the already-filtered/ranked retrieval records separately for
+presentation, captures them per request, and keeps only records cited by the final
+validated report.
+
+The presentation DTO deliberately excludes:
+
+- retrieved `chunk_text`;
+- Alpaca/Benzinga article body text;
+- news headlines/titles.
+
+The private app may link to the original source URL and display non-sensitive
+provenance metadata. This keeps evidence useful to a human reviewer without turning
+the portfolio screenshot into a redistribution surface for licensed news content.
+SEC filing section labels and official SEC source links remain displayable under the
+project's documented publication boundary.
 
 ## Implementation slices
 
