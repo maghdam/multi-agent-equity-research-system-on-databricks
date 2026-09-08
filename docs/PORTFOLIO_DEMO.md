@@ -37,6 +37,9 @@ The committed publication-safe evidence set is available directly in the reposit
   [part 2](screenshots/07-mlflow-evaluation-2.png),
   [part 3](screenshots/07-mlflow-evaluation-3.png),
   [part 4](screenshots/07-mlflow-evaluation-4.png)
+- [Automated daily market/news workflow](screenshots/08-databricks-daily-refresh-workflow.png)
+- [Automated weekly SEC/fundamentals workflow](screenshots/09-databricks-weekly-fundamentals-workflow.png)
+- [Live MLflow production trace rows](screenshots/10-mlflow-production-traces.png)
 
 ## Suggested 3–4 minute walkthrough
 
@@ -83,14 +86,14 @@ In the private app select:
 
 Click **Run Research**.
 
-The final 2026-09-07 operations verification completed:
+The reviewed portfolio run completed:
 
 ```text
 mode=comparison
 symbols=AAPL,MSFT
 status=ready
 synthesis_mode=model
-evidence_count=14
+evidence_count=13
 ```
 
 This is a live controlled Databricks run, not a static mock.
@@ -176,6 +179,12 @@ The verified app refused to invent an NVDA recommendation because NVDA was not p
 of the active AAPL/MSFT evidence context.
 
 ### 2:50–3:30 — Evaluation and operations
+
+First show the live MLflow production-tracing screenshot. It demonstrates that deployed
+research and grounded follow-up requests create observable trace rows with bounded
+model, token, validation and latency metadata. In this Free Edition workspace the rows
+remain visible, while complete span payload persistence is unavailable; production
+scorers therefore remain paused at sample rate `0`.
 
 Show the reviewed four-part MLflow evaluation screenshot set for the final managed
 E1/E2 run `spiffy-rat-765` (run ID
