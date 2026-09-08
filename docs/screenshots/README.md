@@ -179,19 +179,65 @@ workspace navigation, and other account details add little portfolio value and m
 cropped out. Keep the four screenshots at a consistent zoom/width so they read like a
 single paginated metric table.
 
-### 8. Optional scope-refusal evidence
+### 8. Automated daily market/news workflow
 
 Suggested filename:
 
-`08-followup-scope-refusal.png`
+`08-databricks-daily-refresh-workflow.png`
+
+Capture the Databricks workflow graph with the incremental Bronze price/news tasks,
+Silver transformations, Gold market metrics, and final verification gate visible.
+
+Why it matters:
+
+Shows that the market and news datasets are refreshed by an orchestrated production
+workflow rather than isolated notebooks.
+
+### 9. Automated weekly SEC/fundamentals workflow
+
+Suggested filename:
+
+`09-databricks-weekly-fundamentals-workflow.png`
+
+Capture the Databricks workflow graph with SEC company-facts and filing ingestion,
+Silver transformations, Gold fundamental metrics, and final verification gate visible.
+
+Why it matters:
+
+Shows the independently scheduled slower-moving fundamentals path and its validation
+boundary.
+
+### 10. MLflow production trace rows
+
+Suggested filename:
+
+`10-mlflow-production-traces.png`
+
+Capture live Databricks App research and grounded follow-up trace rows. Keep trace
+identity, trace name, model/token metadata, validation fields, and execution time
+legible. Use only controlled demo prompts and project-authored responses; do not expose
+credentials, provider text, unrestricted span payloads, or private account details.
+
+Why it matters:
+
+Proves that the deployed application emits operational MLflow trace metadata in
+addition to the separately scored E1/E2 evaluation baseline. The README must state the
+Free Edition limitation: trace rows are visible, but complete span payload persistence
+is unavailable and production scorers remain paused at sample rate `0`.
+
+### 11. Optional scope-refusal evidence
+
+Suggested filename:
+
+`11-followup-scope-refusal.png`
 
 Capture the verified out-of-active-context NVDA recommendation refusal.
 
-### 9. Optional application observability
+### 12. Optional application observability
 
 Suggested filename:
 
-`09-app-observability.png`
+`12-app-observability.png`
 
 Capture bounded `APP_EVENT` output showing research/follow-up/feedback lifecycle.
 
@@ -229,6 +275,7 @@ Do not add decorative annotations that obscure the application's actual behavior
 
 ## Final Markdown usage
 
-The main README should use only the strongest two or three images to keep the landing
-page concise. The remaining reviewed screenshots can be linked from a portfolio/demo
-section or this directory.
+Keep the product preview in the main README limited to the strongest two or three app
+images. A small curated platform-proof section may additionally show workflow, Catalog,
+tracing, and evaluation evidence. Link the remaining reviewed screenshots from the
+portfolio walkthrough or this directory rather than rendering every image inline.
