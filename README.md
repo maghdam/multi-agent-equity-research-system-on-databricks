@@ -37,6 +37,7 @@ The MVP will not include trading execution, price prediction, portfolio optimiza
 - **Orchestration and quality:** daily market/news and weekly SEC/fundamentals workflows include incremental ingestion, deterministic transformations, freshness/coverage/lineage gates, and safe replay behavior.
 - **AI engineering:** the controlled RAG corpus and AI Search index, Gold/retrieval tools, two GPT OSS 20B workers, deterministic LangGraph Supervisor, GPT OSS 120B synthesis, citation validation, bounded repair, and deterministic fallback are implemented and live-verified.
 - **Evaluation and observability:** credential-free CI, controlled live E1–E6 evaluation, MLflow application traces, numerical fidelity, grounding, relevance, safety, and publication-boundary checks are in place.
+- **Automated verification:** 556 credential-free unit, contract, transformation, orchestration, agent, evaluation, and publication-safety tests pass locally and are enforced by CI.
 - **Application delivery:** the private Databricks Dash workspace is deployed and live-verified for single-company and AAPL/MSFT comparison research, signed grounded follow-up, fixed-category feedback, and bounded `APP_EVENT` telemetry.
 - Detailed implementation evidence, run identities, and remaining operational observations are tracked in [PLAN.md](PLAN.md).
 
