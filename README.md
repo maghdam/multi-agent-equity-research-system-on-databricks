@@ -108,76 +108,44 @@ See the [portfolio demo walkthrough](docs/PORTFOLIO_DEMO.md) for the evidence-pr
 
 ## Architecture
 
-<div align="center">
-<pre>
-Sources
-│
-├─ Alpaca Market Data API
-├─ Alpaca News API
-├─ SEC Company Facts API
-└─ SEC Filings API
-│
-▼
-Milestone 1 — Data Engineering ✅
-│
-Bronze
-│
-▼
-Silver
-│
-▼
-┌───────────────────────┴───────────────────────┐
-│                                               │
-▼                                               ▼
-Gold metrics                    RAG corpus (news + filings)
-│                                               │
-└───────────────────────┬───────────────────────┘
-                        │
-                        ▼
-Milestone 2 — AI Engineering ✅
-│
-┌───────────────────────┴───────────────────────┐
-│                                               │
-▼                                               ▼
-Controlled Gold tools                      Vector Search / RAG
-│                                               │
-▼                                               ▼
-Market Analyst                            Company Researcher
-GPT OSS 20B                               GPT OSS 20B
-│                                               │
-└───────────────────────┬───────────────────────┘
-                        │
-                        ▼
-              LangGraph Supervisor
-                        │
-                        ▼
-                  GPT OSS 120B
-                        │
-                        ▼
-           deterministic validation
-           numeric fidelity/provenance
-               repair + fallback
-                        │
-                        ▼
-              grounded cited report
-                        │
-                        ▼
-┌───────────────────────┴───────────────────────┐
-│                                               │
-▼                                               ▼
-MLflow traces                              MLflow evaluation
-│                                               │
-└───────────────────────┬───────────────────────┘
-                        │
-                        ▼
-                   CI/regression
-                        │
-                        ▼
-Milestone 3 — Databricks App ✅
-charts · cited report · grounded follow-up
-GPT OSS 120B follow-up chat over signed active research context
-</pre>
-</div>
+```mermaid
+flowchart TB
+    sources["Sources<br/>Alpaca Market Data + News<br/>SEC Company Facts + Filings"]
+    milestone1["Milestone 1 — Data Engineering ✅"]
+    bronze["Bronze"]
+    silver["Silver"]
+    gold["Gold metrics"]
+    corpus["RAG corpus<br/>(news + filings)"]
+    milestone2["Milestone 2 — AI Engineering ✅"]
+    gold_tools["Controlled Gold tools"]
+    vector_search["Vector Search / RAG"]
+    market_analyst["Market Analyst<br/>GPT OSS 20B"]
+    company_researcher["Company Researcher<br/>GPT OSS 20B"]
+    supervisor["LangGraph Supervisor"]
+    synthesis["GPT OSS 120B"]
+    validation["Deterministic validation<br/>Numeric fidelity / provenance<br/>Repair + fallback"]
+    report["Grounded cited report"]
+    traces["MLflow traces"]
+    evaluation["MLflow evaluation"]
+    regression["CI / regression"]
+    app["Milestone 3 — Databricks App ✅<br/>Charts · cited report · grounded follow-up<br/>GPT OSS 120B follow-up over signed active research context"]
+
+    sources --> milestone1 --> bronze --> silver
+    silver --> gold
+    silver --> corpus
+    gold --> milestone2
+    corpus --> milestone2
+    milestone2 --> gold_tools --> market_analyst
+    milestone2 --> vector_search --> company_researcher
+    market_analyst --> supervisor
+    company_researcher --> supervisor
+    supervisor --> synthesis --> validation --> report
+    report --> traces
+    report --> evaluation
+    traces --> regression
+    evaluation --> regression
+    regression --> app
+```
 
 Gold is intentionally **not** a one-to-one mirror of Silver. Structured price and fundamental data feed analytical Gold tables, while validated news and filing text primarily become retrieval/indexing assets for the AI layer.
 
