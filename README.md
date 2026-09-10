@@ -115,7 +115,7 @@ See the [portfolio demo walkthrough](docs/PORTFOLIO_DEMO.md) for the evidence-pr
 
 ```mermaid
 flowchart TB
-    sources["Sources<br/>Alpaca Market Data + News<br/>SEC Company Facts + Filings"]
+    sources["API Sources<br/>Alpaca Market Data + News<br/>SEC Company Facts + Filings"]
     milestone1["Milestone 1 — Data Engineering ✅"]
     bronze["Bronze"]
     silver["Silver"]
@@ -124,16 +124,16 @@ flowchart TB
     milestone2["Milestone 2 — AI Engineering ✅"]
     gold_tools["Controlled Gold tools"]
     vector_search["Vector Search / RAG"]
-    market_analyst["Market Analyst<br/>GPT OSS 20B"]
-    company_researcher["Company Researcher<br/>GPT OSS 20B"]
-    supervisor["LangGraph Supervisor"]
+    market_analyst["Market Analyst Agent<br/>GPT OSS 20B"]
+    company_researcher["Company Researcher Agent<br/>GPT OSS 20B"]
+    supervisor["LangGraph Supervisor<br/>Agent orchestration"]
     synthesis["GPT OSS 120B"]
     validation["Deterministic validation<br/>Numeric fidelity / provenance<br/>Repair + fallback"]
     report["Grounded cited report"]
     traces["MLflow traces"]
     evaluation["MLflow evaluation"]
     regression["CI / regression"]
-    app["Milestone 3 — Databricks App ✅<br/>Charts · cited report · grounded follow-up<br/>GPT OSS 120B follow-up over signed active research context"]
+    app["Milestone 3 — Databricks App ✅<br/>Charts · cited report · grounded follow-up assistant<br/>GPT OSS 120B over signed active research context"]
 
     sources --> milestone1 --> bronze --> silver
     silver --> gold
