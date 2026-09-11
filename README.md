@@ -29,6 +29,8 @@ The MVP:
 - Coordinate a Supervisor, Market Analyst, and Company Researcher with LangGraph.
 - Present results in a private Databricks Dash workspace with normalized market charts, validated cited reports, publication-safe evidence provenance, session-bound grounded follow-up chat, and privacy-safe application telemetry.
 
+The production-validated demonstration universe contains AAPL and MSFT. Equity coverage is configuration-driven and can be expanded without changing pipeline logic after source validation, historical backfill, quality checks, and retrieval-index refresh.
+
 The MVP will not include trading execution, price prediction, portfolio optimization, GDELT, cTrader, or live Alpaca MCP access.
 
 ## Current progress
