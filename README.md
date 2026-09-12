@@ -57,6 +57,12 @@ The MVP will not include trading execution, price prediction, portfolio optimiza
 
 ![Validated AAPL vs MSFT research report](docs/screenshots/03-research-report.png)
 
+### Grounded follow-up assistant
+
+Follow-up questions are answered from the active validated research session and include supporting source references.
+
+![Grounded follow-up answer over the active research session](docs/screenshots/05-grounded-followup.png)
+
 ## Databricks platform architecture in practice
 
 ### Automated daily market & news pipeline
