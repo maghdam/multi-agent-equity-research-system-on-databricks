@@ -45,17 +45,37 @@ The MVP will not include trading execution, price prediction, portfolio optimiza
 
 ## Portfolio preview
 
+Follow the app workflow: **Overview → Market → Fundamentals → Research Report → Evidence → Follow-up**. Screenshots show saved demonstration runs; values reflect their displayed data dates. Click an image to inspect it at full resolution.
+
 ### AAPL vs MSFT research workspace
+
+Select two companies and a market window to generate a structured research comparison.
 
 ![AAPL vs MSFT comparison overview](docs/screenshots/01-comparison-overview.png)
 
 ### Normalized market comparison
 
+Compare price performance on a common starting value of 100 using validated daily prices.
+
 ![AAPL vs MSFT normalized 60-session market comparison](docs/screenshots/02-market-comparison.png)
+
+### Company fundamentals
+
+Compare SEC-derived revenue, net income, margins, assets, and growth, with filing dates and trailing-twelve-month derivation shown explicitly.
+
+![AAPL and MSFT fundamental metrics with filing dates and TTM derivation](docs/screenshots/fundamental-comparison.png)
 
 ### Validated cited research report
 
+Read the synthesized market and fundamental findings, with section status and supporting finding references.
+
 ![Validated AAPL vs MSFT research report](docs/screenshots/03-research-report.png)
+
+### Evidence and source provenance
+
+Inspect the news and SEC filing references behind the findings: company, date, retrieval rank, source record, and original-source link, without exposing raw article bodies.
+
+![News and SEC filing evidence cards with source provenance and supported finding references](docs/screenshots/04-evidence-provenance.png)
 
 ### Grounded follow-up assistant
 

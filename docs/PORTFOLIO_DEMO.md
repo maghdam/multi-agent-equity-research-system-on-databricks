@@ -28,6 +28,7 @@ The committed publication-safe evidence set is available directly in the reposit
 
 - [Comparison overview](screenshots/01-comparison-overview.png)
 - [Normalized market comparison](screenshots/02-market-comparison.png)
+- [Company fundamentals](screenshots/fundamental-comparison.png)
 - [Validated research report](screenshots/03-research-report.png)
 - [Evidence provenance](screenshots/04-evidence-provenance.png)
 - [Grounded follow-up](screenshots/05-grounded-followup.png)
@@ -100,20 +101,22 @@ This is a live controlled Databricks run, not a static mock.
 
 ### 1:10–1:35 — Structured analytics and market chart
 
-Open **Overview** and **Market**.
+Open **Overview**, **Market**, and **Fundamentals**.
 
-The verified application snapshot included derived structured values such as:
+The refreshed report and fundamentals screenshots show these structured values (market as of 2026-09-11):
 
 | Metric | AAPL | MSFT |
 | --- | ---: | ---: |
-| Close | USD 319.97 | USD 499.70 |
-| 60-session return | 9.74% | 25.75% |
+| Close | USD 332.27 | USD 495.63 |
+| 60-session return | 11.04% | 25.85% |
 | Revenue TTM | USD 466.82B | USD 331.84B |
 | Net margin TTM | 27.62% | 40.31% |
 
 The Market tab also renders validated Silver daily prices normalized to 100 at the
 first aligned close. This makes cross-company performance visually comparable while
 Gold remains the authority for report return/volatility metrics.
+
+The Fundamentals tab adds filing dates, assets, growth, and the explicit TTM derivation so reviewers can see how the financial comparison is grounded.
 
 ### 1:35–2:00 — Validated research report
 
@@ -154,10 +157,10 @@ the evidence presentation contract.
 Ask:
 
 ```text
-What was Apple's 60-session return?
+Which company had the stronger 60-session return, and what were the returns for Apple and Microsoft?
 ```
 
-The verified response returned 9.74% with the controlled structured source.
+The refreshed follow-up screenshot shows MSFT at 25.85% versus AAPL at 11.04%, with both controlled structured source references. Values belong to that saved research session, not a live quote.
 
 Then ask a provenance question:
 
@@ -165,7 +168,7 @@ Then ask a provenance question:
 Which source supports the Apple leasing development and when was it published?
 ```
 
-The verified flow returned the active-session source metadata and publication date
+An earlier verified flow returned the active-session source metadata and publication date
 2026-08-28 with a safe original-source link.
 
 Finally demonstrate the boundary with an out-of-context request such as:
